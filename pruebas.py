@@ -589,5 +589,44 @@ class PruebaSeguridadYErrores(unittest.TestCase):
         self.assertEqual(salida.getvalue(), "")
 
 
+class PruebaMarketplace(unittest.TestCase):
+    """Cuando creerle el precio de lista a un vendedor externo.
+
+    El mismo televisor Kalley aparece con identico precio de lista en la tienda
+    propia de Alkosto y en el marketplace del Exito, asi que ese numero es real
+    y descartarlo costaba ofertas legitimas. Pero los accesorios baratos al
+    70-80% si son precio inflado.
+    """
+    TIENDA = {"nombre": "Exito", "api": "x", "web": "https://www.exito.com"}
+
+    def producto(self, precio, lista, seller="2"):
+        return {"linkText": "x", "productId": "1", "productName": "P",
+                "items": [{"images": [], "sellers": [{"sellerId": seller, "sellerName": "s",
+                    "commertialOffer": {"Price": precio, "ListPrice": lista,
+                                        "AvailableQuantity": 5, "IsAvailable": True}}]}]}
+
+    def confiable(self, precio, lista, seller="2"):
+        from sources.vtex import _consultar
+        import sources.vtex as v
+        original = v.http.get_json
+        v.http.get_json = lambda *a, **k: [self.producto(precio, lista, seller)]
+        try:
+            return _consultar("exito", self.TIENDA, "q", 10)[0].list_price_trusted
+        finally:
+            v.http.get_json = original
+
+    def test_le_cree_al_televisor_caro_con_rebaja_creible(self):
+        self.assertTrue(self.confiable(1_249_900, 3_099_900))   # -59.7%, caso real
+
+    def test_no_le_cree_al_accesorio_barato(self):
+        self.assertFalse(self.confiable(38_718, 110_000))       # soporte de pared
+
+    def test_no_le_cree_al_descuento_absurdo(self):
+        self.assertFalse(self.confiable(1_679_990, 36_799_990))  # el portatil falso
+
+    def test_a_la_tienda_propia_si_le_cree(self):
+        self.assertTrue(self.confiable(64_900, 184_900, seller="1"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

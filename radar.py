@@ -142,8 +142,12 @@ def _marcar_avisada(store, deal: Deal, hermanas: dict) -> None:
 
 
 def _orden(par: tuple[Deal, Verdict]) -> tuple:
+    """Primero lo urgente y verificado; ante un empate, la tienda propia."""
     deal, verdict = par
-    return (not verdict.glitch, verdict.confianza != "alta", -deal.discount_verificable)
+    return (not verdict.glitch,
+            verdict.confianza != "alta",
+            deal.marketplace,
+            -deal.discount_verificable)
 
 
 def _con_objetivos(watchlist: dict, objetivos: list[dict]) -> dict:

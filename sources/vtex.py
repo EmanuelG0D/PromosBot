@@ -13,6 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
+import config
 from core import http
 from core.models import Deal
 
@@ -150,9 +151,15 @@ def _consultar(clave: str, tienda: dict, consulta: str, hasta: int) -> list[Deal
         precio = float(oferta["Price"])
         lista = float(oferta.get("ListPrice") or oferta.get("PriceWithoutDiscount") or precio)
         es_marketplace = str(vendedor.get("sellerId")) != "1"
-        # Un precio de lista 10 veces mayor al de venta no es un descuento, es un
-        # dato basura: pasa todo el tiempo en publicaciones de terceros.
-        lista_confiable = not es_marketplace and lista <= precio * 10
+        lista_confiable = lista <= precio * 10   # un 10x no es rebaja, es basura
+        if es_marketplace and lista > 0:
+            # Al vendedor externo se le cree hasta cierto punto: un 55% suele
+            # ser real (mismo precio sugerido que en la tienda propia), un 95%
+            # nunca lo es.
+            declarado = (1 - precio / lista) * 100
+            lista_confiable = (lista_confiable
+                               and declarado <= config.MARKETPLACE_MAX_DISCOUNT_PCT
+                               and precio >= config.MARKETPLACE_MIN_PRICE_COP)
 
         imagenes = (producto.get("items") or [{}])[0].get("images") or []
         foto = imagenes[0].get("imageUrl") if imagenes else None

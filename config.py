@@ -100,6 +100,19 @@ MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 40)
 REALERT_DROP_PCT = _float("REALERT_DROP_PCT", 10.0)
 REALERT_DAYS = _int("REALERT_DAYS", 14)
 
+# Hasta que porcentaje se le cree el precio de lista a un vendedor externo.
+# Medido: el mismo televisor Kalley aparece con identico precio de lista
+# ($3.099.900) en la tienda propia de Alkosto y en el marketplace del Exito,
+# asi que ese numero es el sugerido del fabricante, no un invento. Los fraudes
+# reales que aparecieron estaban todos por encima del 95%.
+MARKETPLACE_MAX_DISCOUNT_PCT = _float("MARKETPLACE_MAX_DISCOUNT_PCT", 65.0)
+# Y solo en productos de cierto valor: el fraude del precio inflado vive en los
+# accesorios baratos (fundas, soportes, joyeros al 70-80%), mientras que en un
+# televisor o un celular el precio sugerido suele ser el de verdad.
+# Los objetivos de precio no dependen de esto, asi que una ganga barata de
+# marketplace sigue avisando si cruza tu tope.
+MARKETPLACE_MIN_PRICE_COP = _float("MARKETPLACE_MIN_PRICE_COP", 300000.0)
+
 # Un ListPrice inflado (tipico en marketplace) simula descuentos falsos.
 # Con esto exigimos que el "glitch" tambien sea bajo frente al historial propio.
 REQUIRE_HISTORY_FOR_GLITCH = _bool("REQUIRE_HISTORY_FOR_GLITCH", False)
