@@ -473,6 +473,42 @@ trampa.
 
 ---
 
+## Comandos: pedirle ofertas cuando quieras
+
+Además de avisar solo, el bot responde comandos escritos en el grupo:
+
+| Comando | Qué hace |
+|---|---|
+| `/alkosto` `/ktronix` | Lo mejor de esas tiendas ahora mismo |
+| `/exito` `/carulla` `/olimpica` | Lo mismo para las tiendas VTEX |
+| `/exterior` | Ofertas de EE. UU. filtradas a tus intereses |
+| `/objetivos` | Tus topes de precio configurados |
+| `/estado` | Cuántas alertas van hoy |
+| `/ayuda` | La lista completa |
+
+Aparecen solos en el menú de Telegram al escribir `/`, porque el bot los
+registra con `setMyCommands` en cada corrida.
+
+### La espera es de minutos, no instantánea
+
+El bot **no vive prendido**: corre por reloj en GitHub Actions. Para recibir un
+comando tiene que despertar y preguntarle a Telegram si llegó algo. El intervalo
+mínimo que permite GitHub es de **5 minutos**, así que entre escribir `/alkosto`
+y recibir la respuesta pasan un par de minutos.
+
+Para respuesta inmediata haría falta un servidor encendido 24/7 — que es
+exactamente lo que se evitó para que el costo fuera cero.
+
+### Por qué los comandos no tocan el historial
+
+Una consulta a voluntad **no marca nada como avisado**. Si `/alkosto` archivara
+lo que muestra, el radar programado dejaría de avisarte de esas mismas ofertas
+después. Por eso [comandos.py](core/comandos.py) guarda su punto de lectura en
+un archivo aparte y el flujo de comandos nunca escribe `radar.db`.
+
+
+---
+
 ## Cómo se leen las alertas
 
 | Ícono | Significado |
@@ -505,6 +541,7 @@ core/
   coupons.py        Extracción de cupones por expresiones regulares
   objetivos.py      Objetivos de precio y filtrado de accesorios
   filtros.py        Listas de intereses y de veto por palabra
+  comandos.py       Comandos de Telegram y su punto de lectura
   veracidad.py      Detecta el inflado previo y calcula el mínimo real
   scoring.py        Decide qué se alerta, con qué confianza y con qué urgencia
   store.py          SQLite: deduplicación e historial de precios

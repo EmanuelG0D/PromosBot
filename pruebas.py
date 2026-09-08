@@ -461,5 +461,33 @@ class PruebaMediosPagoAlkosto(unittest.TestCase):
         self.assertEqual(_medios_pago(hit)[-1], "Descuento con medios de pago")
 
 
+class PruebaComandos(unittest.TestCase):
+    def test_el_catalogo_cubre_las_tiendas_anunciadas(self):
+        from core.comandos import CATALOGO, MENU
+        for comando in ("alkosto", "ktronix", "exito", "carulla", "olimpica", "exterior"):
+            self.assertIn(comando, CATALOGO)
+        # Todo lo que se anuncia en el menu debe existir como comando real.
+        manejados = set(CATALOGO) | {"objetivos", "estado", "ayuda"}
+        for comando, _descripcion in MENU:
+            self.assertIn(comando, manejados, f"el menu ofrece /{comando} sin implementar")
+
+    def test_cada_comando_apunta_a_una_fuente_valida(self):
+        from core.comandos import CATALOGO
+        from radar import FUENTES
+        for comando, (fuente, _tiendas, titulo) in CATALOGO.items():
+            self.assertIn(fuente, FUENTES, f"/{comando} apunta a una fuente inexistente")
+            self.assertTrue(titulo)
+
+    def test_las_tiendas_existen_en_su_fuente(self):
+        from core.comandos import CATALOGO
+        from sources import algolia_co, vtex
+        disponibles = {"algolia_co": set(algolia_co.TIENDAS), "vtex": set(vtex.TIENDAS)}
+        for comando, (fuente, tiendas, _t) in CATALOGO.items():
+            if not tiendas:
+                continue
+            for tienda in tiendas:
+                self.assertIn(tienda, disponibles[fuente], f"/{comando}: {tienda} no existe")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

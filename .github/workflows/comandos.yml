@@ -1,0 +1,59 @@
+name: Comandos del bot
+
+# El bot no vive prendido: pregunta cada tanto si llego un comando. Cinco
+# minutos es el intervalo minimo que permite GitHub, asi que esa es la espera
+# maxima entre escribir /alkosto y recibir la respuesta.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# No debe pisarse con el radar programado ni consigo mismo.
+concurrency:
+  group: comandos
+  cancel-in-progress: false
+
+jobs:
+  atender:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Punto de lectura de Telegram: sin esto el bot volveria a responder
+      # comandos viejos en cada corrida.
+      - name: Restaurar punto de lectura
+        uses: actions/cache/restore@v6
+        with:
+          path: comandos_estado.json
+          key: comandos-${{ github.run_id }}
+          restore-keys: |
+            comandos-
+
+      # Solo lectura: el historial lo escribe el flujo del radar. Aqui se trae
+      # nada mas para que /estado pueda informar cifras reales, y no se guarda
+      # de vuelta para no pisar la cache del otro flujo.
+      - name: Traer historial (solo lectura)
+        uses: actions/cache/restore@v6
+        with:
+          path: radar.db
+          key: solo-lectura-no-existe
+          restore-keys: |
+            radar-db-
+
+      - name: Atender comandos
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python radar.py --comandos
+
+      - name: Guardar punto de lectura
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: comandos_estado.json
+          key: comandos-${{ github.run_id }}

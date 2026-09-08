@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .venv/
 promos_co.json
+comandos_estado.json

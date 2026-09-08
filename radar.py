@@ -18,6 +18,7 @@ import unicodedata
 
 import config
 from core import fx, telegram
+from core import comandos as mod_comandos
 from core import objetivos as mod_objetivos
 from core import veracidad as mod_veracidad
 from core.landed import calcular
@@ -181,6 +182,98 @@ def _toca_resumen(store) -> bool:
     except (TypeError, ValueError):
         return True
     return pasado >= dt.timedelta(hours=config.DIGEST_EVERY_HOURS)
+
+
+def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
+    """Trae las ofertas de una sola fuente, opcionalmente de tiendas concretas."""
+    cfg = watchlist.get(fuente, {})
+    consultas = cfg.get("queries", [])
+    if not consultas:
+        return []
+    if fuente == "algolia_co":
+        return algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
+    if fuente == "vtex":
+        return vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24))
+    if fuente == "slickdeals":
+        return slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
+                                cfg.get("excluir"), cfg.get("incluir"))
+    return []
+
+
+def atender_comandos(por_comando: int = 5) -> dict:
+    """Responde los comandos que hayan llegado al bot.
+
+    No toca radar.db: una consulta a voluntad no debe alterar lo que el flujo
+    programado considera "ya avisado".
+    """
+    solicitudes = mod_comandos.pendientes()
+    if not solicitudes:
+        print("Sin comandos nuevos.")
+        return _resultado()
+
+    watchlist = config.load_watchlist()
+    trm, _origen = fx.get_trm(None)
+    atendidos = 0
+
+    for solicitud in solicitudes:
+        comando = solicitud["comando"]
+        print(f"-> comando /{comando}")
+
+        if comando in ("ayuda", "help", "start"):
+            telegram.send(mod_comandos.AYUDA)
+            atendidos += 1
+            continue
+
+        if comando == "objetivos":
+            lineas = ["🎯 <b>Tus objetivos de precio</b>", ""]
+            for objetivo in watchlist.get("objetivos", []):
+                tope = objetivo.get("max_cop")
+                valor = (telegram.money(tope, "COP") if tope
+                         else telegram.money(objetivo.get("max_usd"), "USD"))
+                lineas.append(f"• {telegram.esc(objetivo['termino'])} "
+                              f"por debajo de <b>{valor}</b>")
+            telegram.send(telegram.NL.join(lineas))
+            atendidos += 1
+            continue
+
+        if comando == "estado":
+            with Store() as store:
+                enviadas = store.enviadas_hoy()
+                archivadas = store.conn.execute(
+                    "SELECT COUNT(*) FROM alerts").fetchone()[0]
+            telegram.send(
+                f"📊 <b>Estado del radar</b>{telegram.NL}"
+                f"Alertas enviadas hoy: <b>{enviadas}</b> de {config.MAX_ALERTS_PER_DAY}"
+                f"{telegram.NL}Ofertas en memoria: <b>{archivadas}</b>")
+            atendidos += 1
+            continue
+
+        if comando not in mod_comandos.CATALOGO:
+            telegram.send(f"No conozco /{telegram.esc(comando)}. Escribe /ayuda.")
+            continue
+
+        fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
+        ofertas = _sin_repetidas(_ofertas_de(watchlist, fuente, tiendas))
+        candidatas = [(d, Verdict(True, "pedido a mano")) for d in ofertas
+                      if d.in_stock and d.discount_verificable > 0]
+        candidatas.sort(key=lambda par: -par[0].discount_verificable)
+        seleccion, _hermanas = _colapsar_variantes(candidatas)
+        seleccion = seleccion[:por_comando]
+
+        if not seleccion:
+            telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.")
+            continue
+
+        telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — "
+                      f"lo mejor de ahora mismo")
+        for deal, verdict in seleccion:
+            landed = calcular(deal.price, trm, deal.weight_lb) if deal.country == "US" else None
+            telegram.enviar_oferta(deal, verdict, landed)
+            time.sleep(3.5)
+        atendidos += 1
+
+    print(f"Comandos atendidos: {atendidos}")
+    return _resultado(enviadas=atendidos)
 
 
 def _resultado(**campos) -> dict:
@@ -380,9 +473,16 @@ def main() -> int:
                         help="manda las N rebajas mas grandes de ahora mismo, "
                              "aunque ya se hayan avisado (vistazo manual)")
     parser.add_argument("--test-telegram", action="store_true", help="envia un mensaje de prueba")
+    parser.add_argument("--comandos", action="store_true",
+                        help="responde los comandos que hayan llegado al bot")
     parser.add_argument("--chat-id", action="store_true",
                         help="muestra los chat_id de los grupos y canales del bot")
     args = parser.parse_args()
+
+    if args.comandos:
+        mod_comandos.registrar_menu()
+        atender_comandos()
+        return 0
 
     if args.chat_id:
         try:
