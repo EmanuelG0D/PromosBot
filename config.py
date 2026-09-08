@@ -97,6 +97,11 @@ MAX_ALERTS_PER_RUN = _int("MAX_ALERTS_PER_RUN", 8)
 # Freno de mano: con rondas cada 15 minutos, un dia malo podria significar
 # cientos de mensajes. Este tope es lo que separa un bot util de uno molesto.
 MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 40)
+# Cuantas ofertas responde un comando. El tope diario no aplica aqui: si lo
+# pediste tu, no es interrupcion. El maximo evita chocar con el limite de
+# mensajes por minuto de Telegram.
+COMANDO_RESULTADOS = _int("COMANDO_RESULTADOS", 15)
+COMANDO_MAX_RESULTADOS = _int("COMANDO_MAX_RESULTADOS", 30)
 REALERT_DROP_PCT = _float("REALERT_DROP_PCT", 10.0)
 REALERT_DAYS = _int("REALERT_DAYS", 14)
 

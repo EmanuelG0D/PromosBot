@@ -605,6 +605,20 @@ class PruebaComandos(unittest.TestCase):
         # Las cinco tiendas colombianas viven en esas dos fuentes.
         self.assertEqual(len(set(algolia_co.TIENDAS) | set(vtex.TIENDAS)), 5)
 
+    def test_lee_la_cantidad_pedida_en_el_comando(self):
+        """/alkosto 25 debe pedir 25, no el valor por defecto."""
+        import inspect
+        from core import comandos
+        codigo = inspect.getsource(comandos.pendientes)
+        self.assertIn("COMANDO_MAX_RESULTADOS", codigo)
+        self.assertIn("isdigit", codigo)
+
+    def test_el_tope_protege_del_limite_de_telegram(self):
+        import config
+        self.assertLessEqual(config.COMANDO_RESULTADOS, config.COMANDO_MAX_RESULTADOS)
+        # A 3.5s por tarjeta, el tope debe caber en la corrida de 10 minutos.
+        self.assertLess(config.COMANDO_MAX_RESULTADOS * 3.5, 600)
+
 
 class PruebaSeguridadYErrores(unittest.TestCase):
     def test_el_token_nunca_aparece_en_un_error(self):

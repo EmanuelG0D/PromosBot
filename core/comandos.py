@@ -49,6 +49,7 @@ AYUDA = (
     "/colombia - lo mejor de las cinco tiendas colombianas\n"
     "/exterior - ofertas de EE. UU. (Slickdeals)\n"
     "/todo - Colombia y exterior mezclados\n"
+    "Puedes pedir mas: <code>/alkosto 25</code>\n"
     "/ayuda - esta lista\n\n"
     "<i>El bot revisa solo cada 15 minutos. Los comandos tardan unos minutos "
     "en responder porque no esta encendido todo el tiempo.</i>"
@@ -133,10 +134,14 @@ def pendientes() -> list[dict]:
             print(f"  [comandos] ignorado: viene del chat {chat}")
             continue
 
-        # "/alkosto@MiBot argumento" -> "alkosto"
-        crudo = re.split(r"[\s@]", texto[1:], maxsplit=1)[0].lower()
+        # "/alkosto@MiBot 25" -> comando "alkosto", cantidad 25
+        partes = texto[1:].split()
+        crudo = re.split(r"@", partes[0], maxsplit=1)[0].lower()
+        cantidad = None
+        if len(partes) > 1 and partes[1].isdigit():
+            cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
         if crudo:
-            encontrados.append({"comando": crudo, "chat_id": chat})
+            encontrados.append({"comando": crudo, "chat_id": chat, "cantidad": cantidad})
 
     if ultimo > offset:
         _guardar_estado(ultimo)

@@ -280,7 +280,7 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
     return seleccion
 
 
-def atender_comandos(por_comando: int = 5) -> dict:
+def atender_comandos(por_comando: int | None = None) -> dict:
     """Responde los comandos que hayan llegado al bot.
 
     No toca radar.db: una consulta a voluntad no debe alterar lo que el flujo
@@ -306,7 +306,10 @@ def atender_comandos(por_comando: int = 5) -> dict:
 
     for solicitud in solicitudes:
         comando = solicitud["comando"]
-        print(f"-> comando /{comando}")
+        # El numero que pediste manda; si no pediste, el valor por defecto.
+        cuantas = (solicitud.get("cantidad") or por_comando
+                   or config.COMANDO_RESULTADOS)
+        print(f"-> comando /{comando} ({cuantas} resultados)")
 
         if comando in ("ayuda", "help", "start"):
             telegram.send(mod_comandos.AYUDA)
@@ -344,16 +347,19 @@ def atender_comandos(por_comando: int = 5) -> dict:
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
         if fuente == "co":
             seleccion = _mejores(watchlist, ["algolia_co", "vtex"], None,
-                                 vistas, por_comando)
+                                 vistas, cuantas)
         elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
             # asi que se les reserva un cupo.
+            # Se le reserva un quinto al exterior: sin porcentaje de descuento
+            # nunca ganaria un orden por rebaja.
+            del_exterior = max(cuantas // 5, 1)
             seleccion = (_mejores(watchlist, ["algolia_co", "vtex"], None, vistas,
-                                  max(por_comando - 1, 1))
-                         + _mejores(watchlist, ["slickdeals"], None, vistas, 1))
+                                  cuantas - del_exterior)
+                         + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior))
         else:
-            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, por_comando)
+            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas)
 
         if not seleccion:
             telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.")
