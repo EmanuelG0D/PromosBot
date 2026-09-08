@@ -1,0 +1,6 @@
+.env
+radar.db
+__pycache__/
+*.pyc
+.venv/
+promos_co.json

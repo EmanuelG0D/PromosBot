@@ -1,0 +1,45 @@
+# Blueprint de Render. Con este archivo en el repo, Render configura el
+# servicio solo: New > Blueprint > apuntar al repositorio.
+#
+# Plan gratuito: 750 horas de instancia al mes por workspace. Mantenerlo
+# despierto 24/7 consume ~744 h en un mes de 31 dias, asi que este debe ser
+# el unico servicio gratuito encendido de forma permanente.
+
+services:
+  - type: web
+    name: radar-ofertas
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /healthz
+    envVars:
+      # Obligatorias: se ponen a mano en el panel de Render.
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+
+      # Opcional pero muy recomendado: sin esto el historial se pierde en cada
+      # despliegue y el bot repite ofertas que ya habia avisado.
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+
+      # Opcional: protege el disparador manual /run
+      - key: RUN_TOKEN
+        sync: false
+
+      # Opcional: credenciales de eBay
+      - key: EBAY_CLIENT_ID
+        sync: false
+      - key: EBAY_CLIENT_SECRET
+        sync: false
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: RUN_EVERY_MINUTES
+        value: "15"
+      - key: PYTHON_VERSION
+        value: "3.12.4"

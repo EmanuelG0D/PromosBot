@@ -1,0 +1,272 @@
+"""Envio y formato de alertas a Telegram (HTML con cupones 'tap-to-copy')."""
+from __future__ import annotations
+
+import datetime as dt
+
+import time
+
+import config
+from core import http
+from core.landed import Landed
+from core.models import Deal
+from core.scoring import Verdict
+from core.veracidad import Veracidad
+
+API = "https://api.telegram.org/bot{token}/{method}"
+NL = chr(10)
+
+
+def enabled() -> bool:
+    return bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+
+
+def esc(text: str) -> str:
+    return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def money(value: float | None, currency: str) -> str:
+    if value is None:
+        return "s/d"
+    if currency == "COP":
+        return "$" + f"{value:,.0f}".replace(",", ".")
+    return f"US${value:,.2f}"
+
+
+def _emoji(verdict: Verdict) -> str:
+    if verdict.glitch:
+        return "\U0001F6A8"          # sirena: posible error de precio
+    if verdict.confianza == "alta":
+        return "\U0001F525"          # fuego: caida confirmada con historial
+    return "\U0001F3F7"              # etiqueta: oferta normal
+
+
+def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
+            veracidad: Veracidad | None = None) -> list[str]:
+    lineas: list[str] = []
+
+    encabezado = f"{_emoji(verdict)} <b>{esc(deal.store)}</b>"
+    if deal.discount_verificable:
+        encabezado += f" \u00b7 <b>-{deal.discount_verificable:g}%</b>"
+    lineas.append(encabezado)
+    lineas.append(f"<b>{esc(deal.title[:160])}</b>")
+
+    precio = money(deal.price, deal.currency)
+    if deal.list_price_trusted and deal.list_price and deal.list_price > (deal.price or 0):
+        lineas.append(f"\U0001F4B5 <s>{money(deal.list_price, deal.currency)}</s> \u2192 <b>{precio}</b>")
+    else:
+        lineas.append(f"\U0001F4B5 <b>{precio}</b>")
+
+    # Precio con hora de caducidad: trasnochon u oferta relampago.
+    if deal.vence_pronto:
+        horas = deal.horas_restantes
+        cuando = ""
+        try:
+            vence = dt.datetime.fromisoformat(deal.expires_at.replace("Z", "+00:00"))
+            local = vence.astimezone(dt.timezone(dt.timedelta(hours=-5)))
+            cuando = local.strftime(" (hasta las %H:%M del %d/%m)")
+        except (AttributeError, TypeError, ValueError):
+            pass
+        aviso = f"menos de 1 hora" if horas < 1 else f"{horas:g} horas"
+        lineas.append(f"⏳ <b>Termina en {aviso}</b><i>{cuando}</i>")
+
+    # La prueba de honestidad: el minimo real medido por nosotros.
+    if veracidad is not None and veracidad.minimo_ventana:
+        referencia = money(veracidad.minimo_ventana, deal.currency)
+        dias = veracidad.dias_observados
+        if veracidad.es_real:
+            lineas.append(f"📉 Minimo de {dias} dias: {referencia} "
+                          f"<b>(hoy baja de ahi)</b>")
+        else:
+            lineas.append(f"⚠ Minimo de {dias} dias: {referencia} "
+                          f"<i>(la rebaja no lo mejora)</i>")
+        if veracidad.alza_previa:
+            lineas.append(f"   <i>Le subieron {veracidad.alza_previa:g}% "
+                          "antes de anunciar la rebaja.</i>")
+
+    for nota in deal.notes[:3]:
+        # Tarjeta de credito para promos bancarias, vineta para el resto.
+        icono = "\U0001F4B3" if "arjeta" in nota else "\u2022"
+        lineas.append(f"{icono} {esc(nota)}")
+
+    if deal.coupons:
+        codigos = "  ".join(f"<code>{esc(c)}</code>" for c in deal.coupons[:3])
+        lineas.append(f"\U0001F39F Cupon: {codigos}  <i>(tocalo para copiarlo)</i>")
+
+    if landed is not None:
+        detalle = (
+            f"FOB {money(landed.fob_usd, 'USD')} + flete {money(landed.flete_usd, 'USD')}"
+        )
+        if landed.exento:
+            detalle += " \u00b7 exento de IVA"
+        else:
+            detalle += f" + impuestos {money(landed.iva_usd + landed.arancel_usd, 'USD')}"
+        lineas.append(
+            f"\U0001F1E8\U0001F1F4 Puesto en Colombia \u2248 <b>{money(landed.total_cop, 'COP')}</b>"
+        )
+        lineas.append(f"   <i>{esc(detalle)} \u00b7 TRM {money(landed.trm, 'COP')}</i>")
+
+    if verdict.etiquetas:
+        lineas.append(f"\U0001F4CC <i>{esc(' \u00b7 '.join(verdict.etiquetas[:4]))}</i>")
+
+    if verdict.glitch:
+        lineas.append("<i>Verifica antes de pagar: los errores de precio suelen cancelarse.</i>")
+
+    lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Abrir oferta</a>')
+    return lineas
+
+
+def render(deal: Deal, verdict: Verdict, landed: Landed | None = None,
+           veracidad: Veracidad | None = None) -> str:
+    return NL.join(_lineas(deal, verdict, landed, veracidad))
+
+
+def _pie_de_foto(deal: Deal, verdict: Verdict, landed: Landed | None = None,
+                 veracidad: Veracidad | None = None, limite: int = 1024) -> str:
+    """Telegram corta los pies de foto en 1024 caracteres.
+
+    Si no cabe, se van sacrificando lineas de detalle desde el final, pero
+    nunca la ultima: el enlace a la oferta es lo que no se puede perder.
+    """
+    lineas = _lineas(deal, verdict, landed, veracidad)
+    while len(NL.join(lineas)) > limite and len(lineas) > 3:
+        del lineas[-2]
+    return NL.join(lineas)[:limite]
+
+
+def _enviar_foto(foto: str, pie: str) -> bool:
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
+    try:
+        respuesta = http.post_json(url, {
+            "chat_id": config.TELEGRAM_CHAT_ID,
+            "photo": foto,
+            "caption": pie,
+            "parse_mode": "HTML",
+        }, retries=1)
+        if not respuesta.get("ok"):
+            print(f"  [telegram] foto rechazada: {respuesta.get('description')}")
+        return bool(respuesta.get("ok"))
+    except Exception as exc:
+        # Imagen caida o formato que Telegram no acepta. Se avisa con el
+        # dominio para poder ubicar que tienda publica imagenes problematicas.
+        dominio = foto.split("/")[2] if foto.count("/") > 2 else foto[:40]
+        print(f"  [telegram] foto rechazada por {dominio}: {exc}")
+        return False
+
+
+def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
+                  veracidad: Veracidad | None = None) -> str:
+    """Manda la oferta como tarjeta con foto; si la foto falla, como texto.
+
+    Devuelve "foto", "texto" o "" si no se pudo enviar. Saber por cual de los
+    dos caminos salio es la unica forma de detectar que una tienda publica
+    imagenes que Telegram rechaza.
+    """
+    if not enabled():
+        return ""
+    if deal.image and _enviar_foto(deal.image, _pie_de_foto(deal, verdict, landed, veracidad)):
+        return "foto"
+    # Sin foto, o si Telegram la rechazo, se manda como texto dejando que
+    # Telegram arme su propia vista previa del enlace.
+    return "texto" if send(render(deal, verdict, landed, veracidad), preview=True) else ""
+
+
+def send(html: str, preview: bool = False) -> bool:
+    if not enabled():
+        return False
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendMessage")
+    payload = {
+        "chat_id": config.TELEGRAM_CHAT_ID,
+        "text": html,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": not preview,
+    }
+    try:
+        respuesta = http.post_json(url, payload, retries=1)
+        return bool(respuesta.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] fallo el envio: {exc}")
+        return False
+
+
+def render_resumen(pares) -> str:
+    """Un unico mensaje con las ofertas que no ameritan interrumpir.
+
+    Telegram corta los mensajes en 4096 caracteres, asi que se agregan lineas
+    mientras quepan y el resto se anuncia como pendiente.
+    """
+    cabecera = f"\U0001F4CB <b>Resumen de ofertas</b> ({len(pares)} nuevas)"
+    lineas = [cabecera, ""]
+    largo = len(cabecera) + 2
+    incluidas = 0
+
+    for deal, _verdict in pares:
+        pct = f"-{deal.discount_verificable:g}% " if deal.discount_verificable else ""
+        cupon = ""
+        if deal.coupons:
+            cupon = " \U0001F39F <code>" + esc(deal.coupons[0]) + "</code>"
+        linea = (f"\u2022 <b>{esc(deal.store)}</b> {pct}"
+                 f'<a href="{esc(deal.url)}">{esc(deal.title[:70])}</a> '
+                 f"\u2014 <b>{money(deal.price, deal.currency)}</b>{cupon}")
+        if largo + len(linea) > 3900:
+            lineas.append(f"<i>...y {len(pares) - incluidas} mas que no cupieron.</i>")
+            break
+        lineas.append(linea)
+        largo += len(linea) + 1
+        incluidas += 1
+
+    return "\n".join(lineas)
+
+
+def descubrir_chats() -> list[dict]:
+    """Chats donde el bot ha visto actividad reciente (para hallar el chat_id).
+
+    Sirve tanto para grupos como para canales. Basta con agregar el bot al
+    grupo: eso genera un update de tipo my_chat_member, aunque nadie escriba.
+    Telegram solo guarda los updates de las ultimas 24 horas.
+    """
+    if not config.TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("falta TELEGRAM_BOT_TOKEN en el archivo .env")
+
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="getUpdates")
+    datos = http.get_json(url, retries=1)
+    if not datos.get("ok"):
+        raise RuntimeError(f"Telegram respondio: {datos}")
+
+    campos = ("message", "edited_message", "channel_post", "edited_channel_post",
+              "my_chat_member", "chat_member")
+    encontrados: dict = {}
+    for update in datos.get("result", []):
+        for campo in campos:
+            objeto = update.get(campo)
+            if not isinstance(objeto, dict):
+                continue
+            chat = objeto.get("chat") or {}
+            if chat.get("id") is None:
+                continue
+            encontrados[chat["id"]] = {
+                "id": chat["id"],
+                "tipo": chat.get("type", "?"),
+                "nombre": (chat.get("title") or chat.get("username")
+                           or chat.get("first_name") or "(sin nombre)"),
+            }
+    return list(encontrados.values())
+
+
+def info_bot() -> dict:
+    """Identidad del bot dueno del token, para confirmar que es el correcto."""
+    if not config.TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("falta TELEGRAM_BOT_TOKEN en el archivo .env")
+    datos = http.get_json(API.format(token=config.TELEGRAM_BOT_TOKEN, method="getMe"), retries=1)
+    if not datos.get("ok"):
+        raise RuntimeError(f"Telegram respondio: {datos}")
+    return datos.get("result") or {}
+
+
+def webhook_activo() -> str:
+    """URL del webhook configurado, si lo hay. Un webhook deja mudo a getUpdates."""
+    try:
+        datos = http.get_json(
+            API.format(token=config.TELEGRAM_BOT_TOKEN, method="getWebhookInfo"), retries=1)
+        return (datos.get("result") or {}).get("url") or ""
+    except Exception:
+        return ""

@@ -1,0 +1,2 @@
+# Sin dependencias: el radar corre con la libreria estandar de Python 3.10+.
+# Se deja el archivo para que los despliegues automaticos no fallen al buscarlo.

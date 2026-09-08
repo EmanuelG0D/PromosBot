@@ -1,0 +1,260 @@
+{
+  "_comentario": "Los terminos de 'objetivos' se agregan solos a las busquedas: no hace falta repetirlos abajo.",
+  "objetivos": [
+    {
+      "termino": "freidora",
+      "max_cop": 150000
+    },
+    {
+      "termino": "licuadora",
+      "max_cop": 120000
+    },
+    {
+      "termino": "microondas",
+      "max_cop": 300000
+    },
+    {
+      "termino": "aspiradora",
+      "max_cop": 250000
+    },
+    {
+      "termino": "audifonos",
+      "max_cop": 90000,
+      "excluir": [
+        "forro",
+        "estuche",
+        "cable"
+      ]
+    },
+    {
+      "termino": "cafetera",
+      "max_cop": 150000
+    },
+    {
+      "termino": "sneakers",
+      "max_usd": 35
+    }
+  ],
+  "algolia_co": {
+    "tiendas": [
+      "alkosto",
+      "ktronix"
+    ],
+    "queries": [
+      "televisor",
+      "portatil",
+      "celular",
+      "consola",
+      "audifonos",
+      "freidora de aire",
+      "lavadora",
+      "nevera",
+      "microondas",
+      "licuadora",
+      "aspiradora",
+      "cafetera",
+      "smartwatch",
+      "impresora",
+      "monitor",
+      "tablet"
+    ],
+    "por_consulta": 60
+  },
+  "vtex": {
+    "tiendas": [
+      "exito",
+      "carulla",
+      "olimpica"
+    ],
+    "queries": [
+      "televisor",
+      "audifonos",
+      "portatil",
+      "celular",
+      "zapatillas",
+      "freidora de aire",
+      "electrodomesticos",
+      "cafetera"
+    ],
+    "por_consulta": 24
+  },
+  "slickdeals": {
+    "_nota": "De consolas solo interesa hardware y accesorios, no videojuegos: por eso las consultas apuntan a 'console'/'controller' y 'excluir' veta el vocabulario tipico de un juego. 'portada' lee el feed de primera pagina.",
+    "queries": [
+      "portada",
+      "adidas shoes",
+      "puma shoes",
+      "reebok shoes",
+      "amazon japan",
+      "ssd",
+      "monitor",
+      "laptop",
+      "headphones",
+      "mechanical keyboard",
+      "graphics card",
+      "tablet",
+      "smartwatch",
+      "robot vacuum",
+      "air fryer",
+      "nintendo switch console",
+      "playstation 5 console",
+      "xbox series console",
+      "ps5 controller",
+      "xbox controller",
+      "nintendo switch controller",
+      "gaming headset"
+    ],
+    "incluir": [
+      "adidas",
+      "puma",
+      "reebok",
+      "steam deck",
+      "console",
+      "controller",
+      "ssd",
+      "nvme",
+      "hard drive",
+      "graphics card",
+      "rtx",
+      "radeon",
+      "cpu",
+      "laptop",
+      "notebook",
+      "macbook",
+      "chromebook",
+      "monitor",
+      "headphone",
+      "earbud",
+      "airpods",
+      "soundbar",
+      "speaker",
+      "keyboard",
+      "mouse",
+      "webcam",
+      "router",
+      "wifi",
+      "tablet",
+      "ipad",
+      "kindle",
+      "smartwatch",
+      "smart tv",
+      "television",
+      "projector",
+      "printer",
+      "camera",
+      "drone",
+      "power bank",
+      "charger",
+      "robot vacuum",
+      "vacuum",
+      "air fryer",
+      "coffee maker",
+      "cookware",
+      "instant pot",
+      "blender",
+      "microwave",
+      "air purifier",
+      "toaster",
+      "dualsense",
+      "dualshock",
+      "joy con",
+      "joycon",
+      "pro controller",
+      "headset",
+      "docking",
+      "switch oled",
+      "switch lite",
+      "charging station",
+      "storage expansion",
+      "elite controller",
+      "system",
+      "carrying case",
+      "memory card",
+      "dock",
+      "charging",
+      "expansion card",
+      "wireless controller",
+      "case for",
+      "travel case",
+      "protective case",
+      "stand for",
+      "grip for"
+    ],
+    "excluir": [
+      "fragrance",
+      "perfume",
+      "cologne",
+      "eau de",
+      "body spray",
+      "deodorant",
+      "gift card",
+      "giftcard",
+      "credit card",
+      "insurance",
+      "subscription",
+      "vitamin",
+      "supplement",
+      "protein",
+      "cbd",
+      "vape",
+      "mattress",
+      "hotel",
+      "flight",
+      "car rental",
+      "grocery",
+      "snack",
+      "candy",
+      "backpack",
+      "socks",
+      "lunch box",
+      "duffel",
+      "boxer brief",
+      "underwear",
+      "water bottle",
+      "wallet",
+      "keychain",
+      "digital code",
+      "digital download",
+      "dlc",
+      "season pass",
+      "game pass",
+      "eshop",
+      "psn card",
+      "steam key",
+      "pre order",
+      "preorder",
+      "launch edition",
+      "standard edition",
+      "deluxe edition",
+      "collector s edition",
+      "goty",
+      "remastered",
+      "physical copy",
+      "video game"
+    ],
+    "por_consulta": 10
+  },
+  "ebay": {
+    "queries": [
+      "running shoes",
+      "sneakers"
+    ],
+    "vendedores": [
+      "adidas_official",
+      "puma_official",
+      "reebokofficial",
+      "underarmour"
+    ],
+    "precio_max": 45,
+    "condiciones": [
+      "NEW"
+    ],
+    "por_consulta": 50
+  },
+  "mercadolibre": {
+    "_nota": "DESACTIVADA: Mercado Libre bloquea /sites/MCO/search con 403 PolicyAgent para aplicaciones no certificadas, incluso teniendo credenciales validas. Verificado el 2026-09-08. Si algun dia certifican la app, vuelve a poner terminos en 'queries'.",
+    "queries": [],
+    "solo_tienda_oficial": false,
+    "por_consulta": 50
+  }
+}
