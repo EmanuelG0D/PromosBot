@@ -31,6 +31,11 @@ services:
       - key: RUN_TOKEN
         sync: false
 
+      # Opcional: secreto con el que Telegram firma el webhook. Si se deja sin
+      # poner, se deriva del token del bot y funciona igual.
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+
       # Opcional: credenciales de eBay
       - key: EBAY_CLIENT_ID
         sync: false

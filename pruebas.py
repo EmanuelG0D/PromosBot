@@ -582,11 +582,16 @@ class PruebaComandos(unittest.TestCase):
 
     def test_solo_obedece_al_chat_configurado(self):
         """Sin este filtro, un extrano que encuentre el bot podria usarlo."""
-        import inspect
         from core import comandos
-        codigo = inspect.getsource(comandos.pendientes)
-        self.assertIn("config.TELEGRAM_CHAT_ID", codigo)
-        self.assertIn("ignorado", codigo)
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+        try:
+            propio = {"text": "/alkosto", "chat": {"id": -100}}
+            ajeno = {"text": "/alkosto", "chat": {"id": 777}}
+            self.assertIsNotNone(comandos.leer_comando(propio))
+            self.assertIsNone(comandos.leer_comando(ajeno))
+        finally:
+            config.TELEGRAM_CHAT_ID = original
 
     def test_el_menu_no_ofrece_lo_que_se_retiro(self):
         """objetivos y estado se quitaron del menu por pedido del usuario."""
@@ -600,24 +605,156 @@ class PruebaComandos(unittest.TestCase):
         import inspect
         import radar
         from sources import algolia_co, vtex
-        codigo = inspect.getsource(radar.atender_comandos)
+        codigo = inspect.getsource(radar.atender_solicitudes)
         self.assertIn('if fuente == "co"', codigo)
         # Las cinco tiendas colombianas viven en esas dos fuentes.
         self.assertEqual(len(set(algolia_co.TIENDAS) | set(vtex.TIENDAS)), 5)
 
     def test_lee_la_cantidad_pedida_en_el_comando(self):
         """/alkosto 25 debe pedir 25, no el valor por defecto."""
-        import inspect
         from core import comandos
-        codigo = inspect.getsource(comandos.pendientes)
-        self.assertIn("COMANDO_MAX_RESULTADOS", codigo)
-        self.assertIn("isdigit", codigo)
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+
+        def leer(texto):
+            return comandos.leer_comando({"text": texto, "chat": {"id": -100}})
+
+        try:
+            self.assertEqual(leer("/alkosto 25")["cantidad"], 25)
+            # Sin numero manda el valor por defecto, que resuelve el radar.
+            self.assertIsNone(leer("/alkosto")["cantidad"])
+            # El @ del bot no estorba, y el tope protege del limite de Telegram.
+            self.assertEqual(leer("/alkosto@MiBot 9999")["comando"], "alkosto")
+            self.assertEqual(leer("/alkosto 9999")["cantidad"],
+                             config.COMANDO_MAX_RESULTADOS)
+        finally:
+            config.TELEGRAM_CHAT_ID = original
 
     def test_el_tope_protege_del_limite_de_telegram(self):
         import config
         self.assertLessEqual(config.COMANDO_RESULTADOS, config.COMANDO_MAX_RESULTADOS)
         # A 3.5s por tarjeta, el tope debe caber en la corrida de 10 minutos.
         self.assertLess(config.COMANDO_MAX_RESULTADOS * 3.5, 600)
+
+    def test_una_oferta_sin_precio_no_tumba_el_comando(self):
+        """Slickdeals anuncia cosas como "Extra 10% off" sin decir el precio.
+
+        Pedir 15 resultados en vez de 5 hizo que esas colaran en la respuesta,
+        y calcular() no acepta None: el comando moria con TypeError y el flujo
+        de Actions terminaba en rojo.
+        """
+        import inspect
+        import radar
+        codigo = inspect.getsource(radar.atender_solicitudes)
+        self.assertIn('deal.country == "US" and deal.price', codigo)
+        # El guardia es obligatorio porque calcular() no tolera un precio nulo.
+        with self.assertRaises(TypeError):
+            calcular(oferta(country="US", price=None).price, 4000.0)
+
+    def test_una_barra_sola_no_tumba_la_lectura(self):
+        """Un "/" pelado no es un comando, pero tampoco puede reventar.
+
+        El offset se confirma al final de la lectura: si el mensaje la tumba,
+        Telegram lo vuelve a entregar y cada corrida falla igual, para siempre.
+        """
+        from pathlib import Path as _Path
+        from core import comandos
+        originales = (comandos.ESTADO, comandos.http.get_json,
+                      config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
+        with tempfile.TemporaryDirectory() as tmp:
+            comandos.ESTADO = _Path(tmp) / "estado.json"
+            config.TELEGRAM_BOT_TOKEN = "1:x"
+            config.TELEGRAM_CHAT_ID = "-100"
+            comandos.http.get_json = lambda url, **kw: {"ok": True, "result": [
+                {"update_id": 1,
+                 "message": {"text": "/", "chat": {"id": -100}}},
+                {"update_id": 2,
+                 "message": {"text": "/alkosto 25", "chat": {"id": -100}}},
+            ]}
+            try:
+                hallados = comandos.pendientes()
+                self.assertEqual(hallados,
+                                 [{"comando": "alkosto", "chat_id": -100,
+                                   "cantidad": 25}])
+                # La barra sola tambien queda confirmada: no vuelve a llegar.
+                self.assertEqual(comandos._leer_estado(), 3)
+            finally:
+                (comandos.ESTADO, comandos.http.get_json,
+                 config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
+
+
+class PruebaWebhook(unittest.TestCase):
+    """El webhook es la puerta por la que entran los comandos: si acepta
+    cualquier cosa, cualquiera pone al bot a trabajar para el."""
+
+    def _servidor(self):
+        """Levanta el manejador real en un puerto libre de la maquina."""
+        import threading as _th
+        from http.server import ThreadingHTTPServer
+        import server
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Manejador)
+        _th.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        self.addCleanup(srv.server_close)
+        return f"http://127.0.0.1:{srv.server_address[1]}", server
+
+    def _post(self, url, cuerpo, secreto=None):
+        import urllib.error
+        import urllib.request
+        cabeceras = {"Content-Type": "application/json"}
+        if secreto is not None:
+            cabeceras["X-Telegram-Bot-Api-Secret-Token"] = secreto
+        peticion = urllib.request.Request(
+            url, data=json.dumps(cuerpo).encode(), headers=cabeceras, method="POST")
+        try:
+            with urllib.request.urlopen(peticion, timeout=5) as r:
+                return r.status
+        except urllib.error.HTTPError as exc:
+            return exc.code
+
+    def test_sin_el_secreto_no_entra_nada(self):
+        from core import telegram
+        base, servidor = self._servidor()
+        mensaje = {"update_id": 1, "message": {"text": "/alkosto", "chat": {"id": 1}}}
+
+        self.assertEqual(self._post(base + servidor.RUTA_WEBHOOK, mensaje), 403)
+        self.assertEqual(
+            self._post(base + servidor.RUTA_WEBHOOK, mensaje, "no-es-el-secreto"), 403)
+        # Con el secreto correcto se acepta al instante, aunque el mensaje no
+        # sea del chat configurado (eso lo filtra leer_comando despues).
+        self.assertEqual(
+            self._post(base + servidor.RUTA_WEBHOOK, mensaje,
+                       telegram.secreto_webhook()), 200)
+
+    def test_el_secreto_no_revela_el_token(self):
+        """Se deriva del token con un hash: estable entre reinicios, y no hay
+        forma de devolverlo al token."""
+        from core import telegram
+        original = config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_WEBHOOK_SECRET
+        config.TELEGRAM_BOT_TOKEN = "8489029941:AAEE6XvWabcdefghijklmnop"
+        config.TELEGRAM_WEBHOOK_SECRET = ""
+        try:
+            secreto = telegram.secreto_webhook()
+            self.assertNotIn("AAEE6XvW", secreto)
+            self.assertNotIn("8489029941", secreto)
+            self.assertEqual(secreto, telegram.secreto_webhook())   # estable
+        finally:
+            config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_WEBHOOK_SECRET = original
+
+    def test_un_comando_repetido_se_responde_una_sola_vez(self):
+        """Telegram reintenta una entrega si duda de que llegara."""
+        import server
+        original = list(server._atendidos)
+        try:
+            server._atendidos.clear()
+            self.assertFalse(server._ya_atendido(7))
+            self.assertTrue(server._ya_atendido(7))
+            # La memoria no crece sin control.
+            for i in range(server._ATENDIDOS_MAX + 50):
+                server._ya_atendido(1000 + i)
+            self.assertLessEqual(len(server._atendidos), server._ATENDIDOS_MAX)
+        finally:
+            server._atendidos[:] = original
 
 
 class PruebaSeguridadYErrores(unittest.TestCase):

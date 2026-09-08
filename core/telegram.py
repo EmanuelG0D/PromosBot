@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import re
 
 import time
@@ -278,6 +279,58 @@ def info_bot() -> dict:
     if not datos.get("ok"):
         raise RuntimeError(f"Telegram respondio: {datos}")
     return datos.get("result") or {}
+
+
+def secreto_webhook() -> str:
+    """Clave con la que Telegram firma cada entrega del webhook.
+
+    Si no se configura una, se deriva del token: queda estable entre reinicios
+    (Telegram la guarda al registrar el webhook) y no revela nada, porque un
+    hash no se puede devolver al token.
+    """
+    if config.TELEGRAM_WEBHOOK_SECRET:
+        return config.TELEGRAM_WEBHOOK_SECRET
+    return hashlib.sha256(config.TELEGRAM_BOT_TOKEN.encode()).hexdigest()[:48]
+
+
+def registrar_webhook(url: str) -> bool:
+    """Le dice a Telegram que entregue los mensajes en esa URL.
+
+    Con webhook los comandos llegan al instante y getUpdates queda mudo: son
+    excluyentes, y es a proposito. Se piden solo los mensajes porque el bot no
+    tiene nada que hacer con los demas tipos de evento.
+    """
+    if not config.TELEGRAM_BOT_TOKEN:
+        return False
+    cuerpo = {
+        "url": url,
+        "secret_token": secreto_webhook(),
+        "allowed_updates": ["message"],
+        # Un despliegue no debe arrastrar comandos de hace horas: para cuando
+        # se respondieran, quien los pidio ya ni se acuerda.
+        "drop_pending_updates": True,
+    }
+    url_api = API.format(token=config.TELEGRAM_BOT_TOKEN, method="setWebhook")
+    try:
+        respuesta = http.post_json(url_api, cuerpo, retries=1)
+        if not respuesta.get("ok"):
+            print(f"  [telegram] webhook rechazado: {respuesta.get('description')}")
+        return bool(respuesta.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] no se pudo registrar el webhook: {exc}")
+        return False
+
+
+def quitar_webhook() -> bool:
+    """Devuelve el bot a getUpdates (util para depurar desde el portatil)."""
+    if not config.TELEGRAM_BOT_TOKEN:
+        return False
+    url_api = API.format(token=config.TELEGRAM_BOT_TOKEN, method="deleteWebhook")
+    try:
+        return bool(http.post_json(url_api, {}, retries=1).get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] no se pudo quitar el webhook: {exc}")
+        return False
 
 
 def webhook_activo() -> str:

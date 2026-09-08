@@ -102,6 +102,10 @@ MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 40)
 # mensajes por minuto de Telegram.
 COMANDO_RESULTADOS = _int("COMANDO_RESULTADOS", 15)
 COMANDO_MAX_RESULTADOS = _int("COMANDO_MAX_RESULTADOS", 30)
+# Secreto con el que Telegram firma cada entrega del webhook. Si se deja
+# vacio se deriva del token: es estable entre reinicios y evita tener que
+# configurar una variable mas.
+TELEGRAM_WEBHOOK_SECRET = _str("TELEGRAM_WEBHOOK_SECRET")
 REALERT_DROP_PCT = _float("REALERT_DROP_PCT", 10.0)
 REALERT_DAYS = _int("REALERT_DAYS", 14)
 

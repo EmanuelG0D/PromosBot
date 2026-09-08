@@ -217,7 +217,18 @@ Un repositorio **privado** (`.env` y `radar.db` ya están en `.gitignore`).
 | `TELEGRAM_CHAT_ID` | el de tu canal |
 | `RUN_TOKEN` | una palabra secreta cualquiera (protege `/run`) |
 
-### 3. Configurar el ping cada 5 minutos
+### 3. Los comandos se conectan solos
+
+No hay nada que configurar: al arrancar, el servicio lee `RENDER_EXTERNAL_URL`
+(que Render inyecta solo), registra el webhook en Telegram y publica el menú de
+comandos. Se comprueba en `/status`, campo `webhook`.
+
+Cada entrega viene firmada con un secreto que Telegram devuelve en la cabecera
+`X-Telegram-Bot-Api-Secret-Token`; si no coincide, el servidor responde 403. El
+secreto sale del token del bot, así que tampoco hay que inventarlo — salvo que
+prefieras fijar `TELEGRAM_WEBHOOK_SECRET` a mano.
+
+### 4. Configurar el ping cada 5 minutos
 
 Con **cron-job.org** o **UptimeRobot** (ambos gratis), apuntando a:
 
@@ -231,7 +242,7 @@ Cada 5 minutos. Con eso nunca pasa 15 minutos en silencio y no se duerme.
 > instante, así el pinger nunca se topa con un timeout. Las rondas las dispara
 > el reloj interno cada `RUN_EVERY_MINUTES`.
 
-### 4. Hacer que el historial sobreviva (importante)
+### 5. Hacer que el historial sobreviva (importante)
 
 **El plan gratuito de Render no tiene discos persistentes**: `radar.db` se borra
 en cada despliegue y en cada reinicio. Sin esto, el bot olvida qué ya avisó y
@@ -267,11 +278,14 @@ hasta el mes siguiente. Si quieres margen, haz que el pinger solo trabaje de
 
 ## Otras formas de dejarlo corriendo
 
-### GitHub Actions
+### GitHub Actions (descartado)
 
-[.github/workflows/radar.yml](.github/workflows/radar.yml) ya corre cada 30
-minutos si subes el repo. El historial se conserva en la caché de Actions.
-GitHub **desactiva los cron de repos sin actividad por 60 días**.
+El proyecto nació corriendo en Actions y **se retiró**: el `schedule` de GitHub
+no es una garantía, sino un mejor esfuerzo que en repos públicos gratuitos se
+descarta casi siempre. Medido en este repo: de ~93 disparos esperados en 8
+horas, ocurrió 1. Los disparos manuales (`workflow_dispatch`) sí arrancan sin
+cola, así que un cron externo llamando a la API de GitHub funcionaría — pero si
+ya hay un servicio encendido en Render, montar un segundo reloj encima sobra.
 
 ### Teléfono Android con Termux
 
@@ -495,15 +509,22 @@ cosas que casi no se usan.
 Aparecen solos en el menú de Telegram al escribir `/`, porque el bot los
 registra con `setMyCommands` en cada corrida.
 
-### La espera es de minutos, no instantánea
+### Los comandos responden al instante
 
-El bot **no vive prendido**: corre por reloj en GitHub Actions. Para recibir un
-comando tiene que despertar y preguntarle a Telegram si llegó algo. El intervalo
-mínimo que permite GitHub es de **5 minutos**, así que entre escribir `/alkosto`
-y recibir la respuesta pasan un par de minutos.
+Telegram entrega cada mensaje al webhook del servicio (`POST /telegram`) apenas
+lo escribes: no hay reloj de por medio. Lo que tarda es la consulta en sí —
+preguntarle a las tiendas y mandar una tarjeta cada 3,5 segundos.
 
-Para respuesta inmediata haría falta un servidor encendido 24/7 — que es
-exactamente lo que se evitó para que el costo fuera cero.
+Antes esto colgaba de un cron de GitHub Actions cada 5 minutos, y no funcionó:
+el `schedule` de GitHub es *best-effort* y en un repo público gratuito
+sencillamente no dispara. En las primeras 8 horas del proyecto, un cron `*/5`
+que debía correr ~93 veces corrió **una**. Por eso los comandos se quedaban sin
+respuesta, y por eso ahora todo vive en Render.
+
+> Telegram **no permite webhook y `getUpdates` a la vez**. Con el webhook
+> registrado, `python radar.py --comandos` deja de ver mensajes; para volver a
+> usarlo desde el portátil hay que quitar el webhook primero
+> (`telegram.quitar_webhook()`).
 
 ### Pedir dos veces no repite lo mismo
 
@@ -572,7 +593,7 @@ mitad de lo que iba a llegarte eran repeticiones.
 
 ```
 radar.py            Orquestador: recolecta, decide, envía
-server.py           Servidor HTTP para Render (rondas programadas + ping)
+server.py           Servidor de Render: rondas, ping y webhook de comandos
 render.yaml         Blueprint de despliegue
 watchlist.json      Qué buscar y con qué objetivos de precio
 config.py           Variables de entorno y umbrales

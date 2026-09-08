@@ -281,12 +281,21 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
 
 
 def atender_comandos(por_comando: int | None = None) -> dict:
-    """Responde los comandos que hayan llegado al bot.
+    """Pregunta por comandos pendientes (getUpdates) y los responde.
 
-    No toca radar.db: una consulta a voluntad no debe alterar lo que el flujo
+    Solo funciona si NO hay webhook registrado: Telegram no deja usar los dos
+    caminos a la vez. Queda para probar desde el portatil.
+    """
+    return atender_solicitudes(mod_comandos.pendientes(), por_comando)
+
+
+def atender_solicitudes(solicitudes: list[dict],
+                        por_comando: int | None = None) -> dict:
+    """Responde comandos ya leidos, vengan del webhook o de getUpdates.
+
+    No toca radar.db: una consulta a voluntad no debe alterar lo que el radar
     programado considera "ya avisado".
     """
-    solicitudes = mod_comandos.pendientes()
     if not solicitudes:
         print("Sin comandos nuevos.")
         return _resultado()
@@ -369,7 +378,11 @@ def atender_comandos(por_comando: int | None = None) -> dict:
                       f"lo mejor de ahora mismo")
         enviadas_ahora = []
         for deal, verdict in seleccion:
-            landed = calcular(deal.price, trm, deal.weight_lb) if deal.country == "US" else None
+            # Slickdeals a veces solo anuncia "50% off" o "Buy 1 Get 1": sin
+            # precio no hay costo puesto en Colombia que calcular.
+            landed = None
+            if deal.country == "US" and deal.price:
+                landed = calcular(deal.price, trm, deal.weight_lb)
             telegram.enviar_oferta(deal, verdict, landed)
             enviadas_ahora.append(deal.key)
             time.sleep(3.5)

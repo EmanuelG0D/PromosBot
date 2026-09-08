@@ -1,8 +1,9 @@
 """Comandos de Telegram: pedirle al bot ofertas de una tienda a voluntad.
 
-El bot no vive prendido: corre por reloj en GitHub Actions. Por eso no recibe
-los mensajes al instante, sino que cada tanto le pregunta a Telegram si llego
-algo (getUpdates). La espera es de pocos minutos, no inmediata.
+Los comandos llegan por webhook al servidor de Render: Telegram los entrega
+apenas se escriben, sin reloj de por medio. `pendientes()` implementa el camino
+viejo (preguntar con getUpdates) y sigue sirviendo para probar desde el
+portatil, pero Telegram no deja usar los dos a la vez.
 
 Telegram entrega los comandos (los que empiezan con "/") aunque el modo
 privacidad este activo, asi que funcionan dentro del grupo sin configurar nada.
@@ -51,8 +52,9 @@ AYUDA = (
     "/todo - Colombia y exterior mezclados\n"
     "Puedes pedir mas: <code>/alkosto 25</code>\n"
     "/ayuda - esta lista\n\n"
-    "<i>El bot revisa solo cada 15 minutos. Los comandos tardan unos minutos "
-    "en responder porque no esta encendido todo el tiempo.</i>"
+    "<i>El bot revisa solo cada 15 minutos, pero los comandos responden al "
+    "instante. Una consulta larga tarda lo que tarde en preguntarle a las "
+    "tiendas.</i>"
 )
 
 
@@ -94,6 +96,39 @@ def marcar_mostradas(claves) -> None:
     _guardar(datos)
 
 
+def leer_comando(mensaje: dict) -> dict | None:
+    """Un mensaje de Telegram vuelto solicitud, o None si no es para el bot.
+
+    La usan las dos vias de entrada: el webhook (un mensaje a la vez, al
+    instante) y getUpdates (un lote cada tanto). El formato del mensaje es el
+    mismo, cambia solo como llega.
+    """
+    texto = ((mensaje or {}).get("text") or "").strip()
+    chat = ((mensaje or {}).get("chat") or {}).get("id")
+    if not texto.startswith("/") or chat is None:
+        return None
+
+    # Solo se obedece al chat configurado. Sin esto, cualquiera que encuentre
+    # el bot podria ponerlo a trabajar para el, y las respuestas llegarian
+    # igual al grupo del dueno.
+    if str(chat) != str(config.TELEGRAM_CHAT_ID):
+        print(f"  [comandos] ignorado: viene del chat {chat}")
+        return None
+
+    # "/alkosto@MiBot 25" -> comando "alkosto", cantidad 25
+    partes = texto[1:].split()
+    if not partes:
+        return None                       # un "/" solo, sin comando
+    crudo = re.split(r"@", partes[0], maxsplit=1)[0].lower()
+    if not crudo:
+        return None
+
+    cantidad = None
+    if len(partes) > 1 and partes[1].isdigit():
+        cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
+    return {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
+
+
 def pendientes() -> list[dict]:
     """Comandos nuevos dirigidos al bot, ya confirmados ante Telegram.
 
@@ -121,27 +156,9 @@ def pendientes() -> list[dict]:
     ultimo = offset
     for update in datos.get("result", []):
         ultimo = max(ultimo, int(update.get("update_id", 0)) + 1)
-        mensaje = update.get("message") or {}
-        texto = (mensaje.get("text") or "").strip()
-        chat = (mensaje.get("chat") or {}).get("id")
-        if not texto.startswith("/") or chat is None:
-            continue
-
-        # Solo se obedece al chat configurado. Sin esto, cualquiera que
-        # encuentre el bot podria ponerlo a trabajar para el, y las respuestas
-        # llegarian igual al grupo del dueno.
-        if str(chat) != str(config.TELEGRAM_CHAT_ID):
-            print(f"  [comandos] ignorado: viene del chat {chat}")
-            continue
-
-        # "/alkosto@MiBot 25" -> comando "alkosto", cantidad 25
-        partes = texto[1:].split()
-        crudo = re.split(r"@", partes[0], maxsplit=1)[0].lower()
-        cantidad = None
-        if len(partes) > 1 and partes[1].isdigit():
-            cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
-        if crudo:
-            encontrados.append({"comando": crudo, "chat_id": chat, "cantidad": cantidad})
+        solicitud = leer_comando(update.get("message") or {})
+        if solicitud:
+            encontrados.append(solicitud)
 
     if ultimo > offset:
         _guardar_estado(ultimo)
