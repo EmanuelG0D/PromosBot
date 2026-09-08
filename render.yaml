@@ -25,7 +25,7 @@ services:
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_REPO
-        sync: false
+        value: "EmanuelG0D/PromosBot"
 
       # Opcional: protege el disparador manual /run
       - key: RUN_TOKEN
