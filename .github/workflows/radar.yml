@@ -2,8 +2,10 @@ name: Radar de ofertas
 
 on:
   schedule:
-    # Cada 30 minutos. GitHub puede retrasar la ejecucion en horas pico.
-    - cron: "*/30 * * * *"
+    # Cada 15 minutos. En repositorios publicos los minutos de Actions son
+    # ilimitados. GitHub puede retrasar la ejecucion en horas pico: el cron
+    # marca el minimo, no el momento exacto.
+    - cron: "*/15 * * * *"
   workflow_dispatch:        # permite lanzarlo a mano desde la pestana Actions
 
 # Evita que dos rondas se pisen si una se demora.
@@ -39,6 +41,10 @@ jobs:
           EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
         run: python radar.py
+
+      - name: Tamano del historial
+        if: always()
+        run: ls -lh radar.db 2>/dev/null || echo "sin base todavia"
 
       - name: Guardar historial
         if: always()
