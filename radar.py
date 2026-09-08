@@ -289,6 +289,16 @@ def _sin_ruido(ofertas: list[Deal], cfg: dict) -> list[Deal]:
 def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     """Trae las ofertas de una sola fuente, opcionalmente de tiendas concretas."""
     cfg = watchlist.get(fuente, {})
+
+    # PROMOCAJITA se configura con "canales", no con "queries": no se le buscan
+    # terminos sino que se lee un canal entero. Va antes del guardia de abajo,
+    # que si no la descartaba sin llegar nunca a su rama.
+    if fuente == "promocajita":
+        if not cfg.get("canales"):
+            return []
+        return promocajita.fetch(cfg["canales"], cfg.get("por_canal", 20),
+                                 cfg.get("incluir"), cfg.get("excluir"))
+
     consultas = cfg.get("queries", [])
     if not consultas:
         return []
@@ -297,9 +307,6 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     elif fuente == "vtex":
         crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24),
                             cfg.get("marcas"))
-    elif fuente == "promocajita":
-        return promocajita.fetch(cfg.get("canales"), cfg.get("por_canal", 20),
-                                 cfg.get("incluir"), cfg.get("excluir"))
     elif fuente == "falabella":
         crudas = falabella.fetch(consultas, tiendas or cfg.get("tiendas"),
                                  cfg.get("por_consulta", 30), cfg.get("marcas"))

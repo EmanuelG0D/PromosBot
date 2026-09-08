@@ -735,6 +735,37 @@ class PruebaComandos(unittest.TestCase):
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
 
 
+class PruebaTodasLasFuentesLlegan(unittest.TestCase):
+    """Una fuente configurada tiene que llegar a su modulo.
+
+    PROMOCAJITA se configura con "canales" y no con "queries", y un guardia
+    generico la descartaba antes de llegar a su rama: /cajita devolvia vacio
+    siempre, y /colombia y /todo la saltaban en silencio. Nadie se enteraba
+    porque no hay error, solo ausencia.
+    """
+
+    def test_cada_fuente_configurada_llama_a_su_modulo(self):
+        import config
+        import radar
+        w = config.load_watchlist()
+        modulos = {"algolia_co": "algolia_co", "vtex": "vtex",
+                   "falabella": "falabella", "droguerias": "vtex",
+                   "slickdeals": "slickdeals", "promocajita": "promocajita"}
+        for fuente, modulo in modulos.items():
+            cfg = w.get(fuente) or {}
+            if not (cfg.get("queries") or cfg.get("canales")):
+                continue                       # sin configurar, no aplica
+            mod = getattr(radar, modulo)
+            original, llamadas = mod.fetch, []
+            try:
+                mod.fetch = lambda *a, _l=llamadas, **k: _l.append(1) or []
+                radar._ofertas_de(w, fuente, None)
+            finally:
+                mod.fetch = original
+            self.assertEqual(len(llamadas), 1,
+                             f"{fuente} no llego a {modulo}.fetch()")
+
+
 class PruebaMarcas(unittest.TestCase):
     """Una marca corta se cuela dentro de palabras corrientes."""
 
