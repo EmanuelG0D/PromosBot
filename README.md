@@ -522,6 +522,34 @@ un archivo aparte y el flujo de comandos nunca escribe `radar.db`.
 
 ---
 
+## Un producto, una alerta
+
+El mismo televisor está en las cinco tiendas, muchas veces al precio exacto.
+Verlo cinco veces no es informar, es ruido. Dos reglas lo evitan:
+
+**El revendedor solo entra si mejora el precio.** Si el marketplace del Éxito
+cobra lo mismo que Alkosto por el mismo producto, sobra: se prefiere la tienda
+original. Solo aparece cuando cobra menos.
+
+**Se agrupa por precio y señas, no por título.** Comparar títulos no funciona
+porque cada tienda escribe distinto:
+
+```
+Alkosto:  TV KALLEY 50" Pulgadas 126 cm 50G315 4K-UHD MAX LED Smart TV Google
+Éxito:    Televisor Kalley 50G315a 50 Pulgadas 4Kuhd Max Smart Tv
+```
+
+Lo que sí coincide es el precio exacto y un par de señas propias (marca,
+modelo), descartando las palabras que aparecen en medio catálogo —*televisor*,
+*pulgadas*, *smart*, *4K*— y los colores. Cuando el mismo producto está en
+varias tiendas, se manda una sola tarjeta con la nota *"También en K-tronix"*.
+
+Medido sobre el catálogo real: **de 1.743 candidatas quedan 775**. Más de la
+mitad de lo que iba a llegarte eran repeticiones.
+
+
+---
+
 ## Cómo se leen las alertas
 
 | Ícono | Significado |

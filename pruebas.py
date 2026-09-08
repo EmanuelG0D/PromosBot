@@ -130,21 +130,76 @@ class PruebaDeduplicacion(unittest.TestCase):
 
 
 class PruebaColapsoVariantes(unittest.TestCase):
+    """Un producto, una alerta: aunque cada tienda escriba el titulo distinto."""
+
+    def par(self, **kw):
+        from core.scoring import Verdict
+        return (oferta(**kw), Verdict(True))
+
     def test_colapsa_colores_y_tiendas_hermanas(self):
         from radar import _colapsar_variantes
-        from core.scoring import Verdict
-        v = Verdict(True)
         pares = [
-            (oferta(key="a", store="Alkosto", title="Audifonos SONY WH-CH720N Negro", price=349900.0), v),
-            (oferta(key="b", store="Alkosto", title="Audifonos SONY WH-CH720N Azul", price=349900.0), v),
-            (oferta(key="c", store="K-tronix", title="Audifonos SONY WH-CH720N Negro", price=349900.0), v),
+            self.par(key="a", store="Alkosto", price=349900.0,
+                     title="Audifonos SONY WH-CH720N Negro"),
+            self.par(key="b", store="Alkosto", price=349900.0,
+                     title="Audifonos SONY WH-CH720N Azul"),
+            self.par(key="c", store="K-tronix", price=349900.0,
+                     title="Audifonos SONY WH-CH720N Negro"),
         ]
         unicas, hermanas = _colapsar_variantes(pares)
         self.assertEqual(len(unicas), 1)
-        # Las dos variantes descartadas quedan asociadas al representante,
-        # para marcarlas como avisadas y que no resurjan en la ronda siguiente.
         self.assertEqual(len(hermanas[unicas[0][0].key]), 2)
         self.assertIn("Tambien en K-tronix", unicas[0][0].notes)
+
+    def test_junta_el_mismo_producto_con_titulos_distintos(self):
+        """Caso real: cada tienda nombra el mismo televisor a su manera."""
+        from radar import _colapsar_variantes
+        pares = [
+            self.par(key="alk", store="Alkosto", price=1249900.0,
+                     title='TV KALLEY 50" Pulgadas 126 cm 50G315 4K-UHD MAX LED Smart TV Google'),
+            self.par(key="exi", store="Exito", price=1249900.0,
+                     title="Televisor Kalley 50G315a 50 Pulgadas 4Kuhd Max Smart Tv"),
+        ]
+        unicas, _hermanas = _colapsar_variantes(pares)
+        self.assertEqual(len(unicas), 1, "el mismo televisor no debe salir dos veces")
+
+    def test_no_junta_productos_distintos_del_mismo_precio(self):
+        from radar import _colapsar_variantes
+        pares = [
+            self.par(key="1", store="Exito", price=99900.0, title="Licuadora IMUSA Powermix"),
+            self.par(key="2", store="Exito", price=99900.0, title="Cafetera OSTER 5 tazas"),
+        ]
+        unicas, _h = _colapsar_variantes(pares)
+        self.assertEqual(len(unicas), 2)
+
+
+class PruebaMarketplaceRedundante(unittest.TestCase):
+    """Un revendedor solo interesa si le gana el precio a la tienda."""
+
+    def test_descarta_al_revendedor_que_cobra_igual(self):
+        from radar import _marketplace_solo_si_mejora
+        propia = oferta(key="p", store="Alkosto", price=1249900.0,
+                        title="TV KALLEY 50 Pulgadas 50G315 4K-UHD Smart")
+        externo = oferta(key="m", store="Exito", price=1249900.0, marketplace=True,
+                         title="Televisor Kalley 50G315a 50 Pulgadas Smart Tv")
+        quedan = _marketplace_solo_si_mejora([propia, externo])
+        self.assertEqual([d.key for d in quedan], ["p"])
+
+    def test_conserva_al_revendedor_mas_barato(self):
+        from radar import _marketplace_solo_si_mejora
+        propia = oferta(key="p", store="Alkosto", price=1249900.0,
+                        title="TV KALLEY 50 Pulgadas 50G315 4K-UHD Smart")
+        externo = oferta(key="m", store="Exito", price=999900.0, marketplace=True,
+                         title="Televisor Kalley 50G315a 50 Pulgadas Smart Tv")
+        quedan = _marketplace_solo_si_mejora([propia, externo])
+        self.assertEqual(sorted(d.key for d in quedan), ["m", "p"])
+
+    def test_no_toca_al_revendedor_de_otro_producto(self):
+        from radar import _marketplace_solo_si_mejora
+        propia = oferta(key="p", store="Alkosto", price=99900.0, title="Cafetera KALLEY 8 tazas")
+        externo = oferta(key="m", store="Exito", price=99900.0, marketplace=True,
+                         title="Licuadora IMUSA Powermix 5 velocidades")
+        self.assertEqual(len(_marketplace_solo_si_mejora([propia, externo])), 2)
 
 
 class PruebaObjetivos(unittest.TestCase):

@@ -98,39 +98,85 @@ def _sin_repetidas(ofertas: list[Deal]) -> list[Deal]:
     return list(vistas.values())
 
 
-def _clave_variante(deal: Deal) -> tuple:
-    """Agrupa variantes del mismo producto (mismo modelo en otro color)."""
-    limpio = unicodedata.normalize("NFKD", deal.title.lower())
+# Palabras que aparecen en medio catalogo y no distinguen un producto de otro.
+GENERICAS = {
+    "tv", "televisor", "smart", "pulgadas", "pulgada", "cm", "led", "uhd",
+    "qled", "4k", "4kuhd", "hd", "fhd", "google", "con", "de", "para", "y",
+    "el", "la", "los", "las", "un", "una", "por", "en", "negro", "blanco",
+    "nuevo", "original", "pulg",
+}
+
+
+def _senas(titulo: str) -> set:
+    """Palabras que si identifican el producto: marca, modelo, medidas."""
+    limpio = unicodedata.normalize("NFKD", titulo.lower())
     limpio = "".join(c for c in limpio if not unicodedata.combining(c))
-    palabras = [p for p in re.findall(r"[a-z0-9]+", limpio) if p not in COLORES][:8]
-    # Sin la tienda en la clave: Alkosto/K-tronix y Exito/Carulla son hermanas
-    # y publican el mismo producto al mismo precio.
-    return (deal.price, " ".join(palabras))
+    return {p for p in re.findall(r"[a-z0-9]+", limpio)
+            if len(p) >= 2 and p not in GENERICAS and p not in COLORES}
+
+
+def _marketplace_solo_si_mejora(ofertas: list[Deal]) -> list[Deal]:
+    """Un revendedor solo interesa si le gana el precio a la tienda.
+
+    El mismo televisor aparece en la tienda propia y en el marketplace, muchas
+    veces al mismo precio exacto. Verlo dos veces no aporta nada: si el precio
+    no es mejor, se prefiere el original.
+    """
+    propias = [(d.price, _senas(d.title)) for d in ofertas
+               if not d.marketplace and d.price]
+    if not propias:
+        return ofertas
+
+    salida: list[Deal] = []
+    for deal in ofertas:
+        if deal.marketplace and deal.price:
+            redundante = any(
+                precio <= deal.price and len(senas & _senas(deal.title)) >= 2
+                for precio, senas in propias
+            )
+            if redundante:
+                continue
+        salida.append(deal)
+    return salida
 
 
 def _colapsar_variantes(candidatas):
-    """Deja una sola alerta por producto para no quemar el cupo en colores.
+    """Una sola alerta por producto, aunque cada tienda lo escriba distinto.
+
+    Comparar el titulo palabra por palabra no sirve: el mismo televisor es
+    "TV KALLEY 50 Pulgadas 126 cm 50G315" en una tienda y "Televisor Kalley
+    50G315a 50 Pulgadas" en otra. Lo que si coincide es el precio exacto y un
+    par de senas propias (marca, modelo), asi que se agrupa por eso.
 
     Devuelve (unicas, hermanas). Las hermanas hay que marcarlas como avisadas
-    junto con su representante: si no, el mismo producto en otro color vuelve a
-    aparecer como novedad en la ronda siguiente.
+    junto con su representante, o el mismo producto reaparece como novedad.
     """
-    vistas: dict = {}
+    por_precio: dict = {}
     hermanas: dict = {}
     unicas = []
+
     for par in candidatas:
-        clave = _clave_variante(par[0])
-        previo = vistas.get(clave)
-        if previo is not None:
-            # Misma oferta en la tienda hermana: se anota en vez de repetirse.
-            otra = f"Tambien en {par[0].store}"
-            if par[0].store != previo.store and otra not in previo.notes:
-                previo.notes.append(otra)
-            hermanas[previo.key].append(par[0])
+        deal = par[0]
+        senas = _senas(deal.title)
+        grupo = por_precio.setdefault(round(deal.price or 0), [])
+
+        representante = None
+        for senas_previas, deal_previo in grupo:
+            if len(senas & senas_previas) >= 2:
+                representante = deal_previo
+                break
+
+        if representante is not None:
+            otra = f"Tambien en {deal.store}"
+            if deal.store != representante.store and otra not in representante.notes:
+                representante.notes.append(otra)
+            hermanas[representante.key].append(deal)
             continue
-        vistas[clave] = par[0]
-        hermanas[par[0].key] = []
+
+        grupo.append((senas, deal))
+        hermanas[deal.key] = []
         unicas.append(par)
+
     return unicas, hermanas
 
 
@@ -210,7 +256,7 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
     ofertas: list[Deal] = []
     for fuente in fuentes:
         ofertas += _ofertas_de(watchlist, fuente, tiendas)
-    ofertas = _sin_repetidas(ofertas)
+    ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
 
     disponibles = [d for d in ofertas if d.in_stock]
     if fuentes == ["slickdeals"]:
@@ -353,7 +399,7 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
     watchlist = _con_objetivos(watchlist, objetivos_cfg)
     activas = fuentes or list(FUENTES)
     inicio = time.time()
-    ofertas = _sin_repetidas(recolectar(watchlist, activas))
+    ofertas = _marketplace_solo_si_mejora(_sin_repetidas(recolectar(watchlist, activas)))
     print(f"\nRecolectadas {len(ofertas)} ofertas en {time.time() - inicio:.1f}s")
 
     if not ofertas:
