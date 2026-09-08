@@ -525,6 +525,14 @@ class PruebaComandos(unittest.TestCase):
             finally:
                 comandos.ESTADO = original
 
+    def test_solo_obedece_al_chat_configurado(self):
+        """Sin este filtro, un extrano que encuentre el bot podria usarlo."""
+        import inspect
+        from core import comandos
+        codigo = inspect.getsource(comandos.pendientes)
+        self.assertIn("config.TELEGRAM_CHAT_ID", codigo)
+        self.assertIn("ignorado", codigo)
+
 
 class PruebaSeguridadYErrores(unittest.TestCase):
     def test_el_token_nunca_aparece_en_un_error(self):

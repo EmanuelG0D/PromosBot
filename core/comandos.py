@@ -126,6 +126,13 @@ def pendientes() -> list[dict]:
         if not texto.startswith("/") or chat is None:
             continue
 
+        # Solo se obedece al chat configurado. Sin esto, cualquiera que
+        # encuentre el bot podria ponerlo a trabajar para el, y las respuestas
+        # llegarian igual al grupo del dueno.
+        if str(chat) != str(config.TELEGRAM_CHAT_ID):
+            print(f"  [comandos] ignorado: viene del chat {chat}")
+            continue
+
         # "/alkosto@MiBot argumento" -> "alkosto"
         crudo = re.split(r"[\s@]", texto[1:], maxsplit=1)[0].lower()
         if crudo:
