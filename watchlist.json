@@ -277,5 +277,28 @@
     ],
     "por_consulta": 40,
     "excluir": []
+  },
+  "falabella": {
+    "_nota": "Falabella y Homecenter no publican API: el catalogo se lee del JSON que Next.js incrusta en la pagina del buscador. Homecenter es la de ferreteria y hogar; Falabella la de tecnologia y ropa.",
+    "tiendas": [
+      "falabella",
+      "homecenter"
+    ],
+    "queries": [
+      "televisor",
+      "portatil",
+      "celular",
+      "audifonos",
+      "nevera",
+      "lavadora",
+      "freidora de aire",
+      "licuadora",
+      "microondas",
+      "taladro",
+      "tenis",
+      "jean",
+      "chaqueta"
+    ],
+    "por_consulta": 30
   }
 }

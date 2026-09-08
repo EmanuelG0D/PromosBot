@@ -25,9 +25,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, ebay, mercadolibre, slickdeals, vtex
+from sources import algolia_co, falabella, ebay, mercadolibre, slickdeals, vtex
 
-FUENTES = ("slickdeals", "vtex", "algolia_co", "droguerias", "mercadolibre", "ebay")
+FUENTES = ("slickdeals", "vtex", "algolia_co", "falabella", "droguerias",
+           "mercadolibre", "ebay")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -67,6 +68,15 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
             ofertas += _sin_ruido(
                 algolia_co.fetch(consultas, cfg.get("tiendas"),
                                  cfg.get("por_consulta", 60)), cfg)
+
+    if "falabella" in activas:
+        cfg = watchlist.get("falabella", {})
+        consultas = cfg.get("queries", [])
+        if consultas:
+            print(f"-> Falabella/Homecenter: {len(consultas)} busquedas")
+            ofertas += _sin_ruido(
+                falabella.fetch(consultas, cfg.get("tiendas"),
+                                cfg.get("por_consulta", 30)), cfg)
 
     # La drogueria va aparte de las demas VTEX: no se le buscan terminos sino el
     # catalogo entero, y necesita su propio veto (en una tienda de tecnologia
@@ -276,6 +286,9 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
         crudas = algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
     elif fuente == "vtex":
         crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24))
+    elif fuente == "falabella":
+        crudas = falabella.fetch(consultas, tiendas or cfg.get("tiendas"),
+                                 cfg.get("por_consulta", 30))
     elif fuente == "droguerias":
         crudas = vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 40))
     elif fuente == "slickdeals":
@@ -391,7 +404,7 @@ def atender_solicitudes(solicitudes: list[dict],
 
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
         if fuente == "co":
-            seleccion = _mejores(watchlist, ["algolia_co", "vtex", "droguerias"],
+            seleccion = _mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
                                  None, vistas, cuantas)
         elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
@@ -400,7 +413,7 @@ def atender_solicitudes(solicitudes: list[dict],
             # Se le reserva un quinto al exterior: sin porcentaje de descuento
             # nunca ganaria un orden por rebaja.
             del_exterior = max(cuantas // 5, 1)
-            seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "droguerias"],
+            seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
                                   None, vistas, cuantas - del_exterior)
                          + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior))
         else:

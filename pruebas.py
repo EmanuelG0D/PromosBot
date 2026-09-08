@@ -537,11 +537,17 @@ class PruebaComandos(unittest.TestCase):
 
     def test_las_tiendas_existen_en_su_fuente(self):
         from core.comandos import CATALOGO
-        from sources import algolia_co, vtex
-        disponibles = {"algolia_co": set(algolia_co.TIENDAS), "vtex": set(vtex.TIENDAS)}
+        from sources import algolia_co, falabella, vtex
+        disponibles = {
+            "algolia_co": set(algolia_co.TIENDAS),
+            "vtex": set(vtex.TIENDAS),
+            "droguerias": set(vtex.TIENDAS),      # la drogueria tambien es VTEX
+            "falabella": set(falabella.TIENDAS),
+        }
         for comando, (fuente, tiendas, _t) in CATALOGO.items():
             if not tiendas:
                 continue
+            self.assertIn(fuente, disponibles, f"/{comando}: fuente {fuente} sin modulo")
             for tienda in tiendas:
                 self.assertIn(tienda, disponibles[fuente], f"/{comando}: {tienda} no existe")
 
@@ -693,6 +699,55 @@ class PruebaComandos(unittest.TestCase):
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
 
 
+class PruebaFalabella(unittest.TestCase):
+    """Falabella y Homecenter: mismo JSON incrustado, formatos distintos."""
+
+    def test_el_precio_con_tarjeta_no_es_el_precio(self):
+        """Usar el precio CMR inflaria el descuento de una oferta que exige
+        tener esa tarjeta. Va como nota, no como precio."""
+        from sources import falabella
+        precios = [
+            {"type": "internetPrice", "crossed": False, "price": ["2.699.900"]},
+            {"type": "normalPrice", "crossed": True, "price": ["4.999.900"]},
+            {"type": "cmrPrice", "crossed": False, "price": ["2.599.900"]},
+        ]
+        precio, lista, tarjeta = falabella._precios(precios)
+        self.assertEqual(precio, 2699900.0)
+        self.assertEqual(lista, 4999900.0)
+        self.assertEqual(tarjeta, 2599900.0)
+
+    def test_lee_los_dos_formatos_de_precio(self):
+        """Homecenter regala el numero limpio; Falabella solo el texto, y a
+        veces dentro de una lista."""
+        from sources import falabella
+        self.assertEqual(falabella._numero({"priceWithoutFormatting": 2199900}), 2199900.0)
+        self.assertEqual(falabella._numero({"price": "3.999.900"}), 3999900.0)
+        self.assertEqual(falabella._numero({"price": ["3.199.900"]}), 3199900.0)
+        self.assertIsNone(falabella._numero({"price": None}))
+
+    def test_homecenter_marca_la_lista_con_NORMAL(self):
+        """Homecenter no usa 'crossed': rotula el precio de lista como NORMAL."""
+        from sources import falabella
+        precios = [
+            {"type": "INTERNET", "priceWithoutFormatting": 2199900},
+            {"label": "Normal", "type": "NORMAL", "priceWithoutFormatting": 3999900},
+        ]
+        precio, lista, _tarjeta = falabella._precios(precios)
+        self.assertEqual((precio, lista), (2199900.0, 3999900.0))
+
+    def test_encuentra_los_productos_donde_sea(self):
+        """Falabella los deja cerca de la raiz y Homecenter tres niveles
+        adentro; la ruta no es un contrato, la forma del dato si."""
+        from sources import falabella
+        hondo = {"props": {"pageProps": {"searchProps": {"searchData": {
+            "results": [{"displayName": "Taladro", "prices": []}]}}}}}
+        somero = {"pageProps": {"results": [{"displayName": "Televisor", "prices": []}]}}
+        self.assertEqual(falabella._productos(hondo)[0]["displayName"], "Taladro")
+        self.assertEqual(falabella._productos(somero)[0]["displayName"], "Televisor")
+        # Una lista de "results" que no son productos no cuenta.
+        self.assertIsNone(falabella._productos({"results": [{"otra": "cosa"}]}))
+
+
 class PruebaRuido(unittest.TestCase):
     """Lo que separa el producto de lo que lo acompaña."""
 
@@ -729,10 +784,11 @@ class PruebaRuido(unittest.TestCase):
     def test_las_tiendas_de_la_watchlist_existen(self):
         """Un nombre mal escrito se descubriria en produccion, no aqui."""
         import config
-        from sources import algolia_co, vtex
+        from sources import algolia_co, falabella, vtex
         w = config.load_watchlist()
         conocidas = {"vtex": set(vtex.TIENDAS), "droguerias": set(vtex.TIENDAS),
-                     "algolia_co": set(algolia_co.TIENDAS)}
+                     "algolia_co": set(algolia_co.TIENDAS),
+                     "falabella": set(falabella.TIENDAS)}
         for fuente, validas in conocidas.items():
             for tienda in (w.get(fuente) or {}).get("tiendas") or []:
                 self.assertIn(tienda, validas, f"{fuente}: {tienda}")
