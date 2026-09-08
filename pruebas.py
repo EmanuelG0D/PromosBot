@@ -488,6 +488,13 @@ class PruebaComandos(unittest.TestCase):
             for tienda in tiendas:
                 self.assertIn(tienda, disponibles[fuente], f"/{comando}: {tienda} no existe")
 
+    def test_exterior_no_exige_porcentaje_de_descuento(self):
+        """Slickdeals no publica precio de lista: exigir descuento lo vaciaba."""
+        import inspect
+        import radar
+        codigo = inspect.getsource(radar.atender_comandos)
+        self.assertIn('if fuente == "slickdeals"', codigo)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

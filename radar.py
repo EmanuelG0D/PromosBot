@@ -254,9 +254,16 @@ def atender_comandos(por_comando: int = 5) -> dict:
 
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
         ofertas = _sin_repetidas(_ofertas_de(watchlist, fuente, tiendas))
-        candidatas = [(d, Verdict(True, "pedido a mano")) for d in ofertas
-                      if d.in_stock and d.discount_verificable > 0]
-        candidatas.sort(key=lambda par: -par[0].discount_verificable)
+        if fuente == "slickdeals":
+            # De Slickdeals no se puede calcular descuento: no publica precio
+            # de lista. El feed ya viene ordenado por lo que voto la comunidad,
+            # asi que se respeta ese orden en vez de inventar uno.
+            candidatas = [(d, Verdict(True, "pedido a mano"))
+                          for d in ofertas if d.in_stock]
+        else:
+            candidatas = [(d, Verdict(True, "pedido a mano")) for d in ofertas
+                          if d.in_stock and d.discount_verificable > 0]
+            candidatas.sort(key=lambda par: -par[0].discount_verificable)
         seleccion, _hermanas = _colapsar_variantes(candidatas)
         seleccion = seleccion[:por_comando]
 
