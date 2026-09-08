@@ -904,6 +904,18 @@ class PruebaFalabella(unittest.TestCase):
         precio, lista, _tarjeta = falabella._precios(precios)
         self.assertEqual((precio, lista), (2199900.0, 3999900.0))
 
+    def test_la_foto_se_pide_en_jpeg(self):
+        """El CDN de Falabella sirve WebP y sendPhoto no lo acepta: lo trata
+        como sticker. La oferta llegaba, pero sin foto."""
+        from sources import falabella
+        base = "https://media.falabella.com.co/falabellaCO/73677567_1/public"
+        self.assertEqual(falabella._foto([base]), base + "?format=jpg")
+        # Si la URL ya trae parametros, se encadena bien.
+        self.assertEqual(falabella._foto([base + "?w=800"]),
+                         base + "?w=800&format=jpg")
+        self.assertIsNone(falabella._foto([]))
+        self.assertIsNone(falabella._foto(None))
+
     def test_encuentra_los_productos_donde_sea(self):
         """Falabella los deja cerca de la raiz y Homecenter tres niveles
         adentro; la ruta no es un contrato, la forma del dato si."""

@@ -114,6 +114,20 @@ def _precios(entradas) -> tuple[float | None, float | None, float | None]:
     return precio, lista, tarjeta
 
 
+def _foto(urls) -> str | None:
+    """La primera imagen, pidiendola en JPEG.
+
+    El CDN de Falabella sirve WebP por defecto, y el sendPhoto de Telegram no
+    lo acepta: lo trata como sticker y responde "failed to get HTTP URL
+    content". La oferta llegaba igual, pero sin foto. Con el parametro de
+    formato devuelve JPEG y la tarjeta sale completa.
+    """
+    if not urls:
+        return None
+    url = str(urls[0])
+    return url + ("&" if "?" in url else "?") + "format=jpg"
+
+
 def _notas(producto: dict, tarjeta: float | None) -> list[str]:
     notas: list[str] = []
     if tarjeta:
@@ -172,7 +186,7 @@ def _una_consulta(clave: str, tienda: dict, consulta: str,
             currency="COP",
             list_price=lista or precio,
             notes=_notas(producto, tarjeta),
-            image=fotos[0] if fotos else None,
+            image=_foto(fotos),
             seller=producto.get("sellerName"),
             # El buscador solo devuelve lo que se puede comprar; el campo
             # availability viene vacio y no sirve para decidir.
