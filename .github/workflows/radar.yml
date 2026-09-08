@@ -2,10 +2,11 @@ name: Radar de ofertas
 
 on:
   schedule:
-    # Cada 15 minutos. En repositorios publicos los minutos de Actions son
-    # ilimitados. GitHub puede retrasar la ejecucion en horas pico: el cron
-    # marca el minimo, no el momento exacto.
-    - cron: "*/15 * * * *"
+    # Cada 15 minutos, pero en minutos "raros" a proposito. GitHub encola los
+    # cron programados y el minuto :00 es el mas congestionado del planeta:
+    # correr en :07, :22, :37 y :52 reduce la espera. En repositorios publicos
+    # los minutos de Actions son ilimitados.
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:        # permite lanzarlo a mano desde la pestana Actions
 
 # Evita que dos rondas se pisen si una se demora.
