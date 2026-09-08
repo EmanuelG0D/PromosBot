@@ -23,12 +23,12 @@ from core import objetivos as mod_objetivos
 from core import veracidad as mod_veracidad
 from core.landed import calcular
 from core.models import Deal
-from core.scoring import Verdict, evaluar
+from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, ebay, mercadolibre, slickdeals, vtex
+from sources import algolia_co, falabella, promocajita, ebay, mercadolibre, slickdeals, vtex
 
-FUENTES = ("slickdeals", "vtex", "algolia_co", "falabella", "droguerias",
-           "mercadolibre", "ebay")
+FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
+           "droguerias", "mercadolibre", "ebay")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -68,6 +68,14 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
             ofertas += _sin_ruido(
                 algolia_co.fetch(consultas, cfg.get("tiendas"),
                                  cfg.get("por_consulta", 60)), cfg)
+
+    if "promocajita" in activas:
+        cfg = watchlist.get("promocajita", {})
+        if cfg.get("canales"):
+            print("-> PROMOCAJITA: canal de Telegram")
+            ofertas += promocajita.fetch(cfg.get("canales"),
+                                         cfg.get("por_canal", 20),
+                                         cfg.get("incluir"), cfg.get("excluir"))
 
     if "falabella" in activas:
         cfg = watchlist.get("falabella", {})
@@ -286,6 +294,9 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
         crudas = algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
     elif fuente == "vtex":
         crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24))
+    elif fuente == "promocajita":
+        return promocajita.fetch(cfg.get("canales"), cfg.get("por_canal", 20),
+                                 cfg.get("incluir"), cfg.get("excluir"))
     elif fuente == "falabella":
         crudas = falabella.fetch(consultas, tiendas or cfg.get("tiendas"),
                                  cfg.get("por_consulta", 30))
@@ -308,9 +319,9 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
 
     disponibles = [d for d in ofertas if d.in_stock]
-    if fuentes == ["slickdeals"]:
-        # Slickdeals no publica precio de lista: no hay porcentaje que ordenar,
-        # pero el feed ya viene ordenado por los votos de la comunidad.
+    if all(f in SIN_PRECIO_DE_LISTA for f in fuentes):
+        # Ni Slickdeals ni PROMOCAJITA publican precio de lista: no hay
+        # porcentaje que ordenar, pero ya vienen ordenadas por la comunidad.
         candidatas = [(d, Verdict(True, "pedido a mano")) for d in disponibles]
     else:
         candidatas = [(d, Verdict(True, "pedido a mano")) for d in disponibles

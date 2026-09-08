@@ -300,5 +300,53 @@
       "chaqueta"
     ],
     "por_consulta": 30
+  },
+  "promocajita": {
+    "_nota": "Comunidad colombiana de ofertas, leida por su canal publico de Telegram. No traen precio de lista, asi que entran por curaduria y no por porcentaje. 'incluir' es lo que evita que el canal -que publica decenas de cosas al dia, de todo tipo- ahogue las alertas: solo pasa lo que cruza con lo que a ti te interesa.",
+    "canales": [
+      "cajitatech"
+    ],
+    "por_canal": 20,
+    "incluir": [
+      "televisor",
+      "monitor",
+      "portatil",
+      "laptop",
+      "celular",
+      "tablet",
+      "audifonos",
+      "parlante",
+      "teclado",
+      "mouse",
+      "ssd",
+      "disco",
+      "consola",
+      "nintendo",
+      "playstation",
+      "ps5",
+      "xbox",
+      "camara",
+      "nevera",
+      "lavadora",
+      "aspiradora",
+      "licuadora",
+      "freidora",
+      "cafetera",
+      "microondas",
+      "horno",
+      "ventilador",
+      "impresora",
+      "tenis",
+      "zapatillas",
+      "botas",
+      "chaqueta",
+      "jean",
+      "camiseta",
+      "maleta",
+      "reloj",
+      "smartwatch",
+      "bicicleta",
+      "taladro"
+    ]
   }
 }

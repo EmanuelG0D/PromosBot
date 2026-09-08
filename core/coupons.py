@@ -10,6 +10,7 @@ _TRIGGERS = re.compile(
     r"(?:with|use|using|apply|enter|add)\s+(?:promo\s+|coupon\s+|discount\s+)?code|"
     r"(?:promo|coupon|discount|voucher)\s+code|"
     r"c[oó]digo(?:\s+de)?(?:\s+descuento|\s+promocional)?|"
+    r"aplicar(?:\s+el)?(?:\s+c[oó]digo)?|"
     r"cup[oó]n"
     r")\s*[:\-]?\s*",
     re.IGNORECASE,

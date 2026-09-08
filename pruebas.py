@@ -551,12 +551,31 @@ class PruebaComandos(unittest.TestCase):
             for tienda in tiendas:
                 self.assertIn(tienda, disponibles[fuente], f"/{comando}: {tienda} no existe")
 
-    def test_exterior_no_exige_porcentaje_de_descuento(self):
-        """Slickdeals no publica precio de lista: exigir descuento lo vaciaba."""
-        import inspect
+    def test_las_fuentes_de_comunidad_no_exigen_porcentaje(self):
+        """Ni Slickdeals ni PROMOCAJITA publican precio de lista.
+
+        Exigirles descuento verificable dejaba /exterior y /cajita siempre
+        vacios: su descuento calculado siempre es cero.
+        """
         import radar
-        codigo = inspect.getsource(radar._mejores)
-        self.assertIn('fuentes == ["slickdeals"]', codigo)
+        from core.models import Deal
+
+        def una(fuente):
+            return Deal(source=fuente, store=fuente, country="US", key=fuente,
+                        title="Audifonos de prueba", url="u", price=10.0,
+                        currency="USD")
+
+        original = radar._ofertas_de
+        try:
+            for fuente in radar.SIN_PRECIO_DE_LISTA:
+                radar._ofertas_de = lambda _w, f, _t: [una(f)]
+                self.assertEqual(len(radar._mejores({}, [fuente], None, set(), 5)),
+                                 1, fuente)
+            # Una tienda normal si tiene que traer un descuento demostrable.
+            radar._ofertas_de = lambda _w, _f, _t: [una("vtex")]
+            self.assertEqual(radar._mejores({}, ["vtex"], None, set(), 5), [])
+        finally:
+            radar._ofertas_de = original
 
     def test_prioriza_lo_que_no_has_visto(self):
         """Pedir la misma tienda dos veces debe traer cosas distintas."""
@@ -697,6 +716,61 @@ class PruebaComandos(unittest.TestCase):
             finally:
                 (comandos.ESTADO, comandos.http.get_json,
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
+
+
+class PruebaPromocajita(unittest.TestCase):
+    """El canal de Telegram de la comunidad colombiana de ofertas."""
+
+    BLOQUE = (
+        '<div class="tgme_widget_message_photo_wrap" '
+        'style="background-image:url(https://cdn1.telesco.pe/file/abc)"></div>'
+        '<a class="tgme_widget_message_date" href="https://t.me/cajitatech/84260">'
+        '<time datetime="2026-09-08T15:42:58+00:00"></time></a>'
+        '<div class="tgme_widget_message_text js-message_text">'
+        '#Tablet 💰 $679915 COP - Redmi Pad 2 (4+128) + Cover '
+        '🛍 Aplicar XIAOMILOVERS para obtener el descuento '
+        'Oferta ➡ <a href="https://pccajita.link/k44dla">link</a></div>'
+    )
+
+    def test_el_punto_en_pesos_no_son_centavos(self):
+        """En COP el punto separa miles; en USD son los centavos. Tratarlos
+        igual multiplicaba por cien el precio en dolares."""
+        from sources.promocajita import _monto
+        self.assertEqual(_monto("679.915", "COP"), 679915.0)
+        self.assertEqual(_monto("679915", "COP"), 679915.0)
+        self.assertEqual(_monto("1,299.99", "USD"), 1299.99)
+        self.assertEqual(_monto("3.97", "USD"), 3.97)
+
+    def test_lee_una_publicacion_completa(self):
+        from sources import promocajita
+        deal = promocajita._una_publicacion("cajitatech/84260", self.BLOQUE)
+        self.assertIsNotNone(deal)
+        self.assertEqual(deal.price, 679915.0)
+        self.assertEqual(deal.currency, "COP")
+        self.assertEqual(deal.country, "CO")
+        self.assertIn("Redmi Pad 2", deal.title)
+        # El titulo corta antes de la mecanica de la oferta.
+        self.assertNotIn("Aplicar", deal.title)
+        self.assertEqual(deal.coupons, ["XIAOMILOVERS"])
+        self.assertEqual(deal.url, "https://pccajita.link/k44dla")
+        self.assertEqual(deal.key, "promocajita:cajitatech/84260")
+        # Nadie publica el precio anterior: fingirlo seria inventar el descuento.
+        self.assertIsNone(deal.list_price)
+        self.assertEqual(deal.discount_verificable, 0.0)
+
+    def test_incluir_es_lo_que_evita_que_ahogue_el_canal(self):
+        """Publican decenas de cosas al dia; sin este filtro se comerian los
+        cupos de alerta con floreros."""
+        from sources import promocajita
+        pasa = promocajita._una_publicacion("c/1", self.BLOQUE, incluir=["tablet"])
+        no_pasa = promocajita._una_publicacion("c/1", self.BLOQUE, incluir=["nevera"])
+        self.assertIsNotNone(pasa)
+        self.assertIsNone(no_pasa)
+
+    def test_sin_precio_no_es_oferta(self):
+        from sources import promocajita
+        sin = self.BLOQUE.replace("$679915 COP", "precio en el enlace")
+        self.assertIsNone(promocajita._una_publicacion("c/1", sin))
 
 
 class PruebaFalabella(unittest.TestCase):
