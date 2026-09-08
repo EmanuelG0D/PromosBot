@@ -30,6 +30,7 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "carulla":  ("vtex",       ["carulla"],  "Carulla"),
     "olimpica": ("vtex",       ["olimpica"], "Olimpica"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
+    "colombia": ("co",         None,         "Todo lo colombiano"),
     "todo":     ("*",          None,         "Todas las tiendas"),
 }
 
@@ -45,10 +46,9 @@ AYUDA = (
     "/exito - ofertas del Exito\n"
     "/carulla - ofertas de Carulla\n"
     "/olimpica - ofertas de Olimpica\n"
+    "/colombia - lo mejor de las cinco tiendas colombianas\n"
     "/exterior - ofertas de EE. UU. (Slickdeals)\n"
-    "/todo - lo mejor de todas las tiendas\n"
-    "/objetivos - tus topes de precio configurados\n"
-    "/estado - cuantas alertas van hoy\n"
+    "/todo - Colombia y exterior mezclados\n"
     "/ayuda - esta lista\n\n"
     "<i>El bot revisa solo cada 15 minutos. Los comandos tardan unos minutos "
     "en responder porque no esta encendido todo el tiempo.</i>"
@@ -149,10 +149,9 @@ MENU = [
     ("exito", "Ofertas del Exito"),
     ("carulla", "Ofertas de Carulla"),
     ("olimpica", "Ofertas de Olimpica"),
+    ("colombia", "Lo mejor de las 5 tiendas colombianas"),
     ("exterior", "Ofertas de EE. UU."),
-    ("todo", "Lo mejor de todas las tiendas"),
-    ("objetivos", "Tus topes de precio"),
-    ("estado", "Alertas enviadas hoy"),
+    ("todo", "Colombia y exterior mezclados"),
     ("ayuda", "Lista de comandos"),
 ]
 

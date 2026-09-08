@@ -483,11 +483,14 @@ Además de avisar solo, el bot responde comandos escritos en el grupo:
 |---|---|
 | `/alkosto` `/ktronix` | Lo mejor de esas tiendas ahora mismo |
 | `/exito` `/carulla` `/olimpica` | Lo mismo para las tiendas VTEX |
+| `/colombia` | Lo mejor de las cinco tiendas colombianas juntas |
 | `/exterior` | Ofertas de EE. UU. filtradas a tus intereses |
-| `/todo` | Lo mejor de todas las tiendas, mezclando Colombia y exterior |
-| `/objetivos` | Tus topes de precio configurados |
-| `/estado` | Cuántas alertas van hoy |
+| `/todo` | Colombia y exterior mezclados |
 | `/ayuda` | La lista completa |
+
+`/objetivos` (tus topes de precio) y `/estado` (alertas enviadas hoy) siguen
+funcionando si los escribes, pero no aparecen en el menú para no llenarlo de
+cosas que casi no se usan.
 
 Aparecen solos en el menú de Telegram al escribir `/`, porque el bot los
 registra con `setMyCommands` en cada corrida.

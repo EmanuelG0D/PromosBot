@@ -292,7 +292,10 @@ def atender_comandos(por_comando: int = 5) -> dict:
             continue
 
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
-        if fuente == "*":
+        if fuente == "co":
+            seleccion = _mejores(watchlist, ["algolia_co", "vtex"], None,
+                                 vistas, por_comando)
+        elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
             # asi que se les reserva un cupo.

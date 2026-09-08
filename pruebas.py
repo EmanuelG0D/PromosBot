@@ -475,8 +475,8 @@ class PruebaComandos(unittest.TestCase):
         from core.comandos import CATALOGO
         from radar import FUENTES
         for comando, (fuente, _tiendas, titulo) in CATALOGO.items():
-            # "*" es el comodin de /todo: mezcla todas las fuentes.
-            self.assertIn(fuente, set(FUENTES) | {"*"},
+            # "co" y "*" son comodines: /colombia y /todo agrupan fuentes.
+            self.assertIn(fuente, set(FUENTES) | {"*", "co"},
                           f"/{comando} apunta a una fuente inexistente")
             self.assertTrue(titulo)
 
@@ -532,6 +532,23 @@ class PruebaComandos(unittest.TestCase):
         codigo = inspect.getsource(comandos.pendientes)
         self.assertIn("config.TELEGRAM_CHAT_ID", codigo)
         self.assertIn("ignorado", codigo)
+
+    def test_el_menu_no_ofrece_lo_que_se_retiro(self):
+        """objetivos y estado se quitaron del menu por pedido del usuario."""
+        from core.comandos import MENU
+        visibles = {c for c, _d in MENU}
+        self.assertNotIn("objetivos", visibles)
+        self.assertNotIn("estado", visibles)
+        self.assertIn("colombia", visibles)
+
+    def test_colombia_agrupa_las_cinco_tiendas(self):
+        import inspect
+        import radar
+        from sources import algolia_co, vtex
+        codigo = inspect.getsource(radar.atender_comandos)
+        self.assertIn('if fuente == "co"', codigo)
+        # Las cinco tiendas colombianas viven en esas dos fuentes.
+        self.assertEqual(len(set(algolia_co.TIENDAS) | set(vtex.TIENDAS)), 5)
 
 
 class PruebaSeguridadYErrores(unittest.TestCase):
