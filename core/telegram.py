@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 
 import time
 
@@ -170,6 +171,22 @@ def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     return "texto" if send(render(deal, verdict, landed, veracidad), preview=True) else ""
 
 
+def _avisar_migracion(error: Exception) -> None:
+    """Un grupo que pasa a supergrupo cambia de id y deja al bot mudo.
+
+    Telegram lo dice en el cuerpo del error, pero como un 400 cualquiera. Vale
+    la pena gritarlo, porque la solucion es cambiar una variable y no hay forma
+    de adivinarlo desde afuera.
+    """
+    texto = str(error)
+    if "migrate_to_chat_id" not in texto:
+        return
+    nuevo = re.search(r"migrate_to_chat_id[^-\d]*(-?\d+)", texto)
+    print("  [telegram] EL GRUPO PASO A SUPERGRUPO Y CAMBIO DE ID.")
+    if nuevo:
+        print(f"  [telegram] actualiza TELEGRAM_CHAT_ID a: {nuevo.group(1)}")
+
+
 def send(html: str, preview: bool = False) -> bool:
     if not enabled():
         return False
@@ -184,6 +201,7 @@ def send(html: str, preview: bool = False) -> bool:
         respuesta = http.post_json(url, payload, retries=1)
         return bool(respuesta.get("ok"))
     except Exception as exc:
+        _avisar_migracion(exc)
         print(f"  [telegram] fallo el envio: {exc}")
         return False
 

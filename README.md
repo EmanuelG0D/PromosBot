@@ -164,8 +164,10 @@ Detalles que confunden a todo el mundo:
   No afecta el envío de ofertas; solo significa que, si `--chat-id` sale vacío,
   debes escribir `/start@TuBot` en el grupo para que el bot registre el chat.
 - **Si el grupo se convierte en supergrupo** (al hacerlo público o crecer), su id
-  cambia de `-123456789` a `-100123456789`. Si el bot deja de escribir de golpe,
-  vuelve a correr `--chat-id` y actualiza el valor.
+  cambia de `-123456789` a `-100123456789` y el bot se queda mudo. Pasa de
+  verdad: le ocurrió a este proyecto. El bot lo detecta y lo grita en el log
+  con el id nuevo — pero hay que actualizarlo **en los dos lados**: el `.env`
+  local y el secret `TELEGRAM_CHAT_ID` del repositorio.
 
 ### 2. Configurar
 

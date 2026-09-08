@@ -526,5 +526,43 @@ class PruebaComandos(unittest.TestCase):
                 comandos.ESTADO = original
 
 
+class PruebaSeguridadYErrores(unittest.TestCase):
+    def test_el_token_nunca_aparece_en_un_error(self):
+        """El token viaja en la URL de Telegram; en un repo publico no puede
+        terminar en los logs."""
+        from core.http import url_segura
+        sucia = "https://api.telegram.org/bot8489029941:AAEE6XvWabcdefghijklmnop/sendMessage"
+        limpia = url_segura(sucia)
+        self.assertNotIn("AAEE6XvW", limpia)
+        self.assertNotIn("8489029941", limpia)
+        self.assertIn("/bot***/sendMessage", limpia)
+
+    def test_no_estropea_una_url_normal(self):
+        from core.http import url_segura
+        url = "https://www.alkosto.com/tv-kalley/p/123"
+        self.assertEqual(url_segura(url), url)
+
+    def test_detecta_el_cambio_a_supergrupo(self):
+        """Un grupo que pasa a supergrupo cambia de id y deja al bot mudo."""
+        import io
+        import contextlib
+        from core import telegram
+        error = Exception('HTTP 400 -> {"parameters":{"migrate_to_chat_id":-1004476593255}}')
+        salida = io.StringIO()
+        with contextlib.redirect_stdout(salida):
+            telegram._avisar_migracion(error)
+        self.assertIn("-1004476593255", salida.getvalue())
+        self.assertIn("SUPERGRUPO", salida.getvalue())
+
+    def test_calla_si_el_error_es_otro(self):
+        import io
+        import contextlib
+        from core import telegram
+        salida = io.StringIO()
+        with contextlib.redirect_stdout(salida):
+            telegram._avisar_migracion(Exception("HTTP 500 boom"))
+        self.assertEqual(salida.getvalue(), "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

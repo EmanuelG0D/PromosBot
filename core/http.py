@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +16,16 @@ PERMANENT_CODES = {400, 401, 403, 404, 410}
 
 class HttpError(RuntimeError):
     pass
+
+
+# El token de un bot de Telegram viaja dentro de la URL. Si un mensaje de error
+# la incluye tal cual, el token termina en los logs -y en un repositorio
+# publico eso es una fuga-. Se enmascara siempre, antes de cualquier registro.
+_TOKEN_EN_URL = re.compile(r"/bot\d+:[A-Za-z0-9_-]+")
+
+
+def url_segura(url: str) -> str:
+    return _TOKEN_EN_URL.sub("/bot***", url or "")
 
 
 def _request(
@@ -44,14 +55,22 @@ def _request(
                     raw = gzip.decompress(raw)
                 return raw
         except urllib.error.HTTPError as exc:
-            last_error = HttpError(f"HTTP {exc.code} en {url}")
+            # El cuerpo trae la explicacion real ("chat not found", "group chat
+            # was upgraded"...). Sin el, un 400 no dice nada util.
+            detalle = ""
+            try:
+                detalle = url_segura(exc.read()[:400].decode("utf-8", "replace"))
+            except Exception:
+                pass
+            last_error = HttpError(
+                f"HTTP {exc.code} en {url_segura(url)}" + (f" -> {detalle}" if detalle else ""))
             if exc.code in PERMANENT_CODES:
                 break
         except Exception as exc:  # timeouts, DNS, TLS, conexion cortada
-            last_error = HttpError(f"{type(exc).__name__}: {exc} en {url}")
+            last_error = HttpError(f"{type(exc).__name__}: {exc} en {url_segura(url)}")
         if attempt < retries:
             time.sleep(1.5 * (attempt + 1))
-    raise last_error or HttpError(f"Fallo desconocido en {url}")
+    raise last_error or HttpError(f"Fallo desconocido en {url_segura(url)}")
 
 
 def get_text(url: str, **kwargs: Any) -> str:
