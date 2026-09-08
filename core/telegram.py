@@ -135,23 +135,61 @@ def _pie_de_foto(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     return NL.join(lineas)[:limite]
 
 
-def _enviar_foto(foto: str, pie: str) -> bool:
+def _dominio(url: str) -> str:
+    return url.split("/")[2] if url.count("/") > 2 else url[:40]
+
+
+def _foto_por_url(foto: str, pie: str) -> bool:
+    """Le pasa la URL a Telegram para que la baje el. Es lo barato."""
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
+    respuesta = http.post_json(url, {
+        "chat_id": config.TELEGRAM_CHAT_ID,
+        "photo": foto,
+        "caption": pie,
+        "parse_mode": "HTML",
+    }, retries=1)
+    return bool(respuesta.get("ok"))
+
+
+def _foto_subida(foto: str, pie: str) -> bool:
+    """Baja la imagen y la sube como archivo.
+
+    Hay CDN de tienda que no responden a los servidores de Telegram aunque
+    desde aqui carguen perfecto: media.falabella.com.co devuelve un JPEG de
+    768x768 sin problema, y Telegram contesta "failed to get HTTP URL
+    content". Subiendo los bytes, Telegram no tiene que alcanzar a nadie.
+
+    Cuesta una descarga de unos 80 KB, menos de un segundo, y se pierde dentro
+    de la pausa de 3.5s que igual hay entre mensajes.
+    """
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
+    imagen = http.descargar(foto, retries=1)
+    respuesta = http.post_multipart(
+        url,
+        {"chat_id": config.TELEGRAM_CHAT_ID, "caption": pie, "parse_mode": "HTML"},
+        ("photo", "oferta.jpg", imagen),
+        retries=1,
+    )
+    if not respuesta.get("ok"):
+        print(f"  [telegram] la subida tambien fallo: {respuesta.get('description')}")
+    return bool(respuesta.get("ok"))
+
+
+def _enviar_foto(foto: str, pie: str) -> bool:
+    """Primero por URL; si Telegram no puede bajarla, se le suben los bytes."""
     try:
-        respuesta = http.post_json(url, {
-            "chat_id": config.TELEGRAM_CHAT_ID,
-            "photo": foto,
-            "caption": pie,
-            "parse_mode": "HTML",
-        }, retries=1)
-        if not respuesta.get("ok"):
-            print(f"  [telegram] foto rechazada: {respuesta.get('description')}")
-        return bool(respuesta.get("ok"))
+        if _foto_por_url(foto, pie):
+            return True
+        print(f"  [telegram] {_dominio(foto)} no le sirve por URL; se sube")
     except Exception as exc:
-        # Imagen caida o formato que Telegram no acepta. Se avisa con el
-        # dominio para poder ubicar que tienda publica imagenes problematicas.
-        dominio = foto.split("/")[2] if foto.count("/") > 2 else foto[:40]
-        print(f"  [telegram] foto rechazada por {dominio}: {exc}")
+        print(f"  [telegram] {_dominio(foto)} rechazada por URL ({exc}); se sube")
+
+    try:
+        return _foto_subida(foto, pie)
+    except Exception as exc:
+        # Imagen caida de verdad. Se avisa con el dominio para poder ubicar
+        # que tienda publica imagenes problematicas.
+        print(f"  [telegram] no se pudo subir la foto de {_dominio(foto)}: {exc}")
         return False
 
 

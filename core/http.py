@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import secrets
 import re
 import time
 import urllib.error
@@ -102,3 +103,49 @@ def post_form(url: str, form: str, **kwargs: Any) -> Any:
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     headers.update(kwargs.pop("headers", {}) or {})
     return json.loads(_request(url, data=form.encode(), headers=headers, **kwargs).decode("utf-8", errors="replace"))
+
+
+def post_multipart(url: str, campos: dict[str, str],
+                   archivo: tuple[str, str, bytes], **kwargs: Any) -> Any:
+    """POST de formulario con un archivo adjunto, sin dependencias.
+
+    `archivo` es (nombre del campo, nombre de archivo, contenido). El cuerpo se
+    arma a mano porque la libreria estandar no trae multipart, y no vale la
+    pena una dependencia por treinta lineas.
+
+    Hace falta para las fotos que Telegram no puede bajar por su cuenta: hay
+    CDN de tienda que no responden desde fuera del pais.
+    """
+    frontera = "----promosbot" + secrets.token_hex(16)
+    sep = ("--" + frontera).encode()
+    salto = b"\r\n"
+
+    partes: list[bytes] = []
+    for clave, valor in campos.items():
+        partes += [
+            sep, salto,
+            f'Content-Disposition: form-data; name="{clave}"'.encode(),
+            salto, salto,
+            str(valor).encode("utf-8"), salto,
+        ]
+
+    campo, nombre, contenido = archivo
+    partes += [
+        sep, salto,
+        (f'Content-Disposition: form-data; name="{campo}"; '
+         f'filename="{nombre}"').encode(),
+        salto,
+        b"Content-Type: application/octet-stream", salto, salto,
+        contenido, salto,
+        sep, b"--", salto,
+    ]
+
+    cabeceras = {"Content-Type": "multipart/form-data; boundary=" + frontera}
+    cabeceras.update(kwargs.pop("headers", {}) or {})
+    crudo = _request(url, data=b"".join(partes), headers=cabeceras, **kwargs)
+    return json.loads(crudo.decode("utf-8", errors="replace"))
+
+
+def descargar(url: str, **kwargs: Any) -> bytes:
+    """El contenido crudo de una URL, para reenviarlo tal cual."""
+    return _request(url, **kwargs)
