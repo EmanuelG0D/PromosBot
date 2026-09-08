@@ -21,9 +21,23 @@ TIENDAS = {
     "exito":    {"nombre": "Exito",    "api": "https://www.exito.com/io",    "web": "https://www.exito.com"},
     "carulla":  {"nombre": "Carulla",  "api": "https://www.carulla.com/io",  "web": "https://www.carulla.com"},
     "olimpica": {"nombre": "Olimpica", "api": "https://www.olimpica.com",    "web": "https://www.olimpica.com"},
+    # Verificadas el 2026-09-08 contra el endpoint de catalogo: las cinco
+    # responden JSON con Price y ListPrice. Metro no esta porque redirige al
+    # mismo catalogo de Jumbo: seria pedir dos veces lo mismo.
+    "jumbo":        {"nombre": "Jumbo",        "api": "https://www.jumbocolombia.com",   "web": "https://www.jumbocolombia.com"},
+    "panamericana": {"nombre": "Panamericana", "api": "https://www.panamericana.com.co", "web": "https://www.panamericana.com.co"},
+    "pepeganga":    {"nombre": "Pepe Ganga",   "api": "https://www.pepeganga.com",       "web": "https://www.pepeganga.com"},
+    "arturocalle":  {"nombre": "Arturo Calle", "api": "https://www.arturocalle.com",     "web": "https://www.arturocalle.com"},
+    "larebaja":     {"nombre": "La Rebaja",    "api": "https://www.larebajavirtual.com", "web": "https://www.larebajavirtual.com"},
 }
 
 RUTA = "/api/catalog_system/pub/products/search?ft={q}&O=OrderByBestDiscountDESC&_from=0&_to={hasta}"
+
+# La consulta especial "rebajas" pide el catalogo entero ordenado por descuento,
+# sin termino de busqueda. Sirve para las tiendas donde uno no busca un producto
+# concreto sino "a ver que hay rebajado hoy", como la drogueria.
+CATALOGO = "rebajas"
+RUTA_CATALOGO = "/api/catalog_system/pub/products/search?O=OrderByBestDiscountDESC&_from=0&_to={hasta}"
 HILOS = 6
 
 # VTEX mete en clusterHighlights tanto promociones reales como basura interna
@@ -132,7 +146,10 @@ def _notas(oferta: dict) -> list[str]:
 
 
 def _consultar(clave: str, tienda: dict, consulta: str, hasta: int) -> list[Deal]:
-    url = tienda["api"] + RUTA.format(q=quote(consulta), hasta=hasta)
+    if consulta == CATALOGO:
+        url = tienda["api"] + RUTA_CATALOGO.format(hasta=hasta)
+    else:
+        url = tienda["api"] + RUTA.format(q=quote(consulta), hasta=hasta)
     try:
         productos = http.get_json(url)
     except Exception as exc:

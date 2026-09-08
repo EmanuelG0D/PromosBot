@@ -247,6 +247,17 @@ class Manejador(BaseHTTPRequestHandler):
         self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/healthz", "/run", RUTA_WEBHOOK]})
 
     def do_POST(self) -> None:  # noqa: N802  (lo exige BaseHTTPRequestHandler)
+        # El cuerpo se lee SIEMPRE y antes de decidir nada. Responder sin
+        # haberlo leido deja al cliente escribiendo en una conexion que ya se
+        # cerro, y el sistema la aborta: Telegram lo contaria como entrega
+        # fallida y la repetiria.
+        try:
+            largo = int(self.headers.get("Content-Length") or 0)
+            crudo = self.rfile.read(largo)
+        except (ValueError, OSError):
+            self._responder(400, {"error": "cuerpo ilegible"})
+            return
+
         if urlparse(self.path).path != RUTA_WEBHOOK:
             self._responder(404, {"error": "ruta desconocida"})
             return
@@ -260,9 +271,8 @@ class Manejador(BaseHTTPRequestHandler):
             return
 
         try:
-            largo = int(self.headers.get("Content-Length") or 0)
-            actualizacion = json.loads(self.rfile.read(largo) or b"{}")
-        except (ValueError, OSError):
+            actualizacion = json.loads(crudo or b"{}")
+        except ValueError:
             self._responder(400, {"error": "cuerpo ilegible"})
             return
 

@@ -30,6 +30,7 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "exito":    ("vtex",       ["exito"],    "Exito"),
     "carulla":  ("vtex",       ["carulla"],  "Carulla"),
     "olimpica": ("vtex",       ["olimpica"], "Olimpica"),
+    "drogueria": ("droguerias", None,        "Droguerias"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
     "colombia": ("co",         None,         "Todo lo colombiano"),
     "todo":     ("*",          None,         "Todas las tiendas"),
@@ -47,7 +48,8 @@ AYUDA = (
     "/exito - ofertas del Exito\n"
     "/carulla - ofertas de Carulla\n"
     "/olimpica - ofertas de Olimpica\n"
-    "/colombia - lo mejor de las cinco tiendas colombianas\n"
+    "/colombia - lo mejor de las tiendas colombianas\n"
+    "/drogueria - rebajas de droguerias\n"
     "/exterior - ofertas de EE. UU. (Slickdeals)\n"
     "/todo - Colombia y exterior mezclados\n"
     "Puedes pedir mas: <code>/alkosto 25</code>\n"
@@ -171,7 +173,8 @@ MENU = [
     ("exito", "Ofertas del Exito"),
     ("carulla", "Ofertas de Carulla"),
     ("olimpica", "Ofertas de Olimpica"),
-    ("colombia", "Lo mejor de las 5 tiendas colombianas"),
+    ("colombia", "Lo mejor de las tiendas colombianas"),
+    ("drogueria", "Rebajas de droguerias"),
     ("exterior", "Ofertas de EE. UU."),
     ("todo", "Colombia y exterior mezclados"),
     ("ayuda", "Lista de comandos"),

@@ -64,7 +64,11 @@
     "tiendas": [
       "exito",
       "carulla",
-      "olimpica"
+      "olimpica",
+      "jumbo",
+      "panamericana",
+      "pepeganga",
+      "arturocalle"
     ],
     "queries": [
       "televisor",
@@ -74,7 +78,13 @@
       "zapatillas",
       "freidora de aire",
       "electrodomesticos",
-      "cafetera"
+      "cafetera",
+      "tenis",
+      "botas",
+      "jean",
+      "camiseta",
+      "chaqueta",
+      "sudadera"
     ],
     "por_consulta": 24
   },
@@ -256,5 +266,16 @@
     "queries": [],
     "solo_tienda_oficial": false,
     "por_consulta": 50
+  },
+  "droguerias": {
+    "_nota": "La Rebaja es la unica cadena con local en Ocana. Se pide el catalogo entero ordenado por descuento (la consulta especial 'rebajas') porque aqui no se busca un producto concreto sino a ver que hay rebajado. 'excluir' va vacio a proposito: el veto general tumbaria maquillaje ('Base liquida') y protector solar.",
+    "tiendas": [
+      "larebaja"
+    ],
+    "queries": [
+      "rebajas"
+    ],
+    "por_consulta": 40,
+    "excluir": []
   }
 }

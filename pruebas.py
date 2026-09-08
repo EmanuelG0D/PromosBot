@@ -601,14 +601,24 @@ class PruebaComandos(unittest.TestCase):
         self.assertNotIn("estado", visibles)
         self.assertIn("colombia", visibles)
 
-    def test_colombia_agrupa_las_cinco_tiendas(self):
+    def test_colombia_agrupa_las_tiendas_colombianas(self):
+        """/colombia debe mirar todas las fuentes del pais, no solo una.
+
+        Antes esta prueba exigia exactamente 5 tiendas y se rompio al sumar
+        Jumbo y compania. El numero va a seguir creciendo: lo que hay que
+        proteger es que consulte las tres fuentes, y que la ayuda no prometa
+        una cifra que quede desactualizada.
+        """
         import inspect
         import radar
-        from sources import algolia_co, vtex
+        from core.comandos import AYUDA, MENU
         codigo = inspect.getsource(radar.atender_solicitudes)
         self.assertIn('if fuente == "co"', codigo)
-        # Las cinco tiendas colombianas viven en esas dos fuentes.
-        self.assertEqual(len(set(algolia_co.TIENDAS) | set(vtex.TIENDAS)), 5)
+        for fuente in ("algolia_co", "vtex", "droguerias"):
+            self.assertIn(fuente, codigo)
+        texto = AYUDA + " ".join(d for _c, d in MENU)
+        for cifra in ("cinco tiendas", "5 tiendas"):
+            self.assertNotIn(cifra, texto)
 
     def test_lee_la_cantidad_pedida_en_el_comando(self):
         """/alkosto 25 debe pedir 25, no el valor por defecto."""
@@ -683,6 +693,59 @@ class PruebaComandos(unittest.TestCase):
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
 
 
+class PruebaRuido(unittest.TestCase):
+    """Lo que separa el producto de lo que lo acompaña."""
+
+    def test_el_accesorio_tiene_que_abrir_el_titulo(self):
+        """Buscar la palabra en cualquier parte descartaba el producto.
+
+        "Aspiradora T-FAL X-FORCE, bateria 45 min, 4 accesorios" es una
+        aspiradora. "Base KALLEY para televisores 23 a 55" es un soporte. La
+        diferencia esta en si la palabra abre el titulo o solo se menciona.
+        """
+        from core import filtros
+        producto = "Aspiradora Inalambrica T-FAL X-FORCE FLEX, 250W, 4 accesorios"
+        accesorio = 'Base KALLEY Brazo Flexible para televisores 23" a 55"'
+        mueble = 'Rack TV 45" Soho Bellota - RTA Design'
+        self.assertFalse(filtros.es_accesorio(producto))
+        self.assertTrue(filtros.es_accesorio(accesorio))
+        # El mueble donde va el televisor tampoco es un televisor.
+        self.assertTrue(filtros.es_accesorio(mueble))
+
+    def test_una_lista_vacia_no_veta_nada(self):
+        """La drogueria pide ver todo: el veto general le tumbaria el
+        maquillaje ("Base liquida Samy") y el protector solar."""
+        import radar
+        from core.models import Deal
+        def oferta_de(titulo):
+            return Deal(source="vtex", store="La Rebaja", country="CO",
+                        key="k", title=titulo, url="u", price=1.0, currency="COP")
+        ofertas = [oferta_de("BASE LIQUIDA SAMY GO BRIGHT"),
+                   oferta_de("PROTECTOR SOLAR FACIAL SPF 50")]
+        self.assertEqual(len(radar._sin_ruido(ofertas, {"excluir": []})), 2)
+        # Sin configuracion propia si aplica el veto general.
+        self.assertEqual(len(radar._sin_ruido(ofertas, {})), 0)
+
+    def test_las_tiendas_de_la_watchlist_existen(self):
+        """Un nombre mal escrito se descubriria en produccion, no aqui."""
+        import config
+        from sources import algolia_co, vtex
+        w = config.load_watchlist()
+        conocidas = {"vtex": set(vtex.TIENDAS), "droguerias": set(vtex.TIENDAS),
+                     "algolia_co": set(algolia_co.TIENDAS)}
+        for fuente, validas in conocidas.items():
+            for tienda in (w.get(fuente) or {}).get("tiendas") or []:
+                self.assertIn(tienda, validas, f"{fuente}: {tienda}")
+
+    def test_la_drogueria_pide_el_catalogo_entero(self):
+        """No se le buscan terminos: se le pide lo mas rebajado de la tienda."""
+        import config
+        from sources import vtex
+        cfg = config.load_watchlist().get("droguerias") or {}
+        self.assertEqual(cfg.get("queries"), [vtex.CATALOGO])
+        self.assertNotIn("ft=", vtex.RUTA_CATALOGO)
+
+
 class PruebaWebhook(unittest.TestCase):
     """El webhook es la puerta por la que entran los comandos: si acepta
     cualquier cosa, cualquiera pone al bot a trabajar para el."""
@@ -693,9 +756,14 @@ class PruebaWebhook(unittest.TestCase):
         from http.server import ThreadingHTTPServer
         import server
         srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Manejador)
+        srv.daemon_threads = True
         _th.Thread(target=srv.serve_forever, daemon=True).start()
-        self.addCleanup(srv.shutdown)
+        # addCleanup corre al reves de como se registra: primero hay que
+        # parar el bucle y solo despues cerrar el socket que escucha. Al
+        # reves, el servidor atendia con el socket ya cerrado y la prueba
+        # fallaba una de cada tres veces.
         self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
         return f"http://127.0.0.1:{srv.server_address[1]}", server
 
     def _post(self, url, cuerpo, secreto=None):

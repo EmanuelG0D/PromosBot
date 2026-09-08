@@ -11,14 +11,12 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from core import filtros
 from core.models import Deal
 
-# Palabras que delatan un accesorio y no el producto buscado.
-ACCESORIOS_POR_DEFECTO = (
-    "canasta", "repuesto", "accesorio", "filtro", "forro", "funda", "cubierta",
-    "protector", "soporte", "base para", "kit de limpieza", "papel para",
-    "moldes", "molde para", "bandeja para", "manual",
-)
+# Palabras que delatan un accesorio y no el producto buscado. La lista vive en
+# filtros.py porque ahora la comparten los objetivos y todas las fuentes.
+ACCESORIOS_POR_DEFECTO = filtros.ACCESORIOS
 
 
 def normalizar(texto: str) -> str:
@@ -44,8 +42,9 @@ def terminos_de_busqueda(objetivos: list[dict]) -> list[str]:
 
 def _es_accesorio(titulo: str, objetivo: dict) -> bool:
     excluir = objetivo.get("excluir")
-    palabras = excluir if excluir is not None else ACCESORIOS_POR_DEFECTO
-    return any(normalizar(p) in titulo for p in palabras)
+    if excluir is not None:
+        return any(normalizar(p) in titulo for p in excluir)
+    return filtros.es_accesorio(titulo)
 
 
 def alcanzado(deal: Deal, objetivos: list[dict]) -> dict | None:

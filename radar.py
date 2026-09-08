@@ -17,7 +17,7 @@ import time
 import unicodedata
 
 import config
-from core import fx, telegram
+from core import filtros, fx, telegram
 from core import comandos as mod_comandos
 from core import objetivos as mod_objetivos
 from core import veracidad as mod_veracidad
@@ -27,7 +27,7 @@ from core.scoring import Verdict, evaluar
 from core.store import Store
 from sources import algolia_co, ebay, mercadolibre, slickdeals, vtex
 
-FUENTES = ("slickdeals", "vtex", "algolia_co", "mercadolibre", "ebay")
+FUENTES = ("slickdeals", "vtex", "algolia_co", "droguerias", "mercadolibre", "ebay")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -47,22 +47,38 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         consultas = cfg.get("queries", [])
         if consultas:
             print(f"-> Slickdeals: {len(consultas)} busquedas")
-            ofertas += slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
-                                        cfg.get("excluir"), cfg.get("incluir"))
+            ofertas += _sin_ruido(
+                slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
+                                 cfg.get("excluir"), cfg.get("incluir")), cfg)
 
     if "vtex" in activas:
         cfg = watchlist.get("vtex", {})
         consultas = cfg.get("queries", [])
         if consultas:
             print(f"-> VTEX ({', '.join(cfg.get('tiendas', vtex.TIENDAS))}): {len(consultas)} busquedas")
-            ofertas += vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 24))
+            ofertas += _sin_ruido(
+                vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 24)), cfg)
 
     if "algolia_co" in activas:
         cfg = watchlist.get("algolia_co", {})
         consultas = cfg.get("queries", [])
         if consultas:
             print(f"-> Alkosto/K-tronix: {len(consultas)} busquedas")
-            ofertas += algolia_co.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 60))
+            ofertas += _sin_ruido(
+                algolia_co.fetch(consultas, cfg.get("tiendas"),
+                                 cfg.get("por_consulta", 60)), cfg)
+
+    # La drogueria va aparte de las demas VTEX: no se le buscan terminos sino el
+    # catalogo entero, y necesita su propio veto (en una tienda de tecnologia
+    # "Base" es un soporte de TV; en una drogueria es maquillaje).
+    if "droguerias" in activas:
+        cfg = watchlist.get("droguerias", {})
+        consultas = cfg.get("queries", [])
+        if consultas:
+            print(f"-> Droguerias ({', '.join(cfg.get('tiendas', []))}): {len(consultas)} busquedas")
+            ofertas += _sin_ruido(
+                vtex.fetch(consultas, cfg.get("tiendas"),
+                           cfg.get("por_consulta", 40)), cfg)
 
     if "mercadolibre" in activas:
         cfg = watchlist.get("mercadolibre", {})
@@ -234,6 +250,22 @@ def _toca_resumen(store) -> bool:
     return pasado >= dt.timedelta(hours=config.DIGEST_EVERY_HOURS)
 
 
+def _sin_ruido(ofertas: list[Deal], cfg: dict) -> list[Deal]:
+    """Quita accesorios y categorias que no vienen al caso.
+
+    Buscar "televisor" en una tienda grande devuelve tambien la base de pared,
+    el cable y el control de repuesto; buscar "licuadora" en un supermercado
+    arrastra el vaso suelto. La lista sale de la watchlist si la fuente trae
+    "excluir"; si no, se usa el veto por defecto de las tiendas colombianas.
+    """
+    vetadas = cfg.get("excluir")
+    if vetadas is not None:
+        return [d for d in ofertas if not filtros.descartado(d.title, vetadas)]
+    return [d for d in ofertas
+            if not filtros.descartado(d.title, filtros.RUIDO_CO)
+            and not filtros.es_accesorio(d.title)]
+
+
 def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     """Trae las ofertas de una sola fuente, opcionalmente de tiendas concretas."""
     cfg = watchlist.get(fuente, {})
@@ -241,13 +273,17 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     if not consultas:
         return []
     if fuente == "algolia_co":
-        return algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
-    if fuente == "vtex":
-        return vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24))
-    if fuente == "slickdeals":
-        return slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
-                                cfg.get("excluir"), cfg.get("incluir"))
-    return []
+        crudas = algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
+    elif fuente == "vtex":
+        crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24))
+    elif fuente == "droguerias":
+        crudas = vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 40))
+    elif fuente == "slickdeals":
+        crudas = slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
+                                  cfg.get("excluir"), cfg.get("incluir"))
+    else:
+        return []
+    return _sin_ruido(crudas, cfg)
 
 
 def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
@@ -355,8 +391,8 @@ def atender_solicitudes(solicitudes: list[dict],
 
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
         if fuente == "co":
-            seleccion = _mejores(watchlist, ["algolia_co", "vtex"], None,
-                                 vistas, cuantas)
+            seleccion = _mejores(watchlist, ["algolia_co", "vtex", "droguerias"],
+                                 None, vistas, cuantas)
         elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
@@ -364,8 +400,8 @@ def atender_solicitudes(solicitudes: list[dict],
             # Se le reserva un quinto al exterior: sin porcentaje de descuento
             # nunca ganaria un orden por rebaja.
             del_exterior = max(cuantas // 5, 1)
-            seleccion = (_mejores(watchlist, ["algolia_co", "vtex"], None, vistas,
-                                  cuantas - del_exterior)
+            seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "droguerias"],
+                                  None, vistas, cuantas - del_exterior)
                          + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior))
         else:
             seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas)
