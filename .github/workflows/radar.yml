@@ -18,16 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       # El historial de precios vive en la cache: sin el, el bot repetiria
       # alertas en cada ronda y no podria detectar caidas reales.
       - name: Restaurar historial
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: radar.db
           key: radar-db-${{ github.run_id }}
@@ -48,7 +48,7 @@ jobs:
 
       - name: Guardar historial
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: radar.db
           key: radar-db-${{ github.run_id }}
