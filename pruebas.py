@@ -735,6 +735,39 @@ class PruebaComandos(unittest.TestCase):
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
 
 
+class PruebaMarcas(unittest.TestCase):
+    """Una marca corta se cuela dentro de palabras corrientes."""
+
+    def test_puma_no_es_espuma(self):
+        """Caso real: buscar "puma" en Olimpica devolvia colchones
+        "esPUMAdos" y adaptadores "ComPUMAx". De 50 resultados, cero eran
+        PUMA."""
+        from core import filtros
+        for falso in ("Colchon Nova Espumados Del Litoral 140x190",
+                      "Adaptador Corriente 12v2a Compumax 11054",
+                      "Espuma Facial Granulos 120Gr Kaloe Exfoliante"):
+            self.assertFalse(filtros.menciona(falso, "puma"), falso)
+        for real in ("PUMA Men Softride Sneakers",
+                     "Tenis Puma Caven 2.0 Hombre"):
+            self.assertTrue(filtros.menciona(real, "puma"), real)
+
+    def test_reconoce_marcas_de_dos_palabras(self):
+        from core import filtros
+        self.assertTrue(filtros.menciona("Zapatillas New Balance 574", "new balance"))
+        self.assertFalse(filtros.menciona("Balance de cocina digital", "new balance"))
+
+    def test_no_confunde_una_marca_con_el_principio_de_otra_palabra(self):
+        from core import filtros
+        self.assertFalse(filtros.menciona("Camiseta Niketown generica", "nike"))
+        self.assertTrue(filtros.menciona("Tenis Nike Zoom Vomero 5", "nike"))
+
+    def test_el_perfume_no_es_ropa(self):
+        """Las marcas deportivas venden perfume, y buscar "adidas" lo traia."""
+        from core import filtros
+        self.assertTrue(filtros.descartado(
+            "Perfume Adidas Hombre Ice Dive Eau De Toilette", filtros.VETADAS_CO))
+
+
 class PruebaRitmos(unittest.TestCase):
     """Dos ritmos y un horario: ni todo cambia al mismo paso, ni de
     madrugada hay nada que buscar."""

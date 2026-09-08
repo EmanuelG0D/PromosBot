@@ -14,18 +14,21 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 import config
-from core import http
+from core import filtros, http
 from core.models import Deal
 
 TIENDAS = {
     "exito":    {"nombre": "Exito",    "api": "https://www.exito.com/io",    "web": "https://www.exito.com"},
     "carulla":  {"nombre": "Carulla",  "api": "https://www.carulla.com/io",  "web": "https://www.carulla.com"},
     "olimpica": {"nombre": "Olimpica", "api": "https://www.olimpica.com",    "web": "https://www.olimpica.com"},
-    # Verificadas el 2026-09-08 contra el endpoint de catalogo: las cinco
-    # responden JSON con Price y ListPrice. Metro no esta porque redirige al
-    # mismo catalogo de Jumbo: seria pedir dos veces lo mismo.
+    # Verificadas el 2026-09-08 contra el endpoint de catalogo: responden JSON
+    # con Price y ListPrice. Metro no esta porque redirige al mismo catalogo de
+    # Jumbo: seria pedir dos veces lo mismo.
+    #
+    # Panamericana se retiro a proposito. Es la unica que nos veta en su
+    # robots.txt, y sin puerta trasera: "Disallow: /api/", "/busca/" y
+    # "/buscapagina/". No es que no nos hayan visto, es que pusieron el letrero.
     "jumbo":        {"nombre": "Jumbo",        "api": "https://www.jumbocolombia.com",   "web": "https://www.jumbocolombia.com"},
-    "panamericana": {"nombre": "Panamericana", "api": "https://www.panamericana.com.co", "web": "https://www.panamericana.com.co"},
     "pepeganga":    {"nombre": "Pepe Ganga",   "api": "https://www.pepeganga.com",       "web": "https://www.pepeganga.com"},
     "arturocalle":  {"nombre": "Arturo Calle", "api": "https://www.arturocalle.com",     "web": "https://www.arturocalle.com"},
     "larebaja":     {"nombre": "La Rebaja",    "api": "https://www.larebajavirtual.com", "web": "https://www.larebajavirtual.com"},
@@ -145,7 +148,8 @@ def _notas(oferta: dict) -> list[str]:
     return notas
 
 
-def _consultar(clave: str, tienda: dict, consulta: str, hasta: int) -> list[Deal]:
+def _consultar(clave: str, tienda: dict, consulta: str, hasta: int,
+               exigir: bool = False) -> list[Deal]:
     if consulta == CATALOGO:
         url = tienda["api"] + RUTA_CATALOGO.format(hasta=hasta)
     else:
@@ -201,11 +205,20 @@ def _consultar(clave: str, tienda: dict, consulta: str, hasta: int) -> list[Deal
             in_stock=bool(oferta.get("AvailableQuantity", 0)),
             list_price_trusted=lista_confiable,
         ))
+    if exigir:
+        ofertas = [d for d in ofertas if filtros.menciona(d.title, consulta)]
     return ofertas
 
 
-def fetch(consultas: list[str], tiendas: list[str] | None = None, por_consulta: int = 24) -> list[Deal]:
+def fetch(consultas: list[str], tiendas: list[str] | None = None,
+          por_consulta: int = 24, marcas=None) -> list[Deal]:
+    """Las consultas listadas en `marcas` exigen que el titulo las nombre.
+
+    Sin eso, "puma" trae colchones espumados: el buscador de la tienda casa
+    subcadenas y una marca corta se cuela dentro de palabras corrientes.
+    """
     hasta = min(por_consulta, 49) - 1   # VTEX topa en 50 resultados por peticion
+    exigidas = {m.lower() for m in (marcas or [])}
 
     tareas = []
     for clave in (tiendas or list(TIENDAS)):
@@ -213,13 +226,14 @@ def fetch(consultas: list[str], tiendas: list[str] | None = None, por_consulta: 
         if not tienda:
             print(f"  [vtex] tienda desconocida: {clave}")
             continue
-        tareas += [(clave, tienda, consulta) for consulta in consultas]
+        tareas += [(clave, tienda, c, c.lower() in exigidas)
+                   for c in consultas]
 
     if not tareas:
         return []
 
     ofertas: list[Deal] = []
     with ThreadPoolExecutor(max_workers=HILOS) as pool:
-        for lote in pool.map(lambda t: _consultar(t[0], t[1], t[2], hasta), tareas):
+        for lote in pool.map(lambda t: _consultar(t[0], t[1], t[2], hasta, t[3]), tareas):
             ofertas += lote
     return ofertas

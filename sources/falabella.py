@@ -21,7 +21,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote_plus
 
-from core import http
+from core import filtros, http
 from core.models import Deal
 
 TIENDAS = {
@@ -128,7 +128,7 @@ def _notas(producto: dict, tarjeta: float | None) -> list[str]:
 
 
 def _una_consulta(clave: str, tienda: dict, consulta: str,
-                  por_consulta: int) -> list[Deal]:
+                  por_consulta: int, exigir: bool = False) -> list[Deal]:
     url = tienda["base"] + tienda["buscar"].format(q=quote_plus(consulta))
     try:
         html = http.get_text(url)
@@ -178,25 +178,33 @@ def _una_consulta(clave: str, tienda: dict, consulta: str,
             # availability viene vacio y no sirve para decidir.
             in_stock=True,
         ))
+    if exigir:
+        ofertas = [d for d in ofertas if filtros.menciona(d.title, consulta)]
     return ofertas
 
 
 def fetch(consultas: list[str], tiendas: list[str] | None = None,
-          por_consulta: int = 30) -> list[Deal]:
-    """Una peticion por cada par (tienda, busqueda), en paralelo."""
+          por_consulta: int = 30, marcas=None) -> list[Deal]:
+    """Una peticion por cada par (tienda, busqueda), en paralelo.
+
+    Las consultas listadas en `marcas` exigen que el titulo las nombre como
+    palabra: una marca corta se cuela dentro de palabras corrientes.
+    """
+    exigidas = {m.lower() for m in (marcas or [])}
     tareas = []
     for clave in (tiendas or list(TIENDAS)):
         tienda = TIENDAS.get(clave)
         if not tienda:
             print(f"  [falabella] tienda desconocida: {clave}")
             continue
-        tareas += [(clave, tienda, consulta) for consulta in consultas]
+        tareas += [(clave, tienda, c, c.lower() in exigidas)
+                   for c in consultas]
 
     ofertas: list[Deal] = []
     vistos: set[str] = set()
     with ThreadPoolExecutor(max_workers=HILOS) as pool:
         for lote in pool.map(
-                lambda t: _una_consulta(t[0], t[1], t[2], por_consulta), tareas):
+                lambda t: _una_consulta(t[0], t[1], t[2], por_consulta, t[3]), tareas):
             for deal in lote:
                 if deal.key in vistos:
                     continue

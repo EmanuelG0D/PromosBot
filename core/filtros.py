@@ -38,6 +38,9 @@ ACCESORIOS = (
 RUIDO_CO = (
     "tetero", "biberon", "chupo", "pañalera", "panalera", "florero",
     "portarretrato", "porta retrato", "adorno", "figura decorativa",
+    # Las marcas deportivas venden perfume, y no es lo que se busca al pedir
+    # "adidas": "Perfume Adidas Ice Dive" no es ropa ni calzado.
+    "perfume", "eau de", "colonia", "desodorante", "body splash",
 )
 
 # Lo que se veta por defecto en las tiendas colombianas cuando la watchlist no
@@ -89,3 +92,24 @@ def es_accesorio(titulo: str, palabras: tuple | list | None = None) -> bool:
     return any(limpio == _normalizar(p).strip()
                or limpio.startswith(_normalizar(p).strip() + " ")
                for p in palabras)
+
+
+def menciona(titulo: str, termino: str) -> bool:
+    """True si el titulo nombra el termino como palabra, no como pedazo.
+
+    Los buscadores de tienda casan subcadenas: pedir "puma" en Olimpica
+    devuelve colchones "esPUMAdos" y adaptadores "ComPUMAx". Con las marcas
+    hay que exigir la palabra entera; con un termino generico no, porque
+    "televisor" tiene que poder traer un "TV LG 55".
+
+    Se compara por palabras y no con una expresion regular a proposito:
+    _normalizar ya deja el titulo como palabras separadas por espacios, asi
+    que basta buscar la secuencia, y no hay que escapar nada.
+    """
+    palabras = _normalizar(termino).split()
+    if not palabras:
+        return True
+    titulo_palabras = _normalizar(titulo).split()
+    n = len(palabras)
+    return any(titulo_palabras[i:i + n] == palabras
+               for i in range(len(titulo_palabras) - n + 1))

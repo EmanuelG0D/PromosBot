@@ -58,7 +58,8 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> VTEX ({', '.join(cfg.get('tiendas', vtex.TIENDAS))}): {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 24)), cfg)
+                vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 24),
+                           cfg.get("marcas")), cfg)
 
     if "algolia_co" in activas:
         cfg = watchlist.get("algolia_co", {})
@@ -84,7 +85,8 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
             print(f"-> Falabella/Homecenter: {len(consultas)} busquedas")
             ofertas += _sin_ruido(
                 falabella.fetch(consultas, cfg.get("tiendas"),
-                                cfg.get("por_consulta", 30)), cfg)
+                                cfg.get("por_consulta", 30),
+                                cfg.get("marcas")), cfg)
 
     # La drogueria va aparte de las demas VTEX: no se le buscan terminos sino el
     # catalogo entero, y necesita su propio veto (en una tienda de tecnologia
@@ -293,13 +295,14 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     if fuente == "algolia_co":
         crudas = algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
     elif fuente == "vtex":
-        crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24))
+        crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24),
+                            cfg.get("marcas"))
     elif fuente == "promocajita":
         return promocajita.fetch(cfg.get("canales"), cfg.get("por_canal", 20),
                                  cfg.get("incluir"), cfg.get("excluir"))
     elif fuente == "falabella":
         crudas = falabella.fetch(consultas, tiendas or cfg.get("tiendas"),
-                                 cfg.get("por_consulta", 30))
+                                 cfg.get("por_consulta", 30), cfg.get("marcas"))
     elif fuente == "droguerias":
         crudas = vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 40))
     elif fuente == "slickdeals":
