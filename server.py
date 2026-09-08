@@ -33,7 +33,25 @@ import radar
 from core import comandos, respaldo, telegram
 
 PUERTO = int(os.environ.get("PORT", "10000"))
-INTERVALO_MIN = float(os.environ.get("RUN_EVERY_MINUTES", "30"))
+
+# Dos ritmos, porque no todo cambia al mismo paso. Las ofertas de comunidad
+# duran horas y cuestan 23 peticiones; los catalogos de tienda se mueven por
+# dia y cuestan 141. Preguntarle a las 12 tiendas cada 15 minutos era gastar
+# 15.744 peticiones diarias para enterarse de lo mismo.
+RONDA_COMUNIDAD = ("slickdeals", "promocajita")
+RONDA_CATALOGOS = ("vtex", "algolia_co", "falabella", "droguerias",
+                   "mercadolibre", "ebay")
+INTERVALO_COMUNIDAD_MIN = float(os.environ.get("RONDA_COMUNIDAD_MINUTOS", "15"))
+# RUN_EVERY_MINUTES quedo obsoleta a proposito: heredarla aqui habria dejado
+# los catalogos en 15 minutos, que es justo lo que este cambio evita.
+INTERVALO_CATALOGOS_MIN = float(os.environ.get("RONDA_CATALOGOS_MINUTOS", "60"))
+
+# Horario de trabajo, en hora de Colombia. De madrugada las tiendas no
+# publican nada, y el servicio gratuito de Render tiene 750 horas al mes:
+# dormir seis horas diarias deja margen de sobra.
+ZONA_CO = dt.timezone(dt.timedelta(hours=-5))
+HORA_DESDE = int(os.environ.get("RONDAS_DESDE_HORA", "6"))
+HORA_HASTA = int(os.environ.get("RONDAS_HASTA_HORA", "24"))
 RUN_TOKEN = os.environ.get("RUN_TOKEN", "").strip()
 ESPERA_INICIAL_S = float(os.environ.get("FIRST_RUN_DELAY_SECONDS", "20"))
 # Cada cuanto se le pregunta a Telegram cuando no hay webhook (modo local).
@@ -72,16 +90,37 @@ def log(mensaje: str) -> None:
     print(f"[{_ahora().strftime('%Y-%m-%d %H:%M:%S')}Z] {mensaje}", flush=True)
 
 
-def correr_ronda(motivo: str) -> dict:
-    """Ejecuta una ronda. Nunca deja que dos se solapen."""
-    if not _ronda_en_curso.acquire(blocking=False):
+def en_horario(ahora: dt.datetime | None = None) -> bool:
+    """True si estamos dentro de la franja en que el bot sale a buscar.
+
+    Se comprueba aqui y no solo en el ping externo: un comando de madrugada
+    despierta el servicio, y sin esta guarda arrancaria una ronda completa a
+    las tres de la manana.
+    """
+    hora = (ahora or dt.datetime.now(ZONA_CO)).hour
+    fin = HORA_HASTA % 24
+    if HORA_DESDE == fin:
+        return True                       # franja de 24 horas
+    if HORA_DESDE < fin:
+        return HORA_DESDE <= hora < fin
+    return hora >= HORA_DESDE or hora < fin   # franja que cruza la medianoche
+
+
+def correr_ronda(motivo: str, fuentes=None, espera_s: float = 0) -> dict:
+    """Ejecuta una ronda. Nunca deja que dos se solapen.
+
+    Las rondas programadas esperan su turno (espera_s): descartar la de
+    catalogos por chocar con una de comunidad costaria una hora entera. El
+    disparador manual no espera, para contestar rapido.
+    """
+    if not _ronda_en_curso.acquire(blocking=espera_s > 0, timeout=espera_s or -1):
         log(f"ronda '{motivo}' descartada: ya hay una en curso")
         return {"error": "ya hay una ronda en curso"}
 
     try:
         _estado["corriendo"] = True
         log(f"ronda iniciada ({motivo})")
-        resultado = radar.ejecutar_ronda()
+        resultado = radar.ejecutar_ronda(fuentes)
         _estado["rondas"] += 1
         _estado["ultima_ronda"] = _ahora().isoformat(timespec="seconds")
         _estado["ultimo_resultado"] = resultado
@@ -179,16 +218,24 @@ def sondeo_local() -> None:
         time.sleep(SONDEO_S)
 
 
-def programador() -> None:
-    """Hilo de fondo: una ronda cada INTERVALO_MIN minutos."""
+def programador(nombre: str, fuentes, intervalo_min: float,
+                retraso_s: float = 0) -> None:
+    """Hilo de fondo: una ronda de esas fuentes cada tantos minutos.
+
+    El retraso inicial evita que los dos ritmos arranquen en el mismo segundo
+    y se queden chocando cada hora en punto.
+    """
     # Se espera un poco para que el puerto quede escuchando cuanto antes:
     # Render marca el despliegue como fallido si tarda en responder.
-    time.sleep(ESPERA_INICIAL_S)
+    time.sleep(ESPERA_INICIAL_S + retraso_s)
     while True:
-        correr_ronda("programada")
-        proxima = _ahora() + dt.timedelta(minutes=INTERVALO_MIN)
+        if en_horario():
+            correr_ronda(nombre, fuentes, espera_s=120)
+        else:
+            log(f"ronda '{nombre}' omitida: fuera de horario")
+        proxima = _ahora() + dt.timedelta(minutes=intervalo_min)
         _estado["proxima_ronda"] = proxima.isoformat(timespec="seconds")
-        time.sleep(INTERVALO_MIN * 60)
+        time.sleep(intervalo_min * 60)
 
 
 class Manejador(BaseHTTPRequestHandler):
@@ -219,7 +266,10 @@ class Manejador(BaseHTTPRequestHandler):
                 "ultimo_resultado": _estado["ultimo_resultado"],
                 "ultimo_error": _estado["ultimo_error"],
                 "proxima_ronda": _estado["proxima_ronda"],
-                "intervalo_minutos": INTERVALO_MIN,
+                "ronda_comunidad_min": INTERVALO_COMUNIDAD_MIN,
+                "ronda_catalogos_min": INTERVALO_CATALOGOS_MIN,
+                "horario": f"{HORA_DESDE}:00 a {HORA_HASTA}:00 (Colombia)",
+                "en_horario_ahora": en_horario(),
                 "telegram_configurado": telegram.enabled(),
                 "webhook": _estado["webhook"],
                 "comandos_atendidos": _estado["comandos_atendidos"],
@@ -297,7 +347,10 @@ def main() -> None:
 
     _estado["arranque"] = _ahora().isoformat(timespec="seconds")
     log(f"iniciando radar en el puerto {PUERTO}")
-    log(f"telegram configurado: {telegram.enabled()} | ronda cada {INTERVALO_MIN} min")
+    log(f"telegram configurado: {telegram.enabled()}")
+    log(f"comunidad cada {INTERVALO_COMUNIDAD_MIN:g} min | "
+        f"catalogos cada {INTERVALO_CATALOGOS_MIN:g} min | "
+        f"horario {HORA_DESDE}:00-{HORA_HASTA}:00 Colombia")
 
     respaldo.restaurar()
 
@@ -308,7 +361,10 @@ def main() -> None:
     if not registrar_webhook() and telegram.enabled():
         threading.Thread(target=sondeo_local, daemon=True).start()
 
-    threading.Thread(target=programador, daemon=True).start()
+    threading.Thread(target=programador, daemon=True, args=(
+        "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
+    threading.Thread(target=programador, daemon=True, args=(
+        "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
 
     servidor = ThreadingHTTPServer(("0.0.0.0", PUERTO), Manejador)
     try:

@@ -90,15 +90,38 @@ zapatos y no medias ni loncheras, cambia la consulta `"adidas"` por
 ### El freno diario
 
 `MAX_ALERTS_PER_DAY` (40 por defecto) es el tope de mensajes en 24 horas, sin
-importar cuántas ofertas aparezcan. Con rondas cada 15 minutos, es lo que separa
+importar cuántas ofertas aparezcan. Con rondas cada hora, es lo que separa
 un bot útil de uno insoportable. El contador vive en la base de datos, así que
 sobrevive a los reinicios mientras el respaldo esté configurado.
 
 ### Cada cuánto busca
 
-Cada **15 minutos** (`RUN_EVERY_MINUTES`). Una ronda completa revisa ~2.500
-ofertas de las cinco tiendas y tarda cerca de un minuto, así que el servicio
-pasa la mayor parte del tiempo en reposo.
+**Dos ritmos, porque no todo cambia al mismo paso.**
+
+| Ronda | Fuentes | Cada | Peticiones |
+|---|---|---|---|
+| Comunidad | Slickdeals, PROMOCAJITA | 15 min | 23 |
+| Catálogos | Las 12 tiendas y la droguería | 1 hora | 141 |
+
+Las ofertas de comunidad duran horas y hay que cazarlas pronto; el precio de un
+televisor en Éxito no cambia en quince minutos. Preguntarle a todo cada cuarto
+de hora eran **15.744 peticiones diarias** para enterarse de lo mismo; así son
+**4.194**, un 73% menos, sin perder nada que importe.
+
+Una ronda de catálogos revisa ~4.200 ofertas y tarda unos 40 segundos, así que
+el servicio pasa la mayor parte del tiempo en reposo.
+
+### Horario: de 6 a. m. a medianoche
+
+De madrugada las tiendas colombianas no publican nada, así que el bot no sale a
+buscar entre las 12 y las 6 (`RONDAS_DESDE_HORA` / `RONDAS_HASTA_HORA`, en hora
+de Colombia). Dormir esas seis horas deja margen de sobra dentro de las 750
+horas gratis de Render.
+
+El horario se comprueba **dentro del servicio**, no solo en el ping: un comando
+de madrugada despierta la instancia, y sin esa guarda arrancaría una ronda
+completa contra las doce tiendas a las tres de la mañana. Los comandos sí
+responden a cualquier hora — lo que se pausa es la búsqueda automática.
 
 ### La primera ronda es distinta
 
@@ -236,11 +259,16 @@ Con **cron-job.org** o **UptimeRobot** (ambos gratis), apuntando a:
 https://TU-SERVICIO.onrender.com/healthz
 ```
 
-Cada 5 minutos. Con eso nunca pasa 15 minutos en silencio y no se duerme.
+Cada 5 minutos, **de 6 a. m. a medianoche** (los dos permiten poner horario).
+Con eso nunca pasa 15 minutos en silencio y no se duerme mientras trabaja.
 
 > El ping **no** ejecuta rondas: solo despierta el servicio y responde al
-> instante, así el pinger nunca se topa con un timeout. Las rondas las dispara
-> el reloj interno cada `RUN_EVERY_MINUTES`.
+> instante, así el pinger nunca se topa con un timeout. Las rondas las disparan
+> los dos relojes internos, cada uno con su intervalo.
+
+De noche el servicio se duerme a propósito y no pasa nada: los comandos siguen
+funcionando porque el webhook de Telegram lo despierta solo, con un minuto de
+arranque en frío. Lo único que se pausa es la búsqueda automática.
 
 ### 5. Hacer que el historial sobreviva (importante)
 

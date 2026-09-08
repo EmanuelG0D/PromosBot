@@ -718,6 +718,51 @@ class PruebaComandos(unittest.TestCase):
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
 
 
+class PruebaRitmos(unittest.TestCase):
+    """Dos ritmos y un horario: ni todo cambia al mismo paso, ni de
+    madrugada hay nada que buscar."""
+
+    def test_de_madrugada_no_sale_a_buscar(self):
+        """Un comando a las 3 a.m. despierta el servicio; sin esta guarda
+        arrancaria una ronda completa contra las 12 tiendas."""
+        import datetime as _dt
+        import server
+        def a_las(hora):
+            return server.en_horario(_dt.datetime(2026, 9, 8, hora,
+                                                  tzinfo=server.ZONA_CO))
+        for dormida in (0, 3, 5):
+            self.assertFalse(a_las(dormida), f"{dormida}:00 deberia estar fuera")
+        for despierta in (6, 12, 23):
+            self.assertTrue(a_las(despierta), f"{despierta}:00 deberia entrar")
+
+    def test_los_dos_ritmos_cubren_todo_sin_repetir(self):
+        """Una fuente en los dos ritmos se consultaria de mas; una fuente en
+        ninguno no se consultaria nunca, y nadie se enteraria."""
+        import radar
+        import server
+        rapido, lento = set(server.RONDA_COMUNIDAD), set(server.RONDA_CATALOGOS)
+        self.assertEqual(rapido | lento, set(radar.FUENTES))
+        self.assertEqual(rapido & lento, set())
+
+    def test_lo_que_cambia_rapido_va_en_el_ritmo_rapido(self):
+        """Las ofertas de comunidad duran horas; un catalogo de tienda se
+        mueve por dia. Cambiarlas de ritmo seria gastar peticiones."""
+        import server
+        self.assertIn("promocajita", server.RONDA_COMUNIDAD)
+        self.assertIn("slickdeals", server.RONDA_COMUNIDAD)
+        self.assertIn("vtex", server.RONDA_CATALOGOS)
+        self.assertLess(server.INTERVALO_COMUNIDAD_MIN,
+                        server.INTERVALO_CATALOGOS_MIN)
+
+    def test_la_ronda_programada_espera_su_turno(self):
+        """Descartar la ronda de catalogos por chocar con una de comunidad
+        costaria una hora entera."""
+        import inspect
+        import server
+        codigo = inspect.getsource(server.programador)
+        self.assertIn("espera_s=", codigo)
+
+
 class PruebaPromocajita(unittest.TestCase):
     """El canal de Telegram de la comunidad colombiana de ofertas."""
 

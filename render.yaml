@@ -44,7 +44,16 @@ services:
 
       - key: PYTHONUNBUFFERED
         value: "1"
-      - key: RUN_EVERY_MINUTES
+      # Dos ritmos: la comunidad cambia por hora, los catalogos por dia.
+      - key: RONDA_COMUNIDAD_MINUTOS
         value: "15"
+      - key: RONDA_CATALOGOS_MINUTOS
+        value: "60"
+      # Horario en hora de Colombia. Dormir de medianoche a las 6 deja margen
+      # de sobra dentro de las 750 horas gratis del plan.
+      - key: RONDAS_DESDE_HORA
+        value: "6"
+      - key: RONDAS_HASTA_HORA
+        value: "24"
       - key: PYTHON_VERSION
         value: "3.12.4"
