@@ -36,6 +36,8 @@ PUERTO = int(os.environ.get("PORT", "10000"))
 INTERVALO_MIN = float(os.environ.get("RUN_EVERY_MINUTES", "30"))
 RUN_TOKEN = os.environ.get("RUN_TOKEN", "").strip()
 ESPERA_INICIAL_S = float(os.environ.get("FIRST_RUN_DELAY_SECONDS", "20"))
+# Cada cuanto se le pregunta a Telegram cuando no hay webhook (modo local).
+SONDEO_S = float(os.environ.get("POLL_COMANDOS_SECONDS", "3"))
 
 # Ruta donde Telegram entrega los mensajes. No es secreta: lo que autentica
 # la entrega es la cabecera con el secreto que se registro en setWebhook.
@@ -127,7 +129,7 @@ def atender_comando(actualizacion: dict) -> None:
             log(f"comando fallido: {type(exc).__name__}: {exc}")
 
 
-def registrar_webhook() -> None:
+def registrar_webhook() -> bool:
     """Le dice a Telegram donde entregar los comandos.
 
     Render publica la URL del servicio en RENDER_EXTERNAL_URL, asi que no hay
@@ -137,21 +139,44 @@ def registrar_webhook() -> None:
             or os.environ.get("PUBLIC_URL") or "").strip().rstrip("/")
     if not telegram.enabled():
         _estado["webhook"] = "sin token de Telegram"
-        return
+        return False
     if not base:
-        # En local no hay URL publica: se sigue pudiendo probar con
-        # `python radar.py --comandos`, que usa getUpdates.
-        _estado["webhook"] = "sin URL publica (RENDER_EXTERNAL_URL)"
-        log("sin URL publica: los comandos por webhook quedan apagados")
-        return
+        # En local no hay URL publica; se cae al sondeo. Y hay que quitar el
+        # webhook que hubiera quedado de un despliegue: si sigue puesto,
+        # Telegram no contesta getUpdates y el bot se queda mudo aqui.
+        telegram.quitar_webhook()
+        _estado["webhook"] = "sin URL publica: sondeo local"
+        return False
 
     destino = base + RUTA_WEBHOOK
     if telegram.registrar_webhook(destino):
         _estado["webhook"] = destino
         log(f"webhook registrado en {destino}")
-    else:
-        _estado["webhook"] = "fallo el registro"
-        log("no se pudo registrar el webhook: los comandos no responderan")
+        return True
+    _estado["webhook"] = "fallo el registro"
+    log("no se pudo registrar el webhook: los comandos no responderan")
+    return False
+
+
+def sondeo_local() -> None:
+    """Pregunta por comandos cada tanto, para cuando no hay webhook.
+
+    Telegram solo entrega en una URL publica con HTTPS, y un portatil no la
+    tiene. Este es el modo de prueba en local: el mismo camino viejo de
+    getUpdates, pero cada pocos segundos en vez de cada cinco minutos. En
+    Render no arranca nunca, porque alli si hay webhook.
+    """
+    log(f"sin webhook: preguntando por comandos cada {SONDEO_S:g}s")
+    while True:
+        try:
+            solicitudes = comandos.pendientes()
+            if solicitudes:
+                with _comando_en_curso:
+                    radar.atender_solicitudes(solicitudes)
+                    _estado["comandos_atendidos"] += len(solicitudes)
+        except Exception as exc:              # un comando roto no tumba el hilo
+            log(f"sondeo fallido: {type(exc).__name__}: {exc}")
+        time.sleep(SONDEO_S)
 
 
 def programador() -> None:
@@ -270,7 +295,8 @@ def main() -> None:
     # Antes lo hacia el flujo de GitHub Actions; ahora vive aqui.
     telegram_menu = comandos.registrar_menu()
     log(f"menu de comandos publicado: {telegram_menu}")
-    registrar_webhook()
+    if not registrar_webhook() and telegram.enabled():
+        threading.Thread(target=sondeo_local, daemon=True).start()
 
     threading.Thread(target=programador, daemon=True).start()
 
