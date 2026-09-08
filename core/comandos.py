@@ -30,7 +30,13 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "carulla":  ("vtex",       ["carulla"],  "Carulla"),
     "olimpica": ("vtex",       ["olimpica"], "Olimpica"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
+    "todo":     ("*",          None,         "Todas las tiendas"),
 }
+
+# Cuantas claves de ofertas ya mostradas se recuerdan. Alcanza para que pedir
+# la misma tienda varias veces seguidas traiga cosas distintas, sin dejar que
+# el archivo de estado crezca sin control.
+MEMORIA_MOSTRADAS = 400
 
 AYUDA = (
     "\U0001F916 <b>Comandos disponibles</b>\n\n"
@@ -40,6 +46,7 @@ AYUDA = (
     "/carulla - ofertas de Carulla\n"
     "/olimpica - ofertas de Olimpica\n"
     "/exterior - ofertas de EE. UU. (Slickdeals)\n"
+    "/todo - lo mejor de todas las tiendas\n"
     "/objetivos - tus topes de precio configurados\n"
     "/estado - cuantas alertas van hoy\n"
     "/ayuda - esta lista\n\n"
@@ -48,15 +55,42 @@ AYUDA = (
 )
 
 
+def _cargar() -> dict:
+    try:
+        return json.loads(ESTADO.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _guardar(datos: dict) -> None:
+    ESTADO.write_text(json.dumps(datos), encoding="utf-8")
+
+
 def _leer_estado() -> int:
     try:
-        return int(json.loads(ESTADO.read_text(encoding="utf-8")).get("offset", 0))
-    except Exception:
+        return int(_cargar().get("offset", 0))
+    except (TypeError, ValueError):
         return 0
 
 
 def _guardar_estado(offset: int) -> None:
-    ESTADO.write_text(json.dumps({"offset": offset}), encoding="utf-8")
+    datos = _cargar()
+    datos["offset"] = offset
+    _guardar(datos)
+
+
+def ya_mostradas() -> set:
+    """Ofertas que ya se enviaron respondiendo comandos."""
+    return set(_cargar().get("mostradas") or [])
+
+
+def marcar_mostradas(claves) -> None:
+    """Recuerda lo enviado para que la proxima vez traiga cosas distintas."""
+    datos = _cargar()
+    nuevas = list(claves)
+    previas = [c for c in (datos.get("mostradas") or []) if c not in set(nuevas)]
+    datos["mostradas"] = (previas + nuevas)[-MEMORIA_MOSTRADAS:]
+    _guardar(datos)
 
 
 def pendientes() -> list[dict]:
@@ -109,6 +143,7 @@ MENU = [
     ("carulla", "Ofertas de Carulla"),
     ("olimpica", "Ofertas de Olimpica"),
     ("exterior", "Ofertas de EE. UU."),
+    ("todo", "Lo mejor de todas las tiendas"),
     ("objetivos", "Tus topes de precio"),
     ("estado", "Alertas enviadas hoy"),
     ("ayuda", "Lista de comandos"),

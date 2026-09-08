@@ -200,6 +200,36 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     return []
 
 
+def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
+             cuantas: int) -> list:
+    """Las mejores ofertas de esas fuentes, priorizando las que no has visto."""
+    ofertas: list[Deal] = []
+    for fuente in fuentes:
+        ofertas += _ofertas_de(watchlist, fuente, tiendas)
+    ofertas = _sin_repetidas(ofertas)
+
+    disponibles = [d for d in ofertas if d.in_stock]
+    if fuentes == ["slickdeals"]:
+        # Slickdeals no publica precio de lista: no hay porcentaje que ordenar,
+        # pero el feed ya viene ordenado por los votos de la comunidad.
+        candidatas = [(d, Verdict(True, "pedido a mano")) for d in disponibles]
+    else:
+        candidatas = [(d, Verdict(True, "pedido a mano")) for d in disponibles
+                      if d.discount_verificable > 0]
+        candidatas.sort(key=lambda par: -par[0].discount_verificable)
+
+    unicas, _hermanas = _colapsar_variantes(candidatas)
+
+    # Pedir la misma tienda dos veces seguidas debe traer cosas distintas.
+    nuevas = [par for par in unicas if par[0].key not in vistas]
+    repetidas = [par for par in unicas if par[0].key in vistas]
+    seleccion = (nuevas + repetidas)[:cuantas]
+    for deal, verdict in seleccion:
+        if deal.key in vistas:
+            verdict.etiquetas.append("ya te la habia mostrado")
+    return seleccion
+
+
 def atender_comandos(por_comando: int = 5) -> dict:
     """Responde los comandos que hayan llegado al bot.
 
@@ -214,6 +244,15 @@ def atender_comandos(por_comando: int = 5) -> dict:
     watchlist = config.load_watchlist()
     trm, _origen = fx.get_trm(None)
     atendidos = 0
+
+    # Todo lo que ya viste: lo que alerto el radar programado (se lee sin
+    # escribir) y lo que ya se envio respondiendo comandos.
+    vistas = mod_comandos.ya_mostradas()
+    try:
+        with Store() as store:
+            vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
+    except Exception as exc:
+        print(f"  [comandos] sin historial del radar: {exc}")
 
     for solicitud in solicitudes:
         comando = solicitud["comando"]
@@ -253,19 +292,15 @@ def atender_comandos(por_comando: int = 5) -> dict:
             continue
 
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
-        ofertas = _sin_repetidas(_ofertas_de(watchlist, fuente, tiendas))
-        if fuente == "slickdeals":
-            # De Slickdeals no se puede calcular descuento: no publica precio
-            # de lista. El feed ya viene ordenado por lo que voto la comunidad,
-            # asi que se respeta ese orden en vez de inventar uno.
-            candidatas = [(d, Verdict(True, "pedido a mano"))
-                          for d in ofertas if d.in_stock]
+        if fuente == "*":
+            # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
+            # las del exterior no tienen porcentaje y nunca ganarian ese orden,
+            # asi que se les reserva un cupo.
+            seleccion = (_mejores(watchlist, ["algolia_co", "vtex"], None, vistas,
+                                  max(por_comando - 1, 1))
+                         + _mejores(watchlist, ["slickdeals"], None, vistas, 1))
         else:
-            candidatas = [(d, Verdict(True, "pedido a mano")) for d in ofertas
-                          if d.in_stock and d.discount_verificable > 0]
-            candidatas.sort(key=lambda par: -par[0].discount_verificable)
-        seleccion, _hermanas = _colapsar_variantes(candidatas)
-        seleccion = seleccion[:por_comando]
+            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, por_comando)
 
         if not seleccion:
             telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.")
@@ -273,10 +308,14 @@ def atender_comandos(por_comando: int = 5) -> dict:
 
         telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — "
                       f"lo mejor de ahora mismo")
+        enviadas_ahora = []
         for deal, verdict in seleccion:
             landed = calcular(deal.price, trm, deal.weight_lb) if deal.country == "US" else None
             telegram.enviar_oferta(deal, verdict, landed)
+            enviadas_ahora.append(deal.key)
             time.sleep(3.5)
+        mod_comandos.marcar_mostradas(enviadas_ahora)
+        vistas.update(enviadas_ahora)
         atendidos += 1
 
     print(f"Comandos atendidos: {atendidos}")

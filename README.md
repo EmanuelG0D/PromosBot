@@ -482,6 +482,7 @@ Además de avisar solo, el bot responde comandos escritos en el grupo:
 | `/alkosto` `/ktronix` | Lo mejor de esas tiendas ahora mismo |
 | `/exito` `/carulla` `/olimpica` | Lo mismo para las tiendas VTEX |
 | `/exterior` | Ofertas de EE. UU. filtradas a tus intereses |
+| `/todo` | Lo mejor de todas las tiendas, mezclando Colombia y exterior |
 | `/objetivos` | Tus topes de precio configurados |
 | `/estado` | Cuántas alertas van hoy |
 | `/ayuda` | La lista completa |
@@ -498,6 +499,13 @@ y recibir la respuesta pasan un par de minutos.
 
 Para respuesta inmediata haría falta un servidor encendido 24/7 — que es
 exactamente lo que se evitó para que el costo fuera cero.
+
+### Pedir dos veces no repite lo mismo
+
+Cada comando prioriza lo que **no** te ha mostrado, cruzando dos memorias: lo
+que alertó el radar programado y lo que ya se envió respondiendo comandos. Si
+se acaban las novedades, completa con las mejores y las marca como
+*"ya te la había mostrado"*.
 
 ### Por qué los comandos no tocan el historial
 

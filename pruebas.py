@@ -475,7 +475,9 @@ class PruebaComandos(unittest.TestCase):
         from core.comandos import CATALOGO
         from radar import FUENTES
         for comando, (fuente, _tiendas, titulo) in CATALOGO.items():
-            self.assertIn(fuente, FUENTES, f"/{comando} apunta a una fuente inexistente")
+            # "*" es el comodin de /todo: mezcla todas las fuentes.
+            self.assertIn(fuente, set(FUENTES) | {"*"},
+                          f"/{comando} apunta a una fuente inexistente")
             self.assertTrue(titulo)
 
     def test_las_tiendas_existen_en_su_fuente(self):
@@ -492,8 +494,36 @@ class PruebaComandos(unittest.TestCase):
         """Slickdeals no publica precio de lista: exigir descuento lo vaciaba."""
         import inspect
         import radar
-        codigo = inspect.getsource(radar.atender_comandos)
-        self.assertIn('if fuente == "slickdeals"', codigo)
+        codigo = inspect.getsource(radar._mejores)
+        self.assertIn('fuentes == ["slickdeals"]', codigo)
+
+    def test_prioriza_lo_que_no_has_visto(self):
+        """Pedir la misma tienda dos veces debe traer cosas distintas."""
+        import inspect
+        import radar
+        codigo = inspect.getsource(radar._mejores)
+        self.assertIn("nuevas + repetidas", codigo)
+
+    def test_recuerda_lo_que_ya_mostro(self):
+        import json as _json
+        import tempfile
+        from pathlib import Path as _Path
+        from core import comandos
+        with tempfile.TemporaryDirectory() as tmp:
+            original = comandos.ESTADO
+            comandos.ESTADO = _Path(tmp) / "estado.json"
+            try:
+                self.assertEqual(comandos.ya_mostradas(), set())
+                comandos.marcar_mostradas(["a", "b"])
+                self.assertEqual(comandos.ya_mostradas(), {"a", "b"})
+                comandos.marcar_mostradas(["c"])
+                self.assertEqual(comandos.ya_mostradas(), {"a", "b", "c"})
+                # El offset de Telegram no se pierde al guardar lo mostrado.
+                comandos._guardar_estado(99)
+                comandos.marcar_mostradas(["d"])
+                self.assertEqual(comandos._leer_estado(), 99)
+            finally:
+                comandos.ESTADO = original
 
 
 if __name__ == "__main__":
