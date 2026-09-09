@@ -227,7 +227,10 @@ un ping externo lo mantiene despierto.
 
 ### 1. Subir el proyecto a GitHub
 
-Un repositorio **privado** (`.env` y `radar.db` ya están en `.gitignore`).
+`.env`, `radar.db` y el estado de los comandos están en `.gitignore`, así que
+no viaja ninguna credencial. El repositorio puede ser público o privado: a
+Render le da igual, y desde que los comandos entran por webhook ya no se usan
+los minutos de GitHub Actions, que era la única razón para tenerlo público.
 
 ### 2. Crear el servicio en Render
 
