@@ -18,7 +18,9 @@ infraestructura: **$0**.
 | **Slickdeals** | Ofertas de EE. UU. ya filtradas por la comunidad (Amazon, eBay, Nike, Walmart…) | RSS público. Nadie bloquea un lector de RSS. |
 | **Alkosto · K-tronix** | Catálogo + **precio exclusivo con tarjeta** de la tienda | Índice Algolia del propio buscador |
 | **Éxito · Carulla · Olímpica** | Catálogo colombiano ordenado por mayor descuento | API JSON de VTEX |
-| **Mercado Libre** *(opcional)* | Catálogo colombiano, envío gratis, tiendas oficiales | API oficial (requiere app gratuita) |
+| **Falabella · Homecenter** | Catálogo de tecnología, moda, ferretería y hogar | JSON incrustado de Next.js |
+| **Mercado Libre Colombia** | Liquidaciones del día, cupones activos y tiendas oficiales | Centro oficial de ofertas (SSR JSON pre-renderizado) |
+| **PROMOCAJITA** | Ofertas destacadas de la comunidad colombiana | Canal público de Telegram |
 | **eBay** *(opcional)* | Outlets oficiales y reacondicionados certificados | Browse API oficial (5.000 llamadas/día gratis) |
 
 En cada alerta el bot añade:
@@ -442,35 +444,21 @@ las promociones bancarias y el envío gratis.
 
 ---
 
-## Mercado Libre: verificado que NO se puede
+## Mercado Libre: cómo se lee el catálogo y los cupones
 
-Probado el **8 de septiembre de 2026** con credenciales reales de una aplicación
-propia. El resultado no deja lugar a dudas:
+A diferencia de la búsqueda abierta (`listado.mercadolibre.com.co`), que presenta CAPTCHAs, o su API REST tradicional (`api.mercadolibre.com`), que responde `403 PolicyAgent` a clientes no certificados, Mercado Libre cuenta con un centro público oficial de ofertas en Colombia:
 
-| Endpoint | Respuesta |
-|---|---|
-| `users/me` | **200** — el token es válido y autentica bien |
-| `sites/MCO` (metadata pública del sitio) | **403** PolicyAgent |
-| `sites/MCO/categories` | **403** PolicyAgent |
-| `sites/MCO/search` | **403** PolicyAgent |
+```
+https://www.mercadolibre.com.co/ofertas
+```
 
-No es un problema de scopes ni de credenciales mal puestas: hasta la información
-pública del sitio está bloqueada. Mercado Libre **cerró el catálogo a las
-aplicaciones no certificadas**, y esa certificación está pensada para
-integradores comerciales, no para un bot personal.
+El bot consulta directamente este hub oficial (y sus categorías específicas como `MCO1000`, `MCO1051`, `MCO1648`, `MCO1276`, etc.):
 
-La página web de ofertas sí carga, pero sus datos vienen incrustados como
-fragmentos de interfaz sin contrato estable. Rasparla se rompería en silencio,
-que es la peor falla en un bot desatendido — por eso no se hace.
-
-[sources/mercadolibre.py](sources/mercadolibre.py) se conserva escrito y
-funcional por si algún día esa app queda certificada: bastaría con volver a
-poner términos en `queries` dentro de `watchlist.json`. Mientras tanto la fuente
-está apagada, y si recibe el 403 de política se desactiva sola en la ronda.
-
-**Si creaste la app y no la vas a usar, bórrala** en *Mis aplicaciones*: aunque
-no sirva para el catálogo, su token sí puede leer los datos de tu cuenta
-(`users/me` responde 200). No dejes credenciales vivas de algo que no usas.
+- **Sin navegadores pesados ni APIs con permisos**: lee el estado inicial SSR (`_n.ctx.r`) que los servidores de Mercado Libre inyectan directamente en el HTML.
+- **Cupones oficiales**: extrae promociones y cupones activos (ej. `🎟️ Cupón 10% OFF`) autorizados en la pasarela de Mercado Libre.
+- **Precios reales**: extrae el precio de venta y el `previous_price` certificado para calcular el porcentaje de descuento verificable.
+- **Imágenes en alta resolución**: mapea las fotos al CDN nativo `D_NQ_NP_{id}-F.jpg`, garantizando que Telegram las envíe nítidas sin compresión excesiva.
+- **Vendedores verificados**: captura el nombre del comercio oficial cuando la venta proviene de una marca certificada.
 
 ---
 
@@ -523,12 +511,35 @@ Además de avisar solo, el bot responde comandos escritos en el grupo:
 
 | Comando | Qué hace |
 |---|---|
-| `/alkosto` `/ktronix` | Lo mejor de esas tiendas ahora mismo |
-| `/exito` `/carulla` `/olimpica` | Lo mismo para las tiendas VTEX |
-| `/colombia` | Lo mejor de las cinco tiendas colombianas juntas |
-| `/exterior` | Ofertas de EE. UU. filtradas a tus intereses |
+| `/mercadolibre` `/meli` | Lo mejor de Mercado Libre Colombia y sus cupones |
+| `/alkosto` `/ktronix` | Lo mejor de Alkosto y K-tronix ahora mismo |
+| `/exito` `/carulla` `/olimpica` | Ofertas de las tiendas de Grupo Éxito y Olímpica |
+| `/falabella` `/homecenter` | Ofertas de Falabella y Homecenter |
+| `/drogueria` | Rebajas de droguerías (La Rebaja) |
+| `/cajita` | Lo que publica la comunidad PROMOCAJITA |
+| `/colombia` | Lo mejor de las tiendas colombianas juntas |
+| `/exterior` | Ofertas de EE. UU. filtradas a tus intereses (Slickdeals) |
 | `/todo` | Colombia y exterior mezclados |
+| `/menu` | Abre el teclado interactivo con botones |
 | `/ayuda` | La lista completa |
+
+### Menú interactivo y navegación por departamentos
+
+Además de escribir comandos con `/`, el bot cuenta con un menú de botones interactivos (`ReplyKeyboardMarkup`):
+
+1. **Selección de Tienda**: botones directos para cada tienda (Éxito, Alkosto, Mercado Libre, Falabella, K-tronix, Olímpica, Carulla, Homecenter, Promocajita, Todo Colombia, Exterior, Mis Objetivos).
+2. **Submenú de Categorías**: al tocar una tienda, se despliegan sus departamentos:
+   - `🌟 TODO` (mejores rebajas generales de la tienda)
+   - `📺 Smart TV`
+   - `💻 Portátiles`
+   - `🖥️ Monitores`
+   - `📱 Celulares`
+   - `👟 Zapatos y Tenis`
+   - `🎧 Audio y Diademas`
+   - `❄️ Electrodomésticos`
+   - `👕 Ropa y Moda`
+   - `⬅️ Volver a Tiendas`
+3. **Respuesta inmediata y cancelación reactiva**: al presionar una opción, el bot notifica de inmediato (`🔍 Revisando ofertas de...`) y muestra el estado "escribiendo..." mientras consulta la tienda. Si tocas otra categoría mientras se estaban enviando resultados anteriores, la búsqueda previa se cancela y se atiende la nueva solicitud de inmediato sin trabas.
 
 `/objetivos` (tus topes de precio) y `/estado` (alertas enviadas hoy) siguen
 funcionando si los escribes, pero no aparecen en el menú para no llenarlo de
@@ -640,12 +651,14 @@ core/
   fx.py             TRM oficial con respaldos
   telegram.py       Formato y envío de mensajes
 sources/
-  slickdeals.py     RSS de la comunidad
-  algolia_co.py     Alkosto, K-tronix
-  vtex.py           Éxito, Carulla, Olímpica
-  mercadolibre.py   API oficial (opcional, requiere app)
+  slickdeals.py     RSS de la comunidad (EE. UU.)
+  algolia_co.py     Alkosto, K-tronix (Algolia)
+  vtex.py           Éxito, Carulla, Olímpica, Droguerías (VTEX)
+  falabella.py      Falabella, Homecenter (Next.js SSR)
+  mercadolibre.py   Centro oficial de liquidaciones y cupones (SSR)
+  promocajita.py    Canal público de Telegram de ofertas
   ebay.py           Browse API (opcional)
-pruebas.py          Pruebas de la lógica de decisión
+pruebas.py          Pruebas de la lógica de decisión y catálogo
 ```
 
 ## Comandos

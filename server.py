@@ -55,7 +55,7 @@ HORA_HASTA = int(os.environ.get("RONDAS_HASTA_HORA", "24"))
 RUN_TOKEN = os.environ.get("RUN_TOKEN", "").strip()
 ESPERA_INICIAL_S = float(os.environ.get("FIRST_RUN_DELAY_SECONDS", "20"))
 # Cada cuanto se le pregunta a Telegram cuando no hay webhook (modo local).
-SONDEO_S = float(os.environ.get("POLL_COMANDOS_SECONDS", "3"))
+SONDEO_S = float(os.environ.get("POLL_COMANDOS_SECONDS", "1"))
 
 # Ruta donde Telegram entrega los mensajes. No es secreta: lo que autentica
 # la entrega es la cabecera con el secreto que se registro en setWebhook.
@@ -150,6 +150,36 @@ def _ya_atendido(update_id) -> bool:
     return False
 
 
+def _notificar_inicio_busqueda(solicitudes: list[dict]) -> None:
+    """Envia confirmacion inmediata a Telegram antes de entrar al candado de busqueda."""
+    for req in solicitudes:
+        tipo = req.get("tipo")
+        if tipo == "categoria":
+            cat = req.get("categoria_nombre", "Categoría")
+            tienda = comandos.tienda_activa()
+            if tienda not in comandos.CATALOGO and tienda not in ("objetivos", "estado"):
+                tienda = "colombia"
+            _, _, tit = comandos.CATALOGO.get(tienda, ("co", None, "Colombia"))
+            telegram.accion_escribiendo()
+            telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(cat)}</b> en <b>{telegram.esc(tit)}</b>...</i>")
+            req["notificado"] = True
+        elif tipo == "todo_tienda":
+            tienda = comandos.tienda_activa()
+            if tienda not in comandos.CATALOGO:
+                tienda = "colombia"
+            _, _, tit = comandos.CATALOGO[tienda]
+            telegram.accion_escribiendo()
+            telegram.send(f"🔍 <i>Revisando todo el catálogo de <b>{telegram.esc(tit)}</b>...</i>")
+            req["notificado"] = True
+        else:
+            cmd = req.get("comando", "")
+            if cmd in comandos.CATALOGO:
+                _, _, tit = comandos.CATALOGO[cmd]
+                telegram.accion_escribiendo()
+                telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(tit)}</b>...</i>")
+                req["notificado"] = True
+
+
 def atender_comando(actualizacion: dict) -> None:
     """Responde un comando llegado por webhook. Corre en su propio hilo."""
     solicitud = comandos.leer_comando(actualizacion.get("message") or {})
@@ -158,6 +188,16 @@ def atender_comando(actualizacion: dict) -> None:
     if _ya_atendido(actualizacion.get("update_id")):
         log("comando repetido descartado")
         return
+
+    tipo = solicitud.get("tipo")
+    cmd = solicitud.get("comando")
+    if tipo in ("menu", "elegir_tienda") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
+        radar.atender_solicitudes([solicitud])
+        _estado["comandos_atendidos"] += 1
+        return
+
+    _notificar_inicio_busqueda([solicitud])
+    radar.nueva_busqueda()
 
     with _comando_en_curso:
         try:
@@ -198,24 +238,39 @@ def registrar_webhook() -> bool:
 
 
 def sondeo_local() -> None:
-    """Pregunta por comandos cada tanto, para cuando no hay webhook.
-
-    Telegram solo entrega en una URL publica con HTTPS, y un portatil no la
-    tiene. Este es el modo de prueba en local: el mismo camino viejo de
-    getUpdates, pero cada pocos segundos en vez de cada cinco minutos. En
-    Render no arranca nunca, porque alli si hay webhook.
-    """
-    log(f"sin webhook: preguntando por comandos cada {SONDEO_S:g}s")
+    """Escucha comandos con long-polling de Telegram para responder al instante."""
+    log("sin webhook: escuchando comandos interactivos (long-polling activo)")
     while True:
         try:
-            solicitudes = comandos.pendientes()
+            solicitudes = comandos.pendientes(timeout=2)
             if solicitudes:
-                with _comando_en_curso:
-                    radar.atender_solicitudes(solicitudes)
-                    _estado["comandos_atendidos"] += len(solicitudes)
+                # Comandos de interfaz pura (menu, elegir tienda, ayuda, objetivos):
+                # se responden de inmediato en el mismo hilo de sondeo sin bloquear la cola.
+                inmediatas = [
+                    s for s in solicitudes
+                    if s.get("tipo") in ("menu", "elegir_tienda")
+                    or s.get("comando") in ("menu", "start", "ayuda", "help", "objetivos", "estado")
+                ]
+                busquedas = [s for s in solicitudes if s not in inmediatas]
+
+                if inmediatas:
+                    radar.atender_solicitudes(inmediatas)
+                    _estado["comandos_atendidos"] += len(inmediatas)
+
+                if busquedas:
+                    _notificar_inicio_busqueda(busquedas)
+                    radar.nueva_busqueda()
+
+                    def _ejecutar_busqueda(reqs):
+                        with _comando_en_curso:
+                            radar.atender_solicitudes(reqs)
+                            _estado["comandos_atendidos"] += len(reqs)
+
+                    threading.Thread(target=_ejecutar_busqueda, args=(busquedas,), daemon=True).start()
+                continue
         except Exception as exc:              # un comando roto no tumba el hilo
             log(f"sondeo fallido: {type(exc).__name__}: {exc}")
-        time.sleep(SONDEO_S)
+        time.sleep(0.2)
 
 
 def programador(nombre: str, fuentes, intervalo_min: float,
@@ -358,13 +413,21 @@ def main() -> None:
     # Antes lo hacia el flujo de GitHub Actions; ahora vive aqui.
     telegram_menu = comandos.registrar_menu()
     log(f"menu de comandos publicado: {telegram_menu}")
-    if not registrar_webhook() and telegram.enabled():
+    webhook_activo = registrar_webhook()
+    if not webhook_activo and telegram.enabled():
         threading.Thread(target=sondeo_local, daemon=True).start()
 
-    threading.Thread(target=programador, daemon=True, args=(
-        "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
-    threading.Thread(target=programador, daemon=True, args=(
-        "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
+    # Las rondas de fondo automaticas (scraping masivo de miles de productos)
+    # son para despliegue 24/7 en la nube (Render con webhook).
+    # En modo local, NO se ejecutan en segundo plano para no saturar la red
+    # ni congelar la respuesta del bot mientras el usuario interactua con los menus.
+    if webhook_activo or os.environ.get("ENABLE_LOCAL_ROUNDS") == "1":
+        threading.Thread(target=programador, daemon=True, args=(
+            "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
+        threading.Thread(target=programador, daemon=True, args=(
+            "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
+    else:
+        log("modo interactivo local: rondas de fondo desactivadas para maxima velocidad de respuesta")
 
     servidor = ThreadingHTTPServer(("0.0.0.0", PUERTO), Manejador)
     try:

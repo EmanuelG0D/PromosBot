@@ -34,9 +34,82 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "homecenter": ("falabella", ["homecenter"], "Homecenter"),
     "drogueria": ("droguerias", None,        "Droguerias"),
     "cajita":   ("promocajita", None,        "PROMOCAJITA"),
+    "mercadolibre": ("mercadolibre", None,   "Mercado Libre"),
+    "meli":     ("mercadolibre", None,       "Mercado Libre"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
     "colombia": ("co",         None,         "Todo lo colombiano"),
     "todo":     ("*",          None,         "Todas las tiendas"),
+}
+
+# Mapeo de botones del menu principal a claves de tienda
+BOTONES_TIENDA: dict[str, tuple[str, str]] = {
+    "🟡 éxito": ("exito", "Éxito"),
+    "🟡 exito": ("exito", "Éxito"),
+    "🔴 alkosto": ("alkosto", "Alkosto"),
+    "💛 mercado libre": ("mercadolibre", "Mercado Libre"),
+    "💛 mercadolibre": ("mercadolibre", "Mercado Libre"),
+    "mercado libre": ("mercadolibre", "Mercado Libre"),
+    "mercadolibre": ("mercadolibre", "Mercado Libre"),
+    "meli": ("mercadolibre", "Mercado Libre"),
+    "🟢 falabella": ("falabella", "Falabella"),
+    "⚪ k-tronix": ("ktronix", "K-tronix"),
+    "⚪ ktronix": ("ktronix", "K-tronix"),
+    "🔵 olímpica": ("olimpica", "Olímpica"),
+    "🔵 olimpica": ("olimpica", "Olímpica"),
+    "🟢 carulla": ("carulla", "Carulla"),
+    "carulla": ("carulla", "Carulla"),
+    "caruya": ("carulla", "Carulla"),
+    "🟠 homecenter": ("homecenter", "Homecenter"),
+    "homecenter": ("homecenter", "Homecenter"),
+    "📦 promocajita": ("cajita", "PROMOCAJITA"),
+    "promocajita": ("cajita", "PROMOCAJITA"),
+    "📦 cajita": ("cajita", "PROMOCAJITA"),
+    "cajita": ("cajita", "PROMOCAJITA"),
+    "🇨🇴 todo colombia": ("colombia", "Todo Colombia"),
+    "🇺🇸 exterior (ee. uu.)": ("exterior", "Exterior (EE. UU.)"),
+    "🇺🇸 exterior": ("exterior", "Exterior (EE. UU.)"),
+    "🎯 mis objetivos": ("objetivos", "Mis Objetivos"),
+}
+
+# Consultas especificas al tocar cada categoria en tiendas de Colombia
+CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
+    "📺 Smart TV": ["televisor", "smart tv"],
+    "💻 Portátiles": ["portatil", "laptop", "computador"],
+    "🖥️ Monitores": ["monitor"],
+    "📱 Celulares": ["celular", "smartphone", "iphone"],
+    "👟 Zapatos y Tenis": ["tenis", "zapatillas", "sneakers", "botas", "zapatos"],
+    "🎧 Audio y Diademas": ["audifonos", "diadema", "parlante", "audio"],
+    "❄️ Electrodomésticos": [
+        "nevera",
+        "lavadora",
+        "electrodomesticos",
+        "freidora de aire",
+        "microondas",
+        "cafetera",
+        "aspiradora",
+        "licuadora",
+    ],
+    "👕 Ropa y Moda": [
+        "camiseta",
+        "pantalon",
+        "chaqueta",
+        "billetera",
+        "bolso",
+        "sudadera",
+        "jean",
+    ],
+}
+
+# Consultas especificas al tocar cada categoria en tiendas de EE. UU. (Slickdeals)
+CATEGORIAS_BUSQUEDA_EN: dict[str, list[str]] = {
+    "📺 Smart TV": ["tv", "oled tv", "smart tv"],
+    "💻 Portátiles": ["laptop", "macbook", "notebook"],
+    "🖥️ Monitores": ["monitor", "gaming monitor"],
+    "📱 Celulares": ["phone", "smartphone", "iphone"],
+    "👟 Zapatos y Tenis": ["sneakers", "shoes", "running shoes"],
+    "🎧 Audio y Diademas": ["headphones", "earbuds", "speaker"],
+    "❄️ Electrodomésticos": ["air fryer", "vacuum", "coffee maker", "appliance"],
+    "👕 Ropa y Moda": ["clothing", "hoodie", "jacket", "jeans"],
 }
 
 # Cuantas claves de ofertas ya mostradas se recuerdan. Alcanza para que pedir
@@ -45,7 +118,8 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
 MEMORIA_MOSTRADAS = 400
 
 AYUDA = (
-    "\U0001F916 <b>Comandos disponibles</b>\n\n"
+    "\U0001F916 <b>Comandos y Menú interactivo</b>\n\n"
+    "/menu - Abre el menú de botones interactivo\n"
     "/alkosto - ofertas de Alkosto\n"
     "/ktronix - ofertas de K-tronix\n"
     "/exito - ofertas del Exito\n"
@@ -53,6 +127,7 @@ AYUDA = (
     "/olimpica - ofertas de Olimpica\n"
     "/falabella - ofertas de Falabella\n"
     "/homecenter - ofertas de Homecenter\n"
+    "/mercadolibre - ofertas de Mercado Libre\n"
     "/colombia - lo mejor de las tiendas colombianas\n"
     "/drogueria - rebajas de droguerias\n"
     "/cajita - lo que publica PROMOCAJITA\n"
@@ -60,9 +135,7 @@ AYUDA = (
     "/todo - Colombia y exterior mezclados\n"
     "Puedes pedir mas: <code>/alkosto 25</code>\n"
     "/ayuda - esta lista\n\n"
-    "<i>El bot revisa solo cada 15 minutos, pero los comandos responden al "
-    "instante. Una consulta larga tarda lo que tarde en preguntarle a las "
-    "tiendas.</i>"
+    "<i>También puedes navegar tocando los botones del menú inferior.</i>"
 )
 
 
@@ -90,6 +163,18 @@ def _guardar_estado(offset: int) -> None:
     _guardar(datos)
 
 
+def tienda_activa() -> str:
+    """Tienda seleccionada actualmente en el menu de navegacion."""
+    return str(_cargar().get("tienda_activa") or "colombia")
+
+
+def fijar_tienda_activa(tienda: str) -> None:
+    """Guarda la tienda activa para que los botones de categoria sepan a quien consultar."""
+    datos = _cargar()
+    datos["tienda_activa"] = tienda
+    _guardar(datos)
+
+
 def ya_mostradas() -> set:
     """Ofertas que ya se enviaron respondiendo comandos."""
     return set(_cargar().get("mostradas") or [])
@@ -107,13 +192,11 @@ def marcar_mostradas(claves) -> None:
 def leer_comando(mensaje: dict) -> dict | None:
     """Un mensaje de Telegram vuelto solicitud, o None si no es para el bot.
 
-    La usan las dos vias de entrada: el webhook (un mensaje a la vez, al
-    instante) y getUpdates (un lote cada tanto). El formato del mensaje es el
-    mismo, cambia solo como llega.
+    Soporta comandos tradicionales con '/' y toques en los botones del menu interactivo.
     """
     texto = ((mensaje or {}).get("text") or "").strip()
     chat = ((mensaje or {}).get("chat") or {}).get("id")
-    if not texto.startswith("/") or chat is None:
+    if not texto or chat is None:
         return None
 
     # Solo se obedece al chat configurado. Sin esto, cualquiera que encuentre
@@ -123,21 +206,76 @@ def leer_comando(mensaje: dict) -> dict | None:
         print(f"  [comandos] ignorado: viene del chat {chat}")
         return None
 
-    # "/alkosto@MiBot 25" -> comando "alkosto", cantidad 25
-    partes = texto[1:].split()
-    if not partes:
-        return None                       # un "/" solo, sin comando
-    crudo = re.split(r"@", partes[0], maxsplit=1)[0].lower()
-    if not crudo:
-        return None
+    # 1. Comandos tradicionales con "/"
+    if texto.startswith("/"):
+        partes = texto[1:].split()
+        if not partes:
+            return None                       # un "/" solo, sin comando
+        crudo = re.split(r"@", partes[0], maxsplit=1)[0].lower()
+        if not crudo:
+            return None
 
-    cantidad = None
-    if len(partes) > 1 and partes[1].isdigit():
-        cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
-    return {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
+        cantidad = None
+        if len(partes) > 1 and partes[1].isdigit():
+            cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
+        return {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
+
+    # 2. Botones del teclado interactivo (sin "/")
+    texto_norm = texto.lower()
+
+    # Volver a la lista de tiendas
+    if "volver a tiendas" in texto_norm or "volver" in texto_norm:
+        return {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
+
+    # Boton de tienda
+    for btn_key, (tienda_key, tienda_nombre) in BOTONES_TIENDA.items():
+        if texto_norm == btn_key:
+            if tienda_key == "objetivos":
+                return {"comando": "objetivos", "chat_id": chat, "cantidad": None}
+            return {
+                "comando": "elegir_tienda",
+                "tienda": tienda_key,
+                "tienda_nombre": tienda_nombre,
+                "chat_id": chat,
+                "cantidad": None,
+                "tipo": "elegir_tienda",
+            }
+
+    # Boton '🌟 TODO'
+    if "todo" in texto_norm:
+        return {
+            "comando": "todo_tienda",
+            "chat_id": chat,
+            "cantidad": None,
+            "tipo": "todo_tienda",
+        }
+
+    # Boton de categoria
+    for cat_label, queries in CATEGORIAS_BUSQUEDA.items():
+        if texto_norm == cat_label.lower():
+            return {
+                "comando": "categoria",
+                "categoria_nombre": cat_label,
+                "consultas": queries,
+                "chat_id": chat,
+                "cantidad": None,
+                "tipo": "categoria",
+            }
+        sin_emoji = cat_label.split(" ", 1)[-1].lower()
+        if texto_norm == sin_emoji:
+            return {
+                "comando": "categoria",
+                "categoria_nombre": cat_label,
+                "consultas": queries,
+                "chat_id": chat,
+                "cantidad": None,
+                "tipo": "categoria",
+            }
+
+    return None
 
 
-def pendientes() -> list[dict]:
+def pendientes(timeout: int = 0) -> list[dict]:
     """Comandos nuevos dirigidos al bot, ya confirmados ante Telegram.
 
     Devuelve [{"comando": "alkosto", "chat_id": ...}, ...]. Confirmar (avanzar
@@ -148,12 +286,13 @@ def pendientes() -> list[dict]:
 
     offset = _leer_estado()
     url = (f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/getUpdates"
-           f"?timeout=0&allowed_updates=%5B%22message%22%5D")
+           f"?timeout={timeout}&allowed_updates=%5B%22message%22%5D")
     if offset:
         url += f"&offset={offset}"
 
     try:
-        datos = http.get_json(url, retries=1)
+        timeout_red = (timeout + 5) if timeout > 0 else 10
+        datos = http.get_json(url, timeout=timeout_red, retries=1)
     except Exception as exc:
         print(f"  [comandos] no se pudo consultar Telegram: {exc}")
         return []
@@ -181,6 +320,7 @@ MENU = [
     ("olimpica", "Ofertas de Olimpica"),
     ("falabella", "Ofertas de Falabella"),
     ("homecenter", "Ofertas de Homecenter"),
+    ("mercadolibre", "Ofertas de Mercado Libre"),
     ("colombia", "Lo mejor de las tiendas colombianas"),
     ("drogueria", "Rebajas de droguerias"),
     ("cajita", "Ofertas de PROMOCAJITA"),

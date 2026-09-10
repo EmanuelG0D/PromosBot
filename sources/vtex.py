@@ -29,7 +29,6 @@ TIENDAS = {
     # robots.txt, y sin puerta trasera: "Disallow: /api/", "/busca/" y
     # "/buscapagina/". No es que no nos hayan visto, es que pusieron el letrero.
     "jumbo":        {"nombre": "Jumbo",        "api": "https://www.jumbocolombia.com",   "web": "https://www.jumbocolombia.com"},
-    "pepeganga":    {"nombre": "Pepe Ganga",   "api": "https://www.pepeganga.com",       "web": "https://www.pepeganga.com"},
     "arturocalle":  {"nombre": "Arturo Calle", "api": "https://www.arturocalle.com",     "web": "https://www.arturocalle.com"},
     "larebaja":     {"nombre": "La Rebaja",    "api": "https://www.larebajavirtual.com", "web": "https://www.larebajavirtual.com"},
 }

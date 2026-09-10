@@ -536,7 +536,7 @@ class PruebaMediosPagoAlkosto(unittest.TestCase):
 class PruebaComandos(unittest.TestCase):
     def test_el_catalogo_cubre_las_tiendas_anunciadas(self):
         from core.comandos import CATALOGO, MENU
-        for comando in ("alkosto", "ktronix", "exito", "carulla", "olimpica", "exterior"):
+        for comando in ("alkosto", "ktronix", "exito", "carulla", "olimpica", "exterior", "mercadolibre"):
             self.assertIn(comando, CATALOGO)
         # Todo lo que se anuncia en el menu debe existir como comando real.
         manejados = set(CATALOGO) | {"objetivos", "estado", "ayuda"}
@@ -733,6 +733,164 @@ class PruebaComandos(unittest.TestCase):
             finally:
                 (comandos.ESTADO, comandos.http.get_json,
                  config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) = originales
+
+    def test_teclados_telegram_bien_formados(self):
+        """Los teclados interactivos deben tener las opciones correctas y ser minimizables."""
+        from core import telegram
+        from sources import vtex
+        tiendas = telegram.teclado_tiendas()
+        self.assertTrue(tiendas.get("resize_keyboard"))
+        self.assertFalse(tiendas.get("is_persistent", False))
+        botones_tiendas = [b["text"] for row in tiendas["keyboard"] for b in row]
+        self.assertIn("🟡 Éxito", botones_tiendas)
+        self.assertIn("🔴 Alkosto", botones_tiendas)
+        self.assertIn("🟢 Carulla", botones_tiendas)
+        self.assertIn("🟠 Homecenter", botones_tiendas)
+        self.assertIn("📦 Promocajita", botones_tiendas)
+        self.assertIn("🎯 Mis Objetivos", botones_tiendas)
+        self.assertNotIn("pepeganga", vtex.TIENDAS)
+
+        categorias = telegram.teclado_categorias("Éxito")
+        self.assertTrue(categorias.get("resize_keyboard"))
+        self.assertFalse(categorias.get("is_persistent", False))
+        botones_cat = [b["text"] for row in categorias["keyboard"] for b in row]
+        self.assertIn("🌟 TODO", botones_cat)
+        self.assertIn("📺 Smart TV", botones_cat)
+        self.assertIn("⬅️ Volver a Tiendas", botones_cat)
+
+    def test_botones_menu_interactivo_se_interpretan_correctamente(self):
+        """El parser debe entender cuando el usuario toca un boton en vez de escribir un comando."""
+        from core import comandos
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+        try:
+            def leer(t):
+                return comandos.leer_comando({"text": t, "chat": {"id": -100}})
+
+            # Tienda
+            res = leer("🟡 Éxito")
+            self.assertEqual(res["tipo"], "elegir_tienda")
+            self.assertEqual(res["tienda"], "exito")
+
+            # Promocajita (ahora con menu de categorias)
+            res_cajita = leer("📦 Promocajita")
+            self.assertEqual(res_cajita["tipo"], "elegir_tienda")
+            self.assertEqual(res_cajita["tienda"], "cajita")
+
+            # Categoria
+            res_cat = leer("📺 Smart TV")
+            self.assertEqual(res_cat["tipo"], "categoria")
+            self.assertIn("televisor", res_cat["consultas"])
+
+            # Categoria sin emoji
+            res_cat2 = leer("smart tv")
+            self.assertEqual(res_cat2["tipo"], "categoria")
+
+            # Todo
+            res_todo = leer("🌟 TODO")
+            self.assertEqual(res_todo["tipo"], "todo_tienda")
+
+            # Volver
+            res_volver = leer("⬅️ Volver a Tiendas")
+            self.assertEqual(res_volver["tipo"], "menu")
+
+            # Objetivos
+            res_obj = leer("🎯 Mis Objetivos")
+            self.assertEqual(res_obj["comando"], "objetivos")
+        finally:
+            config.TELEGRAM_CHAT_ID = original
+
+    def test_limite_precio_maximo(self):
+        """No deben pasar ofertas de mas de 2 millones de pesos."""
+        import radar
+        barato = oferta(price=1_500_000.0, currency="COP")
+        caro = oferta(price=2_500_000.0, currency="COP")
+        caro_usd = oferta(price=700.0, currency="USD")  # 700 * 4000 = 2.800.000 COP
+        barato_usd = oferta(price=300.0, currency="USD") # 300 * 4000 = 1.200.000 COP
+
+        self.assertTrue(radar._precio_admisible(barato, trm=4000.0))
+        self.assertFalse(radar._precio_admisible(caro, trm=4000.0))
+        self.assertTrue(radar._precio_admisible(barato_usd, trm=4000.0))
+        self.assertFalse(radar._precio_admisible(caro_usd, trm=4000.0))
+
+    def test_topes_categoria_precio_objetivos(self):
+        """Valida que los objetivos reconozcan las metas fijadas por el usuario."""
+        import config
+        from core import objetivos
+        metas = config.load_watchlist().get("objetivos", [])
+        # Ropa: < 50.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="KOAJ Camiseta azul", price=18130.0), metas))
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Camiseta Polo Lacoste", price=45000.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Camiseta Polo Lacoste", price=65000.0), metas))
+        # Zapatos: < 150.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Tenis Running Puma", price=140000.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Tenis Nike Air Jordan", price=250000.0), metas))
+        # TV: < 1.500.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Smart TV Xiaomi 43", price=1100000.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Televisor OLED LG 55", price=1800000.0), metas))
+        # Monitores: < 800.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Monitor Gamer 24 LG", price=650000.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Monitor Samsung 34 Curvo", price=1200000.0), metas))
+        # Lavadoras: < 1.500.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Lavadora Whirlpool 16kg", price=1350000.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Lavadora Secadora LG", price=2200000.0), metas))
+        # Neveras: < 1.800.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Nevera Haceb 250L", price=1450000.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Nevera Samsung French Door", price=3500000.0), metas))
+        # Electrodomésticos pequeños: < 250.000
+        self.assertIsNotNone(objetivos.alcanzado(oferta(title="Freidora de Aire Imusa", price=199900.0), metas))
+        self.assertIsNone(objetivos.alcanzado(oferta(title="Freidora Ninja Dual", price=550000.0), metas))
+
+    def test_persistencia_tienda_activa(self):
+        """La tienda seleccionada se guarda en el estado para recordar contexto entre mensajes."""
+        import tempfile
+        from pathlib import Path as _Path
+        from core import comandos
+        with tempfile.TemporaryDirectory() as tmp:
+            original = comandos.ESTADO
+            comandos.ESTADO = _Path(tmp) / "estado.json"
+            try:
+                self.assertEqual(comandos.tienda_activa(), "colombia")
+                comandos.fijar_tienda_activa("alkosto")
+                self.assertEqual(comandos.tienda_activa(), "alkosto")
+            finally:
+                comandos.ESTADO = original
+
+    def test_atender_solicitudes_flujo_interactivo(self):
+        """El flujo de seleccion de tienda y categoria despacha mensajes con teclado."""
+        import tempfile
+        from pathlib import Path as _Path
+        import radar
+        from core import comandos, telegram
+
+        mensajes_enviados = []
+        original_send = telegram.send
+        original_estado = comandos.ESTADO
+        try:
+            telegram.send = lambda texto, preview=False, reply_markup=None: mensajes_enviados.append((texto, reply_markup)) or True
+            with tempfile.TemporaryDirectory() as tmp:
+                comandos.ESTADO = _Path(tmp) / "estado.json"
+
+                # 1. Menu
+                radar.atender_solicitudes([{"comando": "menu", "tipo": "menu", "chat_id": -100}])
+                self.assertTrue(any("Menú Principal" in m[0] for m in mensajes_enviados))
+                self.assertIsNotNone(mensajes_enviados[-1][1])
+
+                # 2. Elegir tienda
+                mensajes_enviados.clear()
+                radar.atender_solicitudes([{
+                    "comando": "elegir_tienda",
+                    "tienda": "exito",
+                    "tienda_nombre": "Éxito",
+                    "tipo": "elegir_tienda",
+                    "chat_id": -100
+                }])
+                self.assertEqual(comandos.tienda_activa(), "exito")
+                self.assertTrue(any("Éxito seleccionado" in m[0] for m in mensajes_enviados))
+                self.assertIsNotNone(mensajes_enviados[-1][1])
+        finally:
+            telegram.send = original_send
+            comandos.ESTADO = original_estado
 
 
 class PruebaTodasLasFuentesLlegan(unittest.TestCase):
@@ -1170,5 +1328,134 @@ class PruebaMarketplace(unittest.TestCase):
         self.assertTrue(self.confiable(64_900, 184_900, seller="1"))
 
 
+class PruebaRespuestaInmediataYCancelacion(unittest.TestCase):
+    def test_notificar_inicio_busqueda_marca_notificado(self):
+        import server
+        from core import telegram
+        enviados = []
+        orig_send = telegram.send
+        orig_esc = telegram.accion_escribiendo
+        telegram.send = lambda txt, **k: enviados.append(txt) or True
+        telegram.accion_escribiendo = lambda: None
+        try:
+            reqs = [
+                {"tipo": "categoria", "categoria_nombre": "👟 Zapatos y Tenis"},
+                {"tipo": "todo_tienda"},
+                {"comando": "alkosto", "tipo": "slash"},
+            ]
+            server._notificar_inicio_busqueda(reqs)
+            for r in reqs:
+                self.assertTrue(r.get("notificado"))
+            self.assertEqual(len(enviados), 3)
+            self.assertIn("Zapatos y Tenis", enviados[0])
+            self.assertIn("catálogo", enviados[1])
+            self.assertIn("Alkosto", enviados[2])
+        finally:
+            telegram.send = orig_send
+            telegram.accion_escribiendo = orig_esc
+
+    def test_nueva_busqueda_incrementa_token_y_cancela(self):
+        import radar
+        t1 = radar.nueva_busqueda()
+        t2 = radar.nueva_busqueda()
+        self.assertGreater(t2, t1)
+
+
+class PruebaMercadoLibre(unittest.TestCase):
+    def test_teclado_tiendas_incluye_mercadolibre(self):
+        from core import telegram
+        teclado = telegram.teclado_tiendas()
+        botones = [btn["text"] for fila in teclado.get("keyboard", []) for btn in fila]
+        self.assertIn("💛 Mercado Libre", botones)
+
+    def test_boton_mercadolibre_abre_tienda(self):
+        import config
+        from core import comandos
+        req = comandos.leer_comando({"text": "💛 Mercado Libre", "chat": {"id": config.TELEGRAM_CHAT_ID}})
+        self.assertIsNotNone(req)
+        self.assertEqual(req.get("tipo"), "elegir_tienda")
+        self.assertEqual(req.get("tienda"), "mercadolibre")
+
+    def test_mapeo_categorias_mercadolibre(self):
+        from sources import mercadolibre
+        self.assertEqual(mercadolibre._categoria_para_consultas(["smart tv"]), "MCO1000")
+        self.assertEqual(mercadolibre._categoria_para_consultas(["portatil"]), "MCO1648")
+        self.assertEqual(mercadolibre._categoria_para_consultas(["celular"]), "MCO1051")
+        self.assertEqual(mercadolibre._categoria_para_consultas(["tenis"]), "MCO1276")
+        self.assertEqual(mercadolibre._categoria_para_consultas(["nevera"]), "MCO5726")
+
+    def test_parsea_estado_con_ofertas_y_cupones(self):
+        from sources import mercadolibre
+        from core import http
+        import json
+
+        mock_data = {
+            "appProps": {
+                "pageProps": {
+                    "data": {
+                        "items": [
+                            {
+                                "card": {
+                                    "metadata": {
+                                        "id": "MCO9999",
+                                        "url": "https://articulo.mercadolibre.com.co/MCO-9999-producto",
+                                    },
+                                    "pictures": {"pictures": [{"id": "123456-MCO"}]},
+                                    "components": [
+                                        {"type": "title", "title": {"text": "Smart TV Samsung 55 4K UHD"}},
+                                        {
+                                            "type": "price",
+                                            "price": {
+                                                "current_price": {"value": 1500000.0},
+                                                "price_labels": [
+                                                    {
+                                                        "values": [
+                                                            {"key": "previous_price", "price": {"value": 3000000.0}}
+                                                        ]
+                                                    }
+                                                ],
+                                            },
+                                        },
+                                        {
+                                            "type": "promotions",
+                                            "promotions": [{"text": "{icon_cockade} Cupón 10% OFF"}],
+                                        },
+                                        {
+                                            "type": "seller",
+                                            "seller": {"text": "Tienda Oficial Samsung"},
+                                        },
+                                    ],
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        mock_html = f"<html><body><script>_n.ctx.r = {json.dumps(mock_data)};</script></body></html>"
+
+        orig_get_text = http.get_text
+        try:
+            http.get_text = lambda url, **k: mock_html
+            deals = mercadolibre.fetch(None, por_consulta=10)
+            self.assertEqual(len(deals), 1)
+            d = deals[0]
+            self.assertEqual(d.source, "mercadolibre")
+            self.assertEqual(d.store, "Mercado Libre")
+            self.assertEqual(d.country, "CO")
+            self.assertEqual(d.currency, "COP")
+            self.assertEqual(d.price, 1500000.0)
+            self.assertEqual(d.list_price, 3000000.0)
+            self.assertEqual(d.discount_verificable, 50.0)
+            self.assertIn("https://http2.mlstatic.com/D_NQ_NP_123456-MCO-F.jpg", d.image)
+            self.assertTrue(any("Cupón 10% OFF" in n for n in d.notes))
+            self.assertFalse(any("{icon_cockade}" in n for n in d.notes))
+            self.assertIn("Tienda Oficial Samsung", d.notes)
+        finally:
+            http.get_text = orig_get_text
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+

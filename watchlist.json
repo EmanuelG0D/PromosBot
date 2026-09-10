@@ -2,37 +2,101 @@
   "_comentario": "Los terminos de 'objetivos' se agregan solos a las busquedas: no hace falta repetirlos abajo.",
   "objetivos": [
     {
-      "termino": "freidora",
+      "termino": "camiseta",
+      "max_cop": 50000
+    },
+    {
+      "termino": "pantalon",
+      "max_cop": 50000
+    },
+    {
+      "termino": "jean",
+      "max_cop": 50000
+    },
+    {
+      "termino": "camisa",
+      "max_cop": 50000
+    },
+    {
+      "termino": "sudadera",
+      "max_cop": 50000
+    },
+    {
+      "termino": "chaqueta",
+      "max_cop": 50000
+    },
+    {
+      "termino": "ropa",
+      "max_cop": 50000
+    },
+    {
+      "termino": "tenis",
       "max_cop": 150000
     },
     {
+      "termino": "zapatos",
+      "max_cop": 150000
+    },
+    {
+      "termino": "zapatillas",
+      "max_cop": 150000
+    },
+    {
+      "termino": "botas",
+      "max_cop": 150000
+    },
+    {
+      "termino": "sneakers",
+      "max_cop": 150000,
+      "max_usd": 38
+    },
+    {
+      "termino": "televisor",
+      "max_cop": 1500000
+    },
+    {
+      "termino": "smart tv",
+      "max_cop": 1500000
+    },
+    {
+      "termino": "tv",
+      "max_cop": 1500000
+    },
+    {
+      "termino": "monitor",
+      "max_cop": 800000
+    },
+    {
+      "termino": "lavadora",
+      "max_cop": 1500000
+    },
+    {
+      "termino": "nevera",
+      "max_cop": 1800000
+    },
+    {
+      "termino": "freidora",
+      "max_cop": 250000
+    },
+    {
       "termino": "licuadora",
-      "max_cop": 120000
+      "max_cop": 250000
     },
     {
       "termino": "microondas",
-      "max_cop": 300000
+      "max_cop": 250000
+    },
+    {
+      "termino": "cafetera",
+      "max_cop": 250000
     },
     {
       "termino": "aspiradora",
       "max_cop": 250000
     },
     {
-      "termino": "audifonos",
-      "max_cop": 90000,
-      "excluir": [
-        "forro",
-        "estuche",
-        "cable"
-      ]
-    },
-    {
-      "termino": "cafetera",
-      "max_cop": 150000
-    },
-    {
-      "termino": "sneakers",
-      "max_usd": 35
+      "termino": "electrodomesticos",
+      "max_cop": 250000
     }
   ],
   "algolia_co": {
@@ -46,6 +110,8 @@
       "celular",
       "consola",
       "audifonos",
+      "diadema",
+      "parlante",
       "freidora de aire",
       "lavadora",
       "nevera",
@@ -66,23 +132,29 @@
       "carulla",
       "olimpica",
       "jumbo",
-      "pepeganga",
       "arturocalle"
     ],
     "queries": [
       "televisor",
       "audifonos",
+      "diadema",
+      "parlante",
       "portatil",
       "celular",
       "zapatillas",
       "freidora de aire",
       "electrodomesticos",
+      "nevera",
+      "lavadora",
       "cafetera",
       "tenis",
       "botas",
       "jean",
+      "pantalon",
       "camiseta",
       "chaqueta",
+      "billetera",
+      "bolso",
       "sudadera",
       "adidas",
       "nike",
@@ -226,6 +298,8 @@
       "portatil",
       "celular",
       "audifonos",
+      "diadema",
+      "parlante",
       "nevera",
       "lavadora",
       "freidora de aire",
@@ -234,7 +308,11 @@
       "taladro",
       "tenis",
       "jean",
+      "pantalon",
+      "camiseta",
       "chaqueta",
+      "billetera",
+      "bolso",
       "adidas",
       "nike",
       "puma",

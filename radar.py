@@ -105,8 +105,12 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         consultas = cfg.get("queries", [])
         if consultas:
             print(f"-> Mercado Libre: {len(consultas)} busquedas")
-            ofertas += mercadolibre.fetch(consultas, cfg.get("por_consulta", 50),
-                                          cfg.get("solo_tienda_oficial", False))
+            ofertas += _sin_ruido(
+                mercadolibre.fetch(consultas, por_consulta=cfg.get("por_consulta", 48)), cfg)
+        else:
+            print("-> Mercado Libre: ofertas destacadas")
+            ofertas += _sin_ruido(
+                mercadolibre.fetch(por_consulta=cfg.get("por_consulta", 48)), cfg)
 
     if "ebay" in activas:
         cfg = watchlist.get("ebay", {})
@@ -286,7 +290,8 @@ def _sin_ruido(ofertas: list[Deal], cfg: dict) -> list[Deal]:
             and not filtros.es_accesorio(d.title)]
 
 
-def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
+def _ofertas_de(watchlist: dict, fuente: str, tiendas,
+                consultas_custom: list[str] | None = None) -> list[Deal]:
     """Trae las ofertas de una sola fuente, opcionalmente de tiendas concretas."""
     cfg = watchlist.get(fuente, {})
 
@@ -296,16 +301,27 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     if fuente == "promocajita":
         if not cfg.get("canales"):
             return []
-        return promocajita.fetch(cfg["canales"], cfg.get("por_canal", 20),
-                                 cfg.get("incluir"), cfg.get("excluir"))
+        if consultas_custom is not None:
+            incluir = list(consultas_custom)
+            por_canal = max(cfg.get("por_canal", 20), 80)
+        else:
+            incluir = cfg.get("incluir")
+            por_canal = cfg.get("por_canal", 20)
+        return promocajita.fetch(cfg["canales"], por_canal,
+                                 incluir, cfg.get("excluir"))
 
-    consultas = cfg.get("queries", [])
+    if fuente == "mercadolibre":
+        consultas = consultas_custom if consultas_custom is not None else cfg.get("queries")
+        crudas = mercadolibre.fetch(consultas, por_consulta=cfg.get("por_consulta", 48))
+        return _sin_ruido(crudas, cfg)
+
+    consultas = consultas_custom if consultas_custom is not None else cfg.get("queries", [])
     if not consultas:
         return []
     if fuente == "algolia_co":
         crudas = algolia_co.fetch(consultas, tiendas, cfg.get("por_consulta", 60))
     elif fuente == "vtex":
-        crudas = vtex.fetch(consultas, tiendas, cfg.get("por_consulta", 24),
+        crudas = vtex.fetch(consultas, tiendas or cfg.get("tiendas"), cfg.get("por_consulta", 24),
                             cfg.get("marcas"))
     elif fuente == "falabella":
         crudas = falabella.fetch(consultas, tiendas or cfg.get("tiendas"),
@@ -320,15 +336,82 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas) -> list[Deal]:
     return _sin_ruido(crudas, cfg)
 
 
+# Topes de precio especificos solicitados por el usuario para categorias clave
+TOPES_CATEGORIA_COP: list[tuple[tuple[str, ...], float]] = [
+    # 1. Ropa: menos de 50.000
+    (("camiseta", "pantalon", "jean", "jeans", "camisa", "sudadera", "bermuda",
+      "polo", "chaqueta", "buzo", "blusa", "ropa"), 50000.0),
+
+    # 2. Zapatos: menos de 150.000
+    (("tenis", "zapatos", "zapatillas", "sneakers", "botas", "sandalias", "calzado"), 150000.0),
+
+    # 3. Monitores: menos de 800.000 (antes de tv para no confundir 'monitor tv')
+    (("monitor", "monitores"), 800000.0),
+
+    # 4. TV: menos de 1.500.000
+    (("televisor", "televisores", "smart tv", "tv oled", "tv qled", "tv led", "tv 4k", "tv"), 1500000.0),
+
+    # 5. Lavadoras: menos de 1.500.000
+    (("lavadora", "lavadoras", "torre de lavado", "lavaseca"), 1500000.0),
+
+    # 6. Neveras: menos de 1.800.000
+    (("nevera", "neveras", "refrigerador", "nevecon"), 1800000.0),
+
+    # 7. Pequeños electrodomésticos: menos de 250.000
+    (("freidora", "air fryer", "licuadora", "microondas", "cafetera", "aspiradora",
+      "plancha", "ventilador", "sanduchera", "waflera", "batidora", "procesador de alimentos",
+      "arrocera", "tostador", "tostadora", "exprimidor", "hervidor"), 250000.0),
+]
+
+
+def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
+    """Verifica que el precio este dentro del tope general ($2.000.000 COP hacia abajo)."""
+    if config.MAX_PRICE_COP <= 0:
+        return True
+    if deal.price is None:
+        return True
+    precio_cop = deal.price if deal.currency == "COP" else (deal.price * trm)
+    return precio_cop <= config.MAX_PRICE_COP
+
+
+def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
+                      consultas_custom: list[str] | None = None,
+                      trm: float = 4000.0) -> list:
+    """Las mejores ofertas de las 6 tiendas de Todo Colombia:
+    Alkosto, K-tronix, Éxito, Carulla, Olímpica y Falabella."""
+    ofertas: list[Deal] = []
+    ofertas += _ofertas_de(watchlist, "algolia_co", ["alkosto", "ktronix"], consultas_custom=consultas_custom)
+    ofertas += _ofertas_de(watchlist, "vtex", ["exito", "carulla", "olimpica"], consultas_custom=consultas_custom)
+    ofertas += _ofertas_de(watchlist, "falabella", ["falabella"], consultas_custom=consultas_custom)
+
+    ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
+    disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
+    candidatas = [(d, Verdict(True, "pedido a mano")) for d in disponibles
+                  if d.discount_verificable > 0]
+    candidatas.sort(key=lambda par: -par[0].discount_verificable)
+    unicas, _hermanas = _colapsar_variantes(candidatas)
+    nuevas = [par for par in unicas if par[0].key not in vistas]
+    repetidas = [par for par in unicas if par[0].key in vistas]
+    seleccion = (nuevas + repetidas)[:cuantas]
+    for deal, verdict in seleccion:
+        if deal.key in vistas:
+            verdict.etiquetas.append("ya te la habia mostrado")
+    return seleccion
+
+
 def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
-             cuantas: int) -> list:
+             cuantas: int, consultas_custom: list[str] | None = None,
+             trm: float = 4000.0) -> list:
     """Las mejores ofertas de esas fuentes, priorizando las que no has visto."""
     ofertas: list[Deal] = []
     for fuente in fuentes:
-        ofertas += _ofertas_de(watchlist, fuente, tiendas)
+        if consultas_custom is not None:
+            ofertas += _ofertas_de(watchlist, fuente, tiendas, consultas_custom=consultas_custom)
+        else:
+            ofertas += _ofertas_de(watchlist, fuente, tiendas)
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
 
-    disponibles = [d for d in ofertas if d.in_stock]
+    disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
     if all(f in SIN_PRECIO_DE_LISTA for f in fuentes):
         # Ni Slickdeals ni PROMOCAJITA publican precio de lista: no hay
         # porcentaje que ordenar, pero ya vienen ordenadas por la comunidad.
@@ -348,6 +431,16 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
         if deal.key in vistas:
             verdict.etiquetas.append("ya te la habia mostrado")
     return seleccion
+
+
+_token_busqueda_activa: int = 0
+
+
+def nueva_busqueda() -> int:
+    """Incrementa el token de busqueda para cancelar cualquier envio previo si el usuario pide otra cosa."""
+    global _token_busqueda_activa
+    _token_busqueda_activa += 1
+    return _token_busqueda_activa
 
 
 def atender_comandos(por_comando: int | None = None) -> dict:
@@ -370,40 +463,49 @@ def atender_solicitudes(solicitudes: list[dict],
         print("Sin comandos nuevos.")
         return _resultado()
 
-    watchlist = config.load_watchlist()
-    trm, _origen = fx.get_trm(None)
+    watchlist = None
+    trm = None
+    vistas = None
     atendidos = 0
-
-    # Todo lo que ya viste: lo que alerto el radar programado (se lee sin
-    # escribir) y lo que ya se envio respondiendo comandos.
-    vistas = mod_comandos.ya_mostradas()
-    try:
-        with Store() as store:
-            vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
-    except Exception as exc:
-        print(f"  [comandos] sin historial del radar: {exc}")
 
     for solicitud in solicitudes:
         comando = solicitud["comando"]
+        tipo = solicitud.get("tipo", "slash")
         # El numero que pediste manda; si no pediste, el valor por defecto.
         cuantas = (solicitud.get("cantidad") or por_comando
                    or config.COMANDO_RESULTADOS)
-        print(f"-> comando /{comando} ({cuantas} resultados)")
+        print(f"-> comando /{comando} (tipo={tipo}, {cuantas} resultados)")
 
-        if comando in ("ayuda", "help", "start"):
-            telegram.send(mod_comandos.AYUDA)
+        if comando in ("ayuda", "help"):
+            telegram.send(mod_comandos.AYUDA, reply_markup=telegram.teclado_tiendas())
+            atendidos += 1
+            continue
+
+        if comando in ("start", "menu") or tipo == "menu":
+            telegram.send(
+                "🤖 <b>PromosBot — Menú Principal</b>\n\n"
+                "Toca una tienda en el menú inferior para ver sus departamentos y ofertas:\n"
+                "<i>O escribe directamente un comando como <code>/alkosto</code>, <code>/exito</code>, etc.</i>",
+                reply_markup=telegram.teclado_tiendas(),
+            )
             atendidos += 1
             continue
 
         if comando == "objetivos":
-            lineas = ["🎯 <b>Tus objetivos de precio</b>", ""]
-            for objetivo in watchlist.get("objetivos", []):
-                tope = objetivo.get("max_cop")
-                valor = (telegram.money(tope, "COP") if tope
-                         else telegram.money(objetivo.get("max_usd"), "USD"))
-                lineas.append(f"• {telegram.esc(objetivo['termino'])} "
-                              f"por debajo de <b>{valor}</b>")
-            telegram.send(telegram.NL.join(lineas))
+            lineas = [
+                "🎯 <b>Tus objetivos de precio configurados:</b>",
+                "",
+                "• 👕 <b>Ropa:</b> menos de $50.000",
+                "• 👟 <b>Zapatos / Tenis:</b> menos de $150.000",
+                "• 📺 <b>Smart TV:</b> menos de $1.500.000",
+                "• 🖥️ <b>Monitores:</b> menos de $800.000",
+                "• 🧺 <b>Lavadoras:</b> menos de $1.500.000",
+                "• ❄️ <b>Neveras:</b> menos de $1.800.000",
+                "• 🍳 <b>Electrodomésticos:</b> menos de $250.000",
+                "",
+                "<i>En 'Todo Colombia' se monitorean en las 6 tiendas: Éxito, Carulla, Alkosto, K-tronix, Falabella y Olímpica.</i>",
+            ]
+            telegram.send(telegram.NL.join(lineas), reply_markup=telegram.teclado_tiendas())
             atendidos += 1
             continue
 
@@ -415,49 +517,267 @@ def atender_solicitudes(solicitudes: list[dict],
             telegram.send(
                 f"📊 <b>Estado del radar</b>{telegram.NL}"
                 f"Alertas enviadas hoy: <b>{enviadas}</b> de {config.MAX_ALERTS_PER_DAY}"
-                f"{telegram.NL}Ofertas en memoria: <b>{archivadas}</b>")
+                f"{telegram.NL}Ofertas en memoria: <b>{archivadas}</b>",
+                reply_markup=telegram.teclado_tiendas(),
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "elegir_tienda":
+            tienda = solicitud.get("tienda", "colombia")
+            tienda_nombre = solicitud.get("tienda_nombre", tienda.capitalize())
+            mod_comandos.fijar_tienda_activa(tienda)
+            telegram.send(
+                f"🏬 <b>{telegram.esc(tienda_nombre)} seleccionado</b>\n\n"
+                f"Elige una categoría abajo para buscar rebajas específicas o presiona <b>🌟 TODO</b> para ver las mejores ofertas generales de la tienda:",
+                reply_markup=telegram.teclado_categorias(tienda_nombre),
+            )
+            atendidos += 1
+            continue
+
+        # Inicializacion bajo demanda solo cuando realmente se van a buscar ofertas
+        if tipo == "categoria":
+            token_actual = _token_busqueda_activa
+            categoria_nombre = solicitud.get("categoria_nombre", "Categoría")
+            tienda = mod_comandos.tienda_activa()
+            if tienda not in mod_comandos.CATALOGO and tienda not in ("objetivos", "estado"):
+                tienda = "colombia"
+
+            fuente, tiendas, titulo_tienda = mod_comandos.CATALOGO.get(
+                tienda, ("co", None, "Colombia"))
+
+            # Notificar de inmediato al usuario que se inicio la revision si no se envio antes
+            if not solicitud.get("notificado"):
+                telegram.accion_escribiendo()
+                telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(categoria_nombre)}</b> en <b>{telegram.esc(titulo_tienda)}</b>...</i>")
+
+            if watchlist is None:
+                watchlist = config.load_watchlist()
+            if (tienda in ("exterior", "todo") or fuente in ("slickdeals", "*")) and trm is None:
+                trm, _origen = fx.get_trm(None)
+            if vistas is None:
+                vistas = mod_comandos.ya_mostradas()
+                try:
+                    with Store() as store:
+                        vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
+                except Exception as exc:
+                    print(f"  [comandos] sin historial del radar: {exc}")
+
+            if tienda == "exterior":
+                consultas = mod_comandos.CATEGORIAS_BUSQUEDA_EN.get(
+                    categoria_nombre, solicitud.get("consultas", []))
+            else:
+                consultas = solicitud.get("consultas", [])
+
+            if fuente == "co":
+                # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
+                seleccion = _mejores_colombia(watchlist, vistas, cuantas, consultas_custom=consultas, trm=trm or 4000.0)
+            elif fuente == "*":
+                del_exterior = max(cuantas // 5, 1)
+                seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
+                                      None, vistas, cuantas - del_exterior, consultas_custom=consultas, trm=trm or 4000.0)
+                             + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, consultas_custom=consultas, trm=trm or 4000.0))
+            else:
+                seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas,
+                                     consultas_custom=consultas, trm=trm or 4000.0)
+
+            if token_actual != _token_busqueda_activa:
+                print("  [radar] categoria cancelada por nueva solicitud")
+                atendidos += 1
+                continue
+
+            if not seleccion:
+                telegram.send(
+                    f"Ahora mismo no encontré rebajas destacadas en {telegram.esc(categoria_nombre)} para <b>{telegram.esc(titulo_tienda)}</b>.",
+                    reply_markup=telegram.teclado_categorias(titulo_tienda),
+                )
+                atendidos += 1
+                continue
+
+            telegram.send(
+                f"🏬 <b>{telegram.esc(titulo_tienda)}</b> \u00b7 {telegram.esc(categoria_nombre)}\n"
+                f"<i>Mejores rebajas encontradas ahora mismo:</i>",
+                reply_markup=telegram.teclado_categorias(titulo_tienda),
+            )
+            enviadas_ahora = []
+            for deal, verdict in seleccion:
+                if token_actual != _token_busqueda_activa:
+                    print("  [radar] envio interrumpido por nueva solicitud")
+                    break
+                landed = None
+                if deal.country == "US" and deal.price:
+                    if trm is None:
+                        trm, _origen = fx.get_trm(None)
+                    landed = calcular(deal.price, trm, deal.weight_lb)
+                telegram.enviar_oferta(deal, verdict, landed)
+                enviadas_ahora.append(deal.key)
+                time.sleep(1.2)
+            if token_actual != _token_busqueda_activa:
+                atendidos += 1
+                continue
+            mod_comandos.marcar_mostradas(enviadas_ahora)
+            vistas.update(enviadas_ahora)
+            telegram.send(
+                f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas de {telegram.esc(categoria_nombre)} en {telegram.esc(titulo_tienda)}.\n"
+                f"<i>Puedes elegir otra opción en los botones:</i>",
+                reply_markup=telegram.teclado_categorias(titulo_tienda),
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "todo_tienda":
+            token_actual = _token_busqueda_activa
+            tienda = mod_comandos.tienda_activa()
+            if tienda not in mod_comandos.CATALOGO:
+                tienda = "colombia"
+            fuente, tiendas, titulo = mod_comandos.CATALOGO[tienda]
+
+            # Notificar de inmediato al usuario si no se envio antes
+            if not solicitud.get("notificado"):
+                telegram.accion_escribiendo()
+                telegram.send(f"🔍 <i>Revisando las mejores ofertas en <b>{telegram.esc(titulo)}</b>...</i>")
+
+            if watchlist is None:
+                watchlist = config.load_watchlist()
+            if (tienda in ("exterior", "todo") or fuente in ("slickdeals", "*")) and trm is None:
+                trm, _origen = fx.get_trm(None)
+            if vistas is None:
+                vistas = mod_comandos.ya_mostradas()
+                try:
+                    with Store() as store:
+                        vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
+                except Exception as exc:
+                    print(f"  [comandos] sin historial del radar: {exc}")
+
+            if fuente == "co":
+                # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
+                seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0)
+            elif fuente == "*":
+                del_exterior = max(cuantas // 5, 1)
+                seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
+                                      None, vistas, cuantas - del_exterior, trm=trm or 4000.0)
+                             + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0))
+            else:
+                seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0)
+
+            if token_actual != _token_busqueda_activa:
+                print("  [radar] todo_tienda cancelado por nueva solicitud")
+                atendidos += 1
+                continue
+
+            if not seleccion:
+                telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
+                              reply_markup=telegram.teclado_categorias(titulo))
+                atendidos += 1
+                continue
+
+            telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — lo mejor de ahora mismo",
+                          reply_markup=telegram.teclado_categorias(titulo))
+            enviadas_ahora = []
+            for deal, verdict in seleccion:
+                if token_actual != _token_busqueda_activa:
+                    print("  [radar] envio interrumpido por nueva solicitud")
+                    break
+                landed = None
+                if deal.country == "US" and deal.price:
+                    if trm is None:
+                        trm, _origen = fx.get_trm(None)
+                    landed = calcular(deal.price, trm, deal.weight_lb)
+                telegram.enviar_oferta(deal, verdict, landed)
+                enviadas_ahora.append(deal.key)
+                time.sleep(1.2)
+            if token_actual != _token_busqueda_activa:
+                atendidos += 1
+                continue
+            mod_comandos.marcar_mostradas(enviadas_ahora)
+            vistas.update(enviadas_ahora)
+            telegram.send(
+                f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas de {telegram.esc(titulo)}.\n"
+                f"<i>Puedes seguir explorando en los botones:</i>",
+                reply_markup=telegram.teclado_categorias(titulo),
+            )
             atendidos += 1
             continue
 
         if comando not in mod_comandos.CATALOGO:
-            telegram.send(f"No conozco /{telegram.esc(comando)}. Escribe /ayuda.")
+            telegram.send(f"No conozco /{telegram.esc(comando)}. Escribe /ayuda o usa el menú interactivo.",
+                          reply_markup=telegram.teclado_tiendas())
             continue
 
+        token_actual = _token_busqueda_activa
+        mod_comandos.fijar_tienda_activa(comando)
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
+
+        # Notificar de inmediato al usuario si no se envio antes
+        if not solicitud.get("notificado"):
+            telegram.accion_escribiendo()
+            telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(titulo)}</b>...</i>")
+
+        if watchlist is None:
+            watchlist = config.load_watchlist()
+        if (comando in ("exterior", "todo") or fuente in ("slickdeals", "*")) and trm is None:
+            trm, _origen = fx.get_trm(None)
+        if vistas is None:
+            vistas = mod_comandos.ya_mostradas()
+            try:
+                with Store() as store:
+                    vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
+            except Exception as exc:
+                print(f"  [comandos] sin historial del radar: {exc}")
+
         if fuente == "co":
-            seleccion = _mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
-                                 None, vistas, cuantas)
+            # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
+            seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0)
         elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
             # asi que se les reserva un cupo.
-            # Se le reserva un quinto al exterior: sin porcentaje de descuento
-            # nunca ganaria un orden por rebaja.
             del_exterior = max(cuantas // 5, 1)
             seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
-                                  None, vistas, cuantas - del_exterior)
-                         + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior))
+                                  None, vistas, cuantas - del_exterior, trm=trm or 4000.0)
+                         + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0))
         else:
-            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas)
+            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0)
 
+        if token_actual != _token_busqueda_activa:
+            print("  [radar] comando cancelado por nueva solicitud")
+            atendidos += 1
+            continue
+
+        teclado_salida = (telegram.teclado_tiendas() if comando == "cajita"
+                          else telegram.teclado_categorias(titulo))
         if not seleccion:
-            telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.")
+            telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
+                          reply_markup=teclado_salida)
+            atendidos += 1
             continue
 
         telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — "
-                      f"lo mejor de ahora mismo")
+                      f"lo mejor de ahora mismo",
+                      reply_markup=teclado_salida)
         enviadas_ahora = []
         for deal, verdict in seleccion:
-            # Slickdeals a veces solo anuncia "50% off" o "Buy 1 Get 1": sin
-            # precio no hay costo puesto en Colombia que calcular.
+            if token_actual != _token_busqueda_activa:
+                print("  [radar] envio interrumpido por nueva solicitud")
+                break
             landed = None
             if deal.country == "US" and deal.price:
+                if trm is None:
+                    trm, _origen = fx.get_trm(None)
                 landed = calcular(deal.price, trm, deal.weight_lb)
             telegram.enviar_oferta(deal, verdict, landed)
             enviadas_ahora.append(deal.key)
-            time.sleep(3.5)
+            time.sleep(1.2)
+        if token_actual != _token_busqueda_activa:
+            atendidos += 1
+            continue
         mod_comandos.marcar_mostradas(enviadas_ahora)
         vistas.update(enviadas_ahora)
+        telegram.send(
+            f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> ofertas de {telegram.esc(titulo)}.\n"
+            f"<i>Puedes seguir buscando con los botones:</i>",
+            reply_markup=teclado_salida,
+        )
         atendidos += 1
 
     print(f"Comandos atendidos: {atendidos}")
@@ -487,6 +807,13 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
     objetivos_cfg = watchlist.get("objetivos") or []
     watchlist = _con_objetivos(watchlist, objetivos_cfg)
     activas = fuentes or list(FUENTES)
+
+    if not top and not dry_run:
+        with Store() as store:
+            if store.enviadas_hoy() >= config.MAX_ALERTS_PER_DAY:
+                print(f"Tope diario alcanzado ({config.MAX_ALERTS_PER_DAY}); ronda de fondo omitida.")
+                return _resultado(duracion=0.0)
+
     inicio = time.time()
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(recolectar(watchlist, activas)))
     print(f"\nRecolectadas {len(ofertas)} ofertas en {time.time() - inicio:.1f}s")
@@ -513,6 +840,8 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             # desenmascara la maniobra de subir el precio para luego "rebajarlo".
             veracidad = mod_veracidad.analizar(deal.price, historial)
             objetivo = mod_objetivos.alcanzado(deal, objetivos_cfg)
+            if not objetivo and not _precio_admisible(deal, trm):
+                continue
             verdict = evaluar(deal, stats, objetivo, veracidad)
 
             if top:
@@ -721,7 +1050,9 @@ def main() -> int:
             return 1
         ok = telegram.send(
             "\u2705 <b>Radar de ofertas conectado</b>\n"
-            "Prueba de formato de cupon: <code>PRUEBA20</code> <i>(tocalo para copiarlo)</i>"
+            "Prueba de formato de cupon: <code>PRUEBA20</code> <i>(tocalo para copiarlo)</i>\n\n"
+            "📱 <i>El menú interactivo inferior ha sido configurado y está listo para usar.</i>",
+            reply_markup=telegram.teclado_tiendas(),
         )
         print("Mensaje enviado." if ok else "Telegram rechazo el mensaje.")
         return 0 if ok else 1

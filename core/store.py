@@ -38,14 +38,22 @@ def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds")
 
 
+_DBS_INICIALIZADAS: set[str] = set()
+
+
 class Store:
     def __init__(self, path: Path | None = None) -> None:
         self.path = Path(path or config.DB_PATH)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
-        self.conn.executescript(_SCHEMA)
-        self.conn.commit()
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA busy_timeout=5000")
+        ruta_str = str(self.path.resolve())
+        if ruta_str not in _DBS_INICIALIZADAS:
+            self.conn.executescript(_SCHEMA)
+            self.conn.commit()
+            _DBS_INICIALIZADAS.add(ruta_str)
 
     # -- metadatos (TRM cacheada, marcas de tiempo) ----------------------
     def get_meta(self, key: str) -> str | None:
@@ -164,13 +172,16 @@ class Store:
         self.set_meta(f"enviadas:{hoy}", str(total))
         return total
 
-    def prune(self, dias: int = 120) -> int:
-        corte = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias)).isoformat()
-        cur = self.conn.execute("DELETE FROM observations WHERE ts < ?", (corte,))
+    def prune(self, dias: int = 120, dias_alertas: int = 30) -> int:
+        corte_obs = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias)).isoformat()
+        cur_obs = self.conn.execute("DELETE FROM observations WHERE ts < ?", (corte_obs,))
+        corte_alertas = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias_alertas)).isoformat()
+        cur_alerts = self.conn.execute("DELETE FROM alerts WHERE last_alert_ts < ?", (corte_alertas,))
         self.conn.commit()
-        if cur.rowcount:
+        total_borradas = cur_obs.rowcount + cur_alerts.rowcount
+        if total_borradas:
             self.conn.execute("VACUUM")   # el archivo viaja al respaldo: hay que encogerlo
-        return cur.rowcount
+        return total_borradas
 
     def close(self) -> None:
         self.conn.close()

@@ -1,138 +1,211 @@
-"""Mercado Libre Colombia por su API oficial. FUENTE INUTILIZABLE HOY.
+"""Mercado Libre Colombia: ofertas destacadas y cupones leidos de su centro oficial de ofertas.
 
-Probado el 2026-09-08 con credenciales reales de una app propia. El resultado
-fue concluyente:
-
-    users/me              -> 200  (el token es valido y autentica bien)
-    sites/MCO             -> 403  PolicyAgent
-    sites/MCO/categories  -> 403  PolicyAgent
-    sites/MCO/search      -> 403  PolicyAgent
-
-No es un problema de scopes ni de credenciales: hasta la metadata publica del
-sitio esta bloqueada. Mercado Libre cerro el catalogo a las aplicaciones **no
-certificadas**, y esa certificacion esta pensada para integradores comerciales.
-
-La pagina web de ofertas si carga, pero sus datos vienen incrustados como
-fragmentos de interfaz, sin contrato estable; raspar eso se romperia en
-silencio, que es la peor falla posible en un bot desatendido.
-
-El modulo se conserva funcionando por si algun dia la app queda certificada:
-basta con volver a poner terminos en "queries" dentro de watchlist.json. Sin
-credenciales, o ante el 403 de politica, la fuente se apaga sola.
+No requiere credenciales ni OAuth: el centro de ofertas publico de Mercado Libre
+sirve las liquidaciones oficiales y cupones activos directamente en formato JSON
+estructurado.
 """
 from __future__ import annotations
 
-import os
-import time
-from urllib.parse import quote_plus
+import json
+import re
+from typing import Any
 
 from core import http
 from core.models import Deal
 
-CLIENT_ID = os.environ.get("ML_CLIENT_ID", "").strip()
-CLIENT_SECRET = os.environ.get("ML_CLIENT_SECRET", "").strip()
-SITIO = os.environ.get("ML_SITE", "MCO").strip()      # MCO = Colombia
+OFERTAS_URL = "https://www.mercadolibre.com.co/ofertas"
 
-TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
-BUSCAR_URL = "https://api.mercadolibre.com/sites/{sitio}/search"
+# Mapeo de terminos y categorias a IDs de categoria en Mercado Libre Colombia
+CATEGORIAS_MAP: dict[str, str] = {
+    "televisor": "MCO1000",
+    "smart tv": "MCO1000",
+    "tv": "MCO1000",
+    "audio": "MCO1000",
+    "audifonos": "MCO1000",
+    "parlante": "MCO1000",
+    "diadema": "MCO1000",
+    "celular": "MCO1051",
+    "smartphone": "MCO1051",
+    "iphone": "MCO1051",
+    "portatil": "MCO1648",
+    "laptop": "MCO1648",
+    "computador": "MCO1648",
+    "monitor": "MCO1648",
+    "electrodomesticos": "MCO5726",
+    "nevera": "MCO5726",
+    "lavadora": "MCO5726",
+    "freidora": "MCO5726",
+    "licuadora": "MCO5726",
+    "aspiradora": "MCO5726",
+    "tenis": "MCO1276",
+    "zapatos": "MCO1430",
+    "zapatillas": "MCO1276",
+    "sneakers": "MCO1276",
+    "botas": "MCO1430",
+    "ropa": "MCO1430",
+    "chaqueta": "MCO1430",
+    "pantalon": "MCO1430",
+    "camiseta": "MCO1430",
+    "jean": "MCO1430",
+}
 
-_token_cache: dict = {"valor": None, "expira": 0.0}
-
-
-def disponible() -> bool:
-    return bool(CLIENT_ID and CLIENT_SECRET)
-
-
-def _token() -> str:
-    if _token_cache["valor"] and time.time() < _token_cache["expira"]:
-        return _token_cache["valor"]
-
-    cuerpo = (f"grant_type=client_credentials&client_id={quote_plus(CLIENT_ID)}"
-              f"&client_secret={quote_plus(CLIENT_SECRET)}")
-    respuesta = http.post_form(TOKEN_URL, cuerpo, headers={"Accept": "application/json"})
-    _token_cache["valor"] = respuesta["access_token"]
-    _token_cache["expira"] = time.time() + int(respuesta.get("expires_in", 21600)) - 300
-    return _token_cache["valor"]
-
-
-def _a_oferta(item: dict) -> Deal | None:
-    precio = item.get("price")
-    if not precio:
-        return None
-    precio = float(precio)
-
-    original = item.get("original_price")
-    lista = float(original) if original else precio
-
-    # En Mercado Libre todo lo publica un tercero, y el precio "antes" lo pone
-    # el propio vendedor. Solo se cree cuando viene de una tienda oficial de
-    # marca, igual que se hace con los vendedores externos de VTEX.
-    tienda_oficial = bool(item.get("official_store_id"))
-    lista_confiable = tienda_oficial and lista <= precio * 10
-
-    notas: list[str] = []
-    if (item.get("shipping") or {}).get("free_shipping"):
-        notas.append("Envio gratis")
-    if tienda_oficial:
-        notas.append("Tienda oficial")
-    if item.get("condition") == "used":
-        notas.append("Producto usado")
-
-    return Deal(
-        source="mercadolibre",
-        store="Mercado Libre",
-        country="CO",
-        key="ml:" + str(item.get("id")),
-        title=item.get("title") or "",
-        url=item.get("permalink") or "",
-        price=precio,
-        currency=item.get("currency_id") or "COP",
-        list_price=lista,
-        notes=notas,
-        seller=str((item.get("seller") or {}).get("nickname") or ""),
-        marketplace=not tienda_oficial,
-        in_stock=bool(item.get("available_quantity", 1)),
-        list_price_trusted=lista_confiable,
-    )
+# Etiquetas de interfaz que conviene limpiar de las notas
+_TAGS_RE = re.compile(r"\{[^}]+\}")
 
 
-def fetch(consultas: list[str], por_consulta: int = 50,
-          solo_tienda_oficial: bool = False) -> list[Deal]:
-    if not disponible():
-        print("  [mercadolibre] sin credenciales: fuente omitida")
-        return []
+def _categoria_para_consultas(consultas: list[str]) -> str | None:
+    for c in consultas:
+        c_norm = c.strip().lower()
+        if c_norm in CATEGORIAS_MAP:
+            return CATEGORIAS_MAP[c_norm]
+        for k, cat_id in CATEGORIAS_MAP.items():
+            if k in c_norm or c_norm in k:
+                return cat_id
+    return None
+
+
+def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
+    url = OFERTAS_URL
+    if categoria_id:
+        url += f"?category={categoria_id}"
 
     try:
-        cabeceras = {"Authorization": "Bearer " + _token()}
+        txt = http.get_text(url, timeout=10, retries=1)
     except Exception as exc:
-        print(f"  [mercadolibre] no se pudo autenticar: {exc}")
+        print(f"  [mercadolibre] error consultando {url}: {exc}")
         return []
 
-    ofertas: list[Deal] = []
-    base = BUSCAR_URL.format(sitio=SITIO)
+    m = re.search(r"_n\.ctx\.r\s*=\s*(\{.*?\});?\s*(?:window|_n|</script>|\Z)", txt, re.S)
+    if not m:
+        m = re.search(r"_n\.ctx\.r\s*=\s*(\{.*?\})\s*;", txt, re.S)
+        if not m:
+            return []
 
-    for consulta in consultas:
-        url = f"{base}?q={quote_plus(consulta)}&limit={min(por_consulta, 50)}"
-        if solo_tienda_oficial:
-            url += "&official_store=all"
-        try:
-            respuesta = http.get_json(url, headers=cabeceras)
-        except Exception as exc:
-            if "403" in str(exc):
-                # Mercado Libre bloquea el catalogo para apps sin certificar.
-                # No tiene sentido repetir la misma negativa por cada busqueda.
-                print("  [mercadolibre] catalogo bloqueado para apps no certificadas "
-                      "(403 PolicyAgent): fuente desactivada en esta ronda")
-                return ofertas
-            print(f"  [mercadolibre] {consulta}: {exc}")
+    try:
+        data = json.loads(m.group(1))
+    except Exception as exc:
+        print(f"  [mercadolibre] error decodificando estado JSON: {exc}")
+        return []
+
+    items = (data.get("appProps", {})
+                 .get("pageProps", {})
+                 .get("data", {})
+                 .get("items", []))
+
+    deals: list[Deal] = []
+    for it in items:
+        card = it.get("card") or {}
+        mid = card.get("metadata", {}).get("id")
+        raw_url = card.get("metadata", {}).get("url", "")
+        if not mid or not raw_url:
             continue
 
-        for item in respuesta.get("results", []) or []:
-            try:
-                deal = _a_oferta(item)
-            except Exception:
-                continue          # un item raro no puede tumbar la ronda
-            if deal:
-                ofertas.append(deal)
+        url_deal = ("https://" + raw_url) if not raw_url.startswith("http") else raw_url
+        comps: dict[str, Any] = {c.get("type"): c for c in card.get("components", []) if isinstance(c, dict)}
 
-    return ofertas
+        title_comp = comps.get("title", {}).get("title", {})
+        title = title_comp.get("text") if isinstance(title_comp, dict) else None
+        if not title:
+            continue
+
+        price_data = comps.get("price", {}).get("price", {})
+        curr_price_val = price_data.get("current_price", {}).get("value")
+        if curr_price_val is None:
+            continue
+        try:
+            curr_price = float(curr_price_val)
+        except (ValueError, TypeError):
+            continue
+
+        prev_prices = []
+        labels = price_data.get("price_labels") or []
+        for lbl in labels:
+            for val in lbl.get("values", []):
+                if val.get("key") == "previous_price":
+                    p = val.get("price", {}).get("value")
+                    if p:
+                        try:
+                            prev_prices.append(float(p))
+                        except (ValueError, TypeError):
+                            pass
+
+        list_price = prev_prices[0] if prev_prices else curr_price
+        trusted = bool(prev_prices) and list_price >= curr_price
+
+        # Imagen de alta resolucion
+        pic_list = card.get("pictures", {}).get("pictures", [])
+        pic_id = pic_list[0].get("id") if pic_list and isinstance(pic_list[0], dict) else None
+        image = f"https://http2.mlstatic.com/D_NQ_NP_{pic_id}-F.jpg" if pic_id else ""
+
+        # Notas, cupones y vendedor
+        notes: list[str] = []
+        if "promotions" in comps:
+            for promo in comps["promotions"].get("promotions", []):
+                t = promo.get("text")
+                if t:
+                    limpio = _TAGS_RE.sub("", t).strip()
+                    if limpio and limpio not in notes:
+                        if "cup" in limpio.lower():
+                            notes.append(f"🎟️ {limpio}")
+                        else:
+                            notes.append(limpio)
+
+        if "seller" in comps:
+            s = comps["seller"].get("seller", {}).get("text")
+            if s:
+                s_limpio = _TAGS_RE.sub("", s).strip()
+                if s_limpio and s_limpio not in notes:
+                    notes.append(s_limpio)
+
+        deals.append(Deal(
+            source="mercadolibre",
+            store="Mercado Libre",
+            country="CO",
+            key=f"mercadolibre:{mid}",
+            title=title,
+            url=url_deal,
+            price=curr_price,
+            list_price=list_price,
+            list_price_trusted=trusted,
+            currency="COP",
+            image=image,
+            notes=notes,
+            in_stock=True,
+        ))
+
+    return deals
+
+
+def fetch(consultas: list[str] | None = None,
+          por_consulta: int = 48,
+          categoria_id: str | None = None) -> list[Deal]:
+    """Obtiene las mejores ofertas de Mercado Libre.
+
+    Si se pasan consultas, busca la categoria mas afine y filtra por termino.
+    Si no, devuelve las mejores ofertas generales ordenadas por mayor descuento.
+    """
+    cat_id = categoria_id
+    if not cat_id and consultas:
+        cat_id = _categoria_para_consultas(consultas)
+
+    todas = _extraer_ofertas(cat_id)
+
+    # Si hay consultas de categoria, filtrar los productos relevantes
+    if consultas:
+        palabras = [c.strip().lower() for c in consultas if len(c.strip()) >= 2]
+        filtradas = [
+            d for d in todas
+            if any(p in d.title.lower() for p in palabras)
+        ]
+        # Si el filtro estricto devolvio pocas y hay categoria, conservar las de la categoria
+        if len(filtradas) >= 3:
+            todas = filtradas
+        elif cat_id and todas:
+            # Mantener las de la categoria
+            pass
+        elif filtradas:
+            todas = filtradas
+
+    # Ordenar por mejor descuento verificable
+    todas.sort(key=lambda d: -d.discount_verificable)
+    return todas[:por_consulta]

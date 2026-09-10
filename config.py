@@ -121,6 +121,9 @@ MARKETPLACE_MAX_DISCOUNT_PCT = _float("MARKETPLACE_MAX_DISCOUNT_PCT", 65.0)
 # Los objetivos de precio no dependen de esto, asi que una ganga barata de
 # marketplace sigue avisando si cruza tu tope.
 MARKETPLACE_MIN_PRICE_COP = _float("MARKETPLACE_MIN_PRICE_COP", 300000.0)
+# Tope maximo de precio: no alertar ni mostrar productos por encima de este valor
+# (ej. maximo 2 millones de pesos para evitar ofertas de cosas excesivamente caras).
+MAX_PRICE_COP = _float("MAX_PRICE_COP", 2000000.0)
 
 # Un ListPrice inflado (tipico en marketplace) simula descuentos falsos.
 # Con esto exigimos que el "glitch" tambien sea bajo frente al historial propio.

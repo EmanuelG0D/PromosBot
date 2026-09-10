@@ -164,6 +164,20 @@ def _foto_subida(foto: str, pie: str) -> bool:
     """
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
     imagen = http.descargar(foto, retries=1)
+
+    # Si la imagen no es un formato estandar directo (ej. AVIF de K-tronix),
+    # convertirla a JPEG en memoria para que Telegram no la rechace con IMAGE_PROCESS_FAILED.
+    if imagen and not (imagen.startswith(b"\xff\xd8\xff") or imagen.startswith(b"\x89PNG") or imagen.startswith(b"GIF8")):
+        try:
+            import io
+            from PIL import Image
+            img = Image.open(io.BytesIO(imagen))
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="JPEG", quality=85)
+            imagen = buf.getvalue()
+        except Exception:
+            pass
+
     respuesta = http.post_multipart(
         url,
         {"chat_id": config.TELEGRAM_CHAT_ID, "caption": pie, "parse_mode": "HTML"},
@@ -175,14 +189,24 @@ def _foto_subida(foto: str, pie: str) -> bool:
     return bool(respuesta.get("ok"))
 
 
+_CDNS_SUBIDA_DIRECTA = (
+    "cdn.dam.ktronix.com",
+    "cdn.dam.alkosto.com",
+    "media.falabella.com.co",
+)
+
+
 def _enviar_foto(foto: str, pie: str) -> bool:
     """Primero por URL; si Telegram no puede bajarla, se le suben los bytes."""
-    try:
-        if _foto_por_url(foto, pie):
-            return True
-        print(f"  [telegram] {_dominio(foto)} no le sirve por URL; se sube")
-    except Exception as exc:
-        print(f"  [telegram] {_dominio(foto)} rechazada por URL ({exc}); se sube")
+    # Las CDN que sabemos que bloquean peticiones directas de Telegram van directo a subida
+    # para no perder varios segundos de espera por producto.
+    if not any(cdn in foto for cdn in _CDNS_SUBIDA_DIRECTA):
+        try:
+            if _foto_por_url(foto, pie):
+                return True
+            print(f"  [telegram] {_dominio(foto)} no le sirve por URL; se sube")
+        except Exception as exc:
+            print(f"  [telegram] {_dominio(foto)} rechazada por URL ({exc}); se sube")
 
     try:
         return _foto_subida(foto, pie)
@@ -226,7 +250,38 @@ def _avisar_migracion(error: Exception) -> None:
         print(f"  [telegram] actualiza TELEGRAM_CHAT_ID a: {nuevo.group(1)}")
 
 
-def send(html: str, preview: bool = False) -> bool:
+def teclado_tiendas() -> dict:
+    """Menu principal de tiendas para ReplyKeyboardMarkup."""
+    return {
+        "keyboard": [
+            [{"text": "🟡 Éxito"}, {"text": "🔴 Alkosto"}],
+            [{"text": "💛 Mercado Libre"}, {"text": "🟢 Falabella"}],
+            [{"text": "⚪ K-tronix"}, {"text": "🔵 Olímpica"}],
+            [{"text": "🟢 Carulla"}, {"text": "🟠 Homecenter"}],
+            [{"text": "📦 Promocajita"}, {"text": "🇨🇴 Todo Colombia"}],
+            [{"text": "🇺🇸 Exterior (EE. UU.)"}, {"text": "🎯 Mis Objetivos"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_categorias(tienda_nombre: str = "") -> dict:
+    """Submenu de categorias para la tienda seleccionada."""
+    return {
+        "keyboard": [
+            [{"text": "🌟 TODO"}, {"text": "📺 Smart TV"}],
+            [{"text": "💻 Portátiles"}, {"text": "🖥️ Monitores"}],
+            [{"text": "📱 Celulares"}, {"text": "👟 Zapatos y Tenis"}],
+            [{"text": "🎧 Audio y Diademas"}, {"text": "❄️ Electrodomésticos"}],
+            [{"text": "👕 Ropa y Moda"}, {"text": "⬅️ Volver a Tiendas"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def send(html: str, preview: bool = False, reply_markup: dict | None = None) -> bool:
     if not enabled():
         return False
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendMessage")
@@ -236,12 +291,26 @@ def send(html: str, preview: bool = False) -> bool:
         "parse_mode": "HTML",
         "disable_web_page_preview": not preview,
     }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
     try:
         respuesta = http.post_json(url, payload, retries=1)
         return bool(respuesta.get("ok"))
     except Exception as exc:
         _avisar_migracion(exc)
         print(f"  [telegram] fallo el envio: {exc}")
+        return False
+
+
+def accion_escribiendo() -> bool:
+    """Muestra 'escribiendo...' en la cabecera de Telegram mientras procesa una busqueda."""
+    if not enabled():
+        return False
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendChatAction")
+    try:
+        respuesta = http.post_json(url, {"chat_id": config.TELEGRAM_CHAT_ID, "action": "typing"}, retries=1)
+        return bool(respuesta.get("ok"))
+    except Exception:
         return False
 
 
