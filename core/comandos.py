@@ -401,23 +401,33 @@ MENU = [
 
 
 def registrar_menu() -> bool:
-    """Publica los comandos SOLO para chats privados (nunca en grupos ni canales)."""
+    """Publica los comandos en privado para todos, y en el grupo SOLO para administradores."""
     if not config.TELEGRAM_BOT_TOKEN:
         return False
     try:
-        # 1. Asegurar que en grupos y por defecto no haya comandos ni boton de menu
+        url_set = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyCommands"
         url_del = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/deleteMyCommands"
+        cmds = [{"command": c, "description": d} for c, d in MENU]
+
+        # 1. Limpiar comandos globales/por defecto y de grupos generales
         http.post_json(url_del, {"scope": {"type": "default"}}, retries=1)
         http.post_json(url_del, {"scope": {"type": "all_group_chats"}}, retries=1)
-        http.post_json(url_del, {"scope": {"type": "all_chat_administrators"}}, retries=1)
 
-        # 2. Publicar comandos UNICAMENTE en chats privados
-        url_set = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyCommands"
-        cuerpo = {
-            "commands": [{"command": c, "description": d} for c, d in MENU],
-            "scope": {"type": "all_private_chats"},
-        }
-        return bool(http.post_json(url_set, cuerpo, retries=1).get("ok"))
+        # 2. Publicar comandos para todos los chats privados
+        http.post_json(url_set, {"commands": cmds, "scope": {"type": "all_private_chats"}}, retries=1)
+
+        # 3. En el grupo oficial: usuarios comunes NO ven ningun menu ni comandos
+        if config.TELEGRAM_CHAT_ID:
+            http.post_json(url_set, {"commands": [], "scope": {"type": "chat", "chat_id": config.TELEGRAM_CHAT_ID}}, retries=1)
+            # 4. En el grupo oficial: administradores SI ven el menu
+            http.post_json(url_set, {"commands": cmds, "scope": {"type": "chat_administrators", "chat_id": config.TELEGRAM_CHAT_ID}}, retries=1)
+            if config.TELEGRAM_ADMIN_ID:
+                try:
+                    admin_id_int = int(config.TELEGRAM_ADMIN_ID)
+                    http.post_json(url_set, {"commands": cmds, "scope": {"type": "chat_member", "chat_id": config.TELEGRAM_CHAT_ID, "user_id": admin_id_int}}, retries=1)
+                except (ValueError, TypeError):
+                    pass
+        return True
     except Exception as exc:
         print(f"  [comandos] no se pudo registrar el menu: {exc}")
         return False

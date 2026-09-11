@@ -143,12 +143,15 @@ def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None) -> bool
     """Le pasa la URL a Telegram para que la baje el. Es lo barato."""
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
     destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
-    respuesta = http.post_json(url, {
+    payload = {
         "chat_id": destino,
         "photo": foto,
         "caption": pie,
         "parse_mode": "HTML",
-    }, retries=1)
+    }
+    if str(destino) == str(config.TELEGRAM_CHAT_ID):
+        payload["reply_markup"] = {"remove_keyboard": True}
+    respuesta = http.post_json(url, payload, retries=1)
     return bool(respuesta.get("ok"))
 
 
@@ -180,9 +183,14 @@ def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
         except Exception:
             pass
 
+    campos = {"chat_id": destino, "caption": pie, "parse_mode": "HTML"}
+    if str(destino) == str(config.TELEGRAM_CHAT_ID):
+        import json as _json
+        campos["reply_markup"] = _json.dumps({"remove_keyboard": True})
+
     respuesta = http.post_multipart(
         url,
-        {"chat_id": destino, "caption": pie, "parse_mode": "HTML"},
+        campos,
         ("photo", "oferta.jpg", imagen),
         retries=1,
     )
@@ -349,6 +357,8 @@ def send(html: str, preview: bool = False, reply_markup: dict | None = None,
     }
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
+    elif str(destino) == str(config.TELEGRAM_CHAT_ID):
+        payload["reply_markup"] = {"remove_keyboard": True}
     try:
         respuesta = http.post_json(url, payload, retries=1)
         return bool(respuesta.get("ok"))

@@ -57,6 +57,8 @@ def _metadatos_github() -> dict | None:
 
 
 def _sync_desde_github() -> dict[str, Any] | None:
+    if ARCHIVO_LOCAL.name != "whitelist.json":
+        return None
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     repo = os.environ.get("GITHUB_REPO", "").strip()
     if not (token and repo):
@@ -72,6 +74,8 @@ def _sync_desde_github() -> dict[str, Any] | None:
 
 
 def _sync_hacia_github(datos: dict[str, Any]) -> bool:
+    if ARCHIVO_LOCAL.name != "whitelist.json":
+        return False
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     repo = os.environ.get("GITHUB_REPO", "").strip()
     if not (token and repo):
