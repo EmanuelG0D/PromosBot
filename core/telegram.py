@@ -149,8 +149,6 @@ def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None) -> bool
         "caption": pie,
         "parse_mode": "HTML",
     }
-    if str(destino) == str(config.TELEGRAM_CHAT_ID):
-        payload["reply_markup"] = {"remove_keyboard": True}
     respuesta = http.post_json(url, payload, retries=1)
     return bool(respuesta.get("ok"))
 
@@ -184,9 +182,6 @@ def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
             pass
 
     campos = {"chat_id": destino, "caption": pie, "parse_mode": "HTML"}
-    if str(destino) == str(config.TELEGRAM_CHAT_ID):
-        import json as _json
-        campos["reply_markup"] = _json.dumps({"remove_keyboard": True})
 
     respuesta = http.post_multipart(
         url,
@@ -357,8 +352,6 @@ def send(html: str, preview: bool = False, reply_markup: dict | None = None,
     }
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
-    elif str(destino) == str(config.TELEGRAM_CHAT_ID):
-        payload["reply_markup"] = {"remove_keyboard": True}
     try:
         respuesta = http.post_json(url, payload, retries=1)
         return bool(respuesta.get("ok"))

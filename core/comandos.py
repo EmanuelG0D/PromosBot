@@ -223,11 +223,6 @@ def leer_comando(mensaje: dict) -> dict | None:
     nombre = user.get("first_name") or "Usuario"
     username = user.get("username")
 
-    # En grupos y canales no se atiende ningun comando ni menu:
-    # el bot solo difunde ofertas automaticas y toda interaccion es por privado.
-    if chat_type in ("group", "supergroup", "channel"):
-        return None
-
     es_grupo_configurado = str(chat) == str(config.TELEGRAM_CHAT_ID)
     es_privado = chat_type == "private"
 
