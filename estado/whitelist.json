@@ -5,5 +5,10 @@
     "3333",
     "9999"
   ],
-  "solicitudes_pendientes": {}
+  "solicitudes_pendientes": {
+    "8888": {
+      "nombre": "Pedro",
+      "username": "pedro88"
+    }
+  }
 }
