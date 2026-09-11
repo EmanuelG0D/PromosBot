@@ -1,10 +1,7 @@
 {
   "admin": "5583002220",
   "usuarios_permitidos": [
-    "5583002220",
-    "8888",
-    "3333",
-    "9999"
+    "5583002220"
   ],
   "solicitudes_pendientes": {}
 }
