@@ -1,6 +1,7 @@
 {
   "admin": "5583002220",
   "usuarios_permitidos": [
+    "8888",
     "5583002220",
     "9999",
     "3333"
@@ -9,10 +10,6 @@
     "8548661045": {
       "nombre": "Suport",
       "username": "SupEmaOr"
-    },
-    "8888": {
-      "nombre": "Pedro",
-      "username": "pedro88"
     }
   }
 }
