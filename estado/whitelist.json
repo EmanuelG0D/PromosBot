@@ -2,16 +2,13 @@
   "admin": "5583002220",
   "usuarios_permitidos": [
     "5583002220",
-    "9999"
+    "9999",
+    "3333"
   ],
   "solicitudes_pendientes": {
     "8548661045": {
       "nombre": "Suport",
       "username": "SupEmaOr"
-    },
-    "3333": {
-      "nombre": "Andres",
-      "username": "andres33"
     }
   }
 }
