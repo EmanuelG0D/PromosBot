@@ -1,12 +1,8 @@
 {
   "admin": "5583002220",
   "usuarios_permitidos": [
-    "5583002220"
+    "5583002220",
+    "9999"
   ],
-  "solicitudes_pendientes": {
-    "9999": {
-      "nombre": "Luisa",
-      "username": "luisa99"
-    }
-  }
+  "solicitudes_pendientes": {}
 }
