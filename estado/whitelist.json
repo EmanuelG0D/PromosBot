@@ -3,5 +3,10 @@
   "usuarios_permitidos": [
     "5583002220"
   ],
-  "solicitudes_pendientes": {}
+  "solicitudes_pendientes": {
+    "8548661045": {
+      "nombre": "Suport",
+      "username": "SupEmaOr"
+    }
+  }
 }
