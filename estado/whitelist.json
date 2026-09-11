@@ -2,12 +2,8 @@
   "admin": "5583002220",
   "usuarios_permitidos": [
     "5583002220",
+    "3333",
     "9999"
   ],
-  "solicitudes_pendientes": {
-    "3333": {
-      "nombre": "Andres",
-      "username": "andres33"
-    }
-  }
+  "solicitudes_pendientes": {}
 }
