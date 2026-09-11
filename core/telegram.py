@@ -139,11 +139,12 @@ def _dominio(url: str) -> str:
     return url.split("/")[2] if url.count("/") > 2 else url[:40]
 
 
-def _foto_por_url(foto: str, pie: str) -> bool:
+def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
     """Le pasa la URL a Telegram para que la baje el. Es lo barato."""
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
+    destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
     respuesta = http.post_json(url, {
-        "chat_id": config.TELEGRAM_CHAT_ID,
+        "chat_id": destino,
         "photo": foto,
         "caption": pie,
         "parse_mode": "HTML",
@@ -151,7 +152,7 @@ def _foto_por_url(foto: str, pie: str) -> bool:
     return bool(respuesta.get("ok"))
 
 
-def _foto_subida(foto: str, pie: str) -> bool:
+def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
     """Baja la imagen y la sube como archivo.
 
     Hay CDN de tienda que no responden a los servidores de Telegram aunque
@@ -164,6 +165,7 @@ def _foto_subida(foto: str, pie: str) -> bool:
     """
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
     imagen = http.descargar(foto, retries=1)
+    destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
 
     # Si la imagen no es un formato estandar directo (ej. AVIF de K-tronix),
     # convertirla a JPEG en memoria para que Telegram no la rechace con IMAGE_PROCESS_FAILED.
@@ -180,7 +182,7 @@ def _foto_subida(foto: str, pie: str) -> bool:
 
     respuesta = http.post_multipart(
         url,
-        {"chat_id": config.TELEGRAM_CHAT_ID, "caption": pie, "parse_mode": "HTML"},
+        {"chat_id": destino, "caption": pie, "parse_mode": "HTML"},
         ("photo", "oferta.jpg", imagen),
         retries=1,
     )
@@ -196,20 +198,20 @@ _CDNS_SUBIDA_DIRECTA = (
 )
 
 
-def _enviar_foto(foto: str, pie: str) -> bool:
+def _enviar_foto(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
     """Primero por URL; si Telegram no puede bajarla, se le suben los bytes."""
     # Las CDN que sabemos que bloquean peticiones directas de Telegram van directo a subida
     # para no perder varios segundos de espera por producto.
     if not any(cdn in foto for cdn in _CDNS_SUBIDA_DIRECTA):
         try:
-            if _foto_por_url(foto, pie):
+            if _foto_por_url(foto, pie, chat_id=chat_id):
                 return True
             print(f"  [telegram] {_dominio(foto)} no le sirve por URL; se sube")
         except Exception as exc:
             print(f"  [telegram] {_dominio(foto)} rechazada por URL ({exc}); se sube")
 
     try:
-        return _foto_subida(foto, pie)
+        return _foto_subida(foto, pie, chat_id=chat_id)
     except Exception as exc:
         # Imagen caida de verdad. Se avisa con el dominio para poder ubicar
         # que tienda publica imagenes problematicas.
@@ -218,7 +220,8 @@ def _enviar_foto(foto: str, pie: str) -> bool:
 
 
 def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
-                  veracidad: Veracidad | None = None) -> str:
+                  veracidad: Veracidad | None = None,
+                  chat_id: int | str | None = None) -> str:
     """Manda la oferta como tarjeta con foto; si la foto falla, como texto.
 
     Devuelve "foto", "texto" o "" si no se pudo enviar. Saber por cual de los
@@ -227,11 +230,11 @@ def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     """
     if not enabled():
         return ""
-    if deal.image and _enviar_foto(deal.image, _pie_de_foto(deal, verdict, landed, veracidad)):
+    if deal.image and _enviar_foto(deal.image, _pie_de_foto(deal, verdict, landed, veracidad), chat_id=chat_id):
         return "foto"
     # Sin foto, o si Telegram la rechazo, se manda como texto dejando que
     # Telegram arme su propia vista previa del enlace.
-    return "texto" if send(render(deal, verdict, landed, veracidad), preview=True) else ""
+    return "texto" if send(render(deal, verdict, landed, veracidad), preview=True, chat_id=chat_id) else ""
 
 
 def _avisar_migracion(error: Exception) -> None:
@@ -281,12 +284,65 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
     }
 
 
-def send(html: str, preview: bool = False, reply_markup: dict | None = None) -> bool:
+def teclado_aprobacion(user_id: int | str) -> dict:
+    """Botones inline para que el admin apruebe o rechace a un usuario."""
+    uid = str(user_id).strip()
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Aprobar", "callback_data": f"aprobar:{uid}"},
+                {"text": "❌ Rechazar", "callback_data": f"rechazar:{uid}"},
+            ]
+        ]
+    }
+
+
+def teclado_unirse_canal(url_canal: str | None = None) -> dict:
+    """Botones inline para invitar al usuario al canal y verificar su membresia."""
+    enlace = (url_canal or getattr(config, "TELEGRAM_CHANNEL_URL", "")
+              or "https://t.me/+GE1nQO-f0HYwNGQx").strip()
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📢 Unirme a Ofertas", "url": enlace},
+            ],
+            [
+                {"text": "🔄 Ya me uní", "callback_data": "verificar_canal"},
+            ],
+        ]
+    }
+
+
+def es_miembro_del_canal(user_id: int | str,
+                         channel_id: int | str | None = None) -> bool:
+    """Verifica si el usuario es miembro activo del canal/grupo configurado."""
+    if not enabled() or not user_id:
+        return False
+    destino = channel_id if channel_id is not None else (
+        getattr(config, "TELEGRAM_CHANNEL_ID", None) or config.TELEGRAM_CHAT_ID
+    )
+    if not destino:
+        return True
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="getChatMember")
+    try:
+        resp = http.post_json(url, {"chat_id": destino, "user_id": int(user_id)}, retries=1)
+        if not resp.get("ok"):
+            return False
+        estado = (resp.get("result") or {}).get("status", "")
+        return estado in ("creator", "administrator", "member", "restricted")
+    except Exception as exc:
+        print(f"  [telegram] fallo verificando membresia de {user_id}: {exc}")
+        return False
+
+
+def send(html: str, preview: bool = False, reply_markup: dict | None = None,
+         chat_id: int | str | None = None) -> bool:
     if not enabled():
         return False
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendMessage")
+    destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
     payload = {
-        "chat_id": config.TELEGRAM_CHAT_ID,
+        "chat_id": destino,
         "text": html,
         "parse_mode": "HTML",
         "disable_web_page_preview": not preview,
@@ -298,17 +354,59 @@ def send(html: str, preview: bool = False, reply_markup: dict | None = None) -> 
         return bool(respuesta.get("ok"))
     except Exception as exc:
         _avisar_migracion(exc)
-        print(f"  [telegram] fallo el envio: {exc}")
+        print(f"  [telegram] fallo el envio a {destino}: {exc}")
         return False
 
 
-def accion_escribiendo() -> bool:
+def editar_mensaje(chat_id: int | str, message_id: int, texto: str,
+                   reply_markup: dict | None = None) -> bool:
+    """Edita el texto y los botones de un mensaje ya enviado."""
+    if not enabled():
+        return False
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="editMessageText")
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": texto,
+        "parse_mode": "HTML",
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    try:
+        respuesta = http.post_json(url, payload, retries=1)
+        return bool(respuesta.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] fallo editando mensaje: {exc}")
+        return False
+
+
+def responder_callback(callback_query_id: str, texto: str = "",
+                       alerta: bool = False) -> bool:
+    """Confirma la recepcion de un click en un boton inline."""
+    if not enabled():
+        return False
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="answerCallbackQuery")
+    payload = {
+        "callback_query_id": callback_query_id,
+        "text": texto,
+        "show_alert": alerta,
+    }
+    try:
+        respuesta = http.post_json(url, payload, retries=1)
+        return bool(respuesta.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] fallo respondiendo callback: {exc}")
+        return False
+
+
+def accion_escribiendo(chat_id: int | str | None = None) -> bool:
     """Muestra 'escribiendo...' en la cabecera de Telegram mientras procesa una busqueda."""
     if not enabled():
         return False
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendChatAction")
+    destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
     try:
-        respuesta = http.post_json(url, {"chat_id": config.TELEGRAM_CHAT_ID, "action": "typing"}, retries=1)
+        respuesta = http.post_json(url, {"chat_id": destino, "action": "typing"}, retries=1)
         return bool(respuesta.get("ok"))
     except Exception:
         return False
@@ -412,7 +510,7 @@ def registrar_webhook(url: str) -> bool:
     cuerpo = {
         "url": url,
         "secret_token": secreto_webhook(),
-        "allowed_updates": ["message"],
+        "allowed_updates": ["message", "callback_query"],
         # Un despliegue no debe arrastrar comandos de hace horas: para cuando
         # se respondieran, quien los pidio ya ni se acuerda.
         "drop_pending_updates": True,

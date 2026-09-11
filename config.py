@@ -51,6 +51,9 @@ def _bool(name: str, default: bool) -> bool:
 # --- Telegram -----------------------------------------------------------
 TELEGRAM_BOT_TOKEN = _str("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _str("TELEGRAM_CHAT_ID")
+TELEGRAM_ADMIN_ID = _str("TELEGRAM_ADMIN_ID", "5583002220")
+TELEGRAM_CHANNEL_ID = _str("TELEGRAM_CHANNEL_ID", TELEGRAM_CHAT_ID)
+TELEGRAM_CHANNEL_URL = _str("TELEGRAM_CHANNEL_URL", "https://t.me/+GE1nQO-f0HYwNGQx")
 
 # --- eBay (opcional: sin credenciales la fuente se omite sola) ----------
 EBAY_CLIENT_ID = _str("EBAY_CLIENT_ID")

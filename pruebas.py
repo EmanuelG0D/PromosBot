@@ -867,7 +867,7 @@ class PruebaComandos(unittest.TestCase):
         original_send = telegram.send
         original_estado = comandos.ESTADO
         try:
-            telegram.send = lambda texto, preview=False, reply_markup=None: mensajes_enviados.append((texto, reply_markup)) or True
+            telegram.send = lambda texto, preview=False, reply_markup=None, **k: mensajes_enviados.append((texto, reply_markup)) or True
             with tempfile.TemporaryDirectory() as tmp:
                 comandos.ESTADO = _Path(tmp) / "estado.json"
 
@@ -1336,7 +1336,7 @@ class PruebaRespuestaInmediataYCancelacion(unittest.TestCase):
         orig_send = telegram.send
         orig_esc = telegram.accion_escribiendo
         telegram.send = lambda txt, **k: enviados.append(txt) or True
-        telegram.accion_escribiendo = lambda: None
+        telegram.accion_escribiendo = lambda *a, **k: None
         try:
             reqs = [
                 {"tipo": "categoria", "categoria_nombre": "👟 Zapatos y Tenis"},
@@ -1453,6 +1453,362 @@ class PruebaMercadoLibre(unittest.TestCase):
             self.assertIn("Tienda Oficial Samsung", d.notes)
         finally:
             http.get_text = orig_get_text
+
+
+class PruebaControlAccesoWhitelist(unittest.TestCase):
+    """Pruebas del sistema de control de acceso por whitelist y aprobacion interactiva."""
+
+    def test_es_admin_identifica_al_dueno(self):
+        from core import whitelist
+        orig_admin = config.TELEGRAM_ADMIN_ID
+        try:
+            config.TELEGRAM_ADMIN_ID = "5583002220"
+            self.assertTrue(whitelist.es_admin("5583002220"))
+            self.assertTrue(whitelist.es_admin(5583002220))
+            self.assertFalse(whitelist.es_admin("9999999999"))
+            self.assertFalse(whitelist.es_admin(None))
+        finally:
+            config.TELEGRAM_ADMIN_ID = orig_admin
+
+    def test_ciclo_solicitud_aprobacion_y_rechazo(self):
+        from core import whitelist
+        import tempfile
+        from pathlib import Path as _Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_archivo = whitelist.ARCHIVO_LOCAL
+            whitelist.ARCHIVO_LOCAL = _Path(tmp) / "whitelist_test.json"
+            orig_admin = config.TELEGRAM_ADMIN_ID
+            config.TELEGRAM_ADMIN_ID = "5583002220"
+            try:
+                # 1. El admin siempre es permitido
+                self.assertTrue(whitelist.es_permitido("5583002220"))
+                # Un extrano no
+                self.assertFalse(whitelist.es_permitido("12345"))
+
+                # 2. Registrar solicitud nueva
+                es_nueva = whitelist.registrar_solicitud("12345", nombre="Carlos", username="carlos_dev")
+                self.assertTrue(es_nueva)
+                self.assertFalse(whitelist.es_permitido("12345"))
+
+                # Si repite, es_nueva debe ser False
+                self.assertFalse(whitelist.registrar_solicitud("12345", nombre="Carlos"))
+
+                # 3. Aprobar usuario
+                info = whitelist.aprobar("12345")
+                self.assertEqual(info.get("nombre"), "Carlos")
+                self.assertTrue(whitelist.es_permitido("12345"))
+
+                # 4. Rechazar / Revocar usuario
+                info_rev = whitelist.rechazar("12345")
+                self.assertFalse(whitelist.es_permitido("12345"))
+            finally:
+                whitelist.ARCHIVO_LOCAL = orig_archivo
+                config.TELEGRAM_ADMIN_ID = orig_admin
+
+    def test_leer_comando_control_acceso_privado(self):
+        from core import comandos, telegram, whitelist
+        import tempfile
+        from pathlib import Path as _Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_wl = whitelist.ARCHIVO_LOCAL
+            whitelist.ARCHIVO_LOCAL = _Path(tmp) / "whitelist_test.json"
+            orig_admin = config.TELEGRAM_ADMIN_ID
+            config.TELEGRAM_ADMIN_ID = "5583002220"
+            orig_miembro = telegram.es_miembro_del_canal
+            try:
+                msg_extrano = {
+                    "text": "/alkosto",
+                    "chat": {"id": 8888, "type": "private"},
+                    "from": {"id": 8888, "first_name": "Pedro", "username": "pedro88"},
+                }
+
+                # Caso 1: Pedro NO está en el canal oficial -> debe ser rechazado con unirse_canal
+                telegram.es_miembro_del_canal = lambda uid, **k: False
+                solicitud_canal = comandos.leer_comando(msg_extrano)
+                self.assertIsNotNone(solicitud_canal)
+                self.assertEqual(solicitud_canal.get("tipo"), "unirse_canal")
+                self.assertEqual(solicitud_canal.get("user_id"), 8888)
+
+                # Caso 2: Pedro SÍ se une al canal oficial pero no está en whitelist -> solicitud_acceso
+                telegram.es_miembro_del_canal = lambda uid, **k: True
+                solicitud = comandos.leer_comando(msg_extrano)
+                self.assertIsNotNone(solicitud)
+                self.assertEqual(solicitud.get("tipo"), "solicitud_acceso")
+                self.assertTrue(solicitud.get("es_nueva"))
+                self.assertEqual(solicitud.get("user_id"), 8888)
+
+                # Si escribe de nuevo mientras sigue pendiente
+                solicitud2 = comandos.leer_comando(msg_extrano)
+                self.assertFalse(solicitud2.get("es_nueva"))
+
+                # El admin aprueba a Pedro
+                whitelist.aprobar("8888")
+
+                # Ahora Pedro escribe /alkosto en privado y es atendido normalmente
+                solicitud3 = comandos.leer_comando(msg_extrano)
+                self.assertIsNotNone(solicitud3)
+                self.assertEqual(solicitud3.get("comando"), "alkosto")
+                self.assertEqual(solicitud3.get("chat_id"), 8888)
+            finally:
+                whitelist.ARCHIVO_LOCAL = orig_wl
+                config.TELEGRAM_ADMIN_ID = orig_admin
+                telegram.es_miembro_del_canal = orig_miembro
+
+    def test_sesion_aislada_por_chat(self):
+        from core import comandos
+        import tempfile
+        from pathlib import Path as _Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_estado = comandos.ESTADO
+            comandos.ESTADO = _Path(tmp) / "comandos_estado.json"
+            try:
+                # Usuario A fija exito, Usuario B fija alkosto
+                comandos.fijar_tienda_activa("exito", chat_id="user_a")
+                comandos.fijar_tienda_activa("alkosto", chat_id="user_b")
+
+                self.assertEqual(comandos.tienda_activa(chat_id="user_a"), "exito")
+                self.assertEqual(comandos.tienda_activa(chat_id="user_b"), "alkosto")
+
+                # Ofertas mostradas independientes
+                comandos.marcar_mostradas(["oferta_1", "oferta_2"], chat_id="user_a")
+                comandos.marcar_mostradas(["oferta_3"], chat_id="user_b")
+
+                self.assertIn("oferta_1", comandos.ya_mostradas(chat_id="user_a"))
+                self.assertNotIn("oferta_1", comandos.ya_mostradas(chat_id="user_b"))
+                self.assertIn("oferta_3", comandos.ya_mostradas(chat_id="user_b"))
+            finally:
+                comandos.ESTADO = orig_estado
+
+    def test_callback_query_aprobacion_admin(self):
+        import server
+        from core import telegram, whitelist
+        import tempfile
+        from pathlib import Path as _Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_wl = whitelist.ARCHIVO_LOCAL
+            whitelist.ARCHIVO_LOCAL = _Path(tmp) / "whitelist_test.json"
+            orig_admin = config.TELEGRAM_ADMIN_ID
+            config.TELEGRAM_ADMIN_ID = "5583002220"
+
+            respuestas_cb = []
+            mensajes_editados = []
+            mensajes_enviados = []
+
+            orig_resp_cb = telegram.responder_callback
+            orig_edit = telegram.editar_mensaje
+            orig_send = telegram.send
+
+            telegram.responder_callback = lambda qid, txt="", alerta=False, **k: respuestas_cb.append((qid, txt, alerta)) or True
+            telegram.editar_mensaje = lambda chat_id, message_id, texto, reply_markup=None, **k: mensajes_editados.append((chat_id, message_id, texto)) or True
+            telegram.send = lambda txt, **k: mensajes_enviados.append((txt, k)) or True
+
+            try:
+                # 1. Registrar usuario pendiente
+                whitelist.registrar_solicitud("9999", nombre="Luisa", username="luisa99")
+
+                # Intento de aprobacion por un no-admin (debe ser rechazado con alerta)
+                cb_no_admin = {
+                    "id": "cb_1",
+                    "from": {"id": 1111},
+                    "data": "aprobar:9999",
+                    "message": {"chat": {"id": 1111}, "message_id": 10},
+                }
+                server.atender_callback_query(cb_no_admin)
+                self.assertTrue(any(r[2] is True for r in respuestas_cb))
+                self.assertFalse(whitelist.es_permitido("9999"))
+
+                # Intento de aprobacion por el Admin
+                cb_admin = {
+                    "id": "cb_2",
+                    "from": {"id": 5583002220},
+                    "data": "aprobar:9999",
+                    "message": {"chat": {"id": 5583002220}, "message_id": 20},
+                }
+                server.atender_callback_query(cb_admin)
+                self.assertTrue(whitelist.es_permitido("9999"))
+                self.assertTrue(any("Aprobado" in r[1] for r in respuestas_cb))
+                self.assertTrue(any("Acceso Autorizado" in m[2] for m in mensajes_editados))
+                # Notificacion enviada al usuario con teclado
+                self.assertTrue(any(m[1].get("chat_id") == "9999" and "aprobado" in m[0].lower() for m in mensajes_enviados))
+            finally:
+                whitelist.ARCHIVO_LOCAL = orig_wl
+                config.TELEGRAM_ADMIN_ID = orig_admin
+                telegram.responder_callback = orig_resp_cb
+                telegram.editar_mensaje = orig_edit
+                telegram.send = orig_send
+
+    def test_teclado_aprobacion_botones(self):
+        from core import telegram
+        markup = telegram.teclado_aprobacion(777)
+        botones = markup["inline_keyboard"][0]
+        self.assertEqual(len(botones), 2)
+        self.assertEqual(botones[0]["callback_data"], "aprobar:777")
+        self.assertEqual(botones[1]["callback_data"], "rechazar:777")
+        self.assertIn("Aprobar", botones[0]["text"])
+        self.assertIn("Rechazar", botones[1]["text"])
+
+    def test_inicio_sesion_notifica_al_admin_con_ventana_30_min(self):
+        from core import whitelist, telegram
+        import radar
+
+        whitelist.limpiar_sesiones()
+        orig_admin = config.TELEGRAM_ADMIN_ID
+        config.TELEGRAM_ADMIN_ID = "5583002220"
+
+        notificaciones = []
+        orig_send = telegram.send
+        telegram.send = lambda txt, **k: notificaciones.append((txt, k)) or True
+
+        try:
+            # 1. Primera interaccion de usuario aprobado -> Notifica al admin
+            solicitud_1 = {
+                "comando": "menu",
+                "tipo": "menu",
+                "chat_id": 4444,
+                "user_id": 4444,
+                "nombre": "Sofia",
+                "username": "sofi_tech",
+            }
+            radar.atender_solicitudes([solicitud_1])
+            notifs_admin = [n for n in notificaciones if n[1].get("chat_id") == "5583002220" and "inició una sesión" in n[0]]
+            self.assertEqual(len(notifs_admin), 1)
+            self.assertIn("Sofia", notifs_admin[0][0])
+            self.assertIn("@sofi_tech", notifs_admin[0][0])
+
+            # 2. Segunda interaccion inmediata (dentro de los 30 min) -> NO repite notificacion
+            notificaciones.clear()
+            solicitud_2 = {
+                "comando": "menu",
+                "tipo": "menu",
+                "chat_id": 4444,
+                "user_id": 4444,
+                "nombre": "Sofia",
+                "username": "sofi_tech",
+            }
+            radar.atender_solicitudes([solicitud_2])
+            notifs_admin_2 = [n for n in notificaciones if n[1].get("chat_id") == "5583002220" and "inició una sesión" in n[0]]
+            self.assertEqual(len(notifs_admin_2), 0)
+
+            # 3. El Admin usando el bot -> NUNCA se notifica a si mismo
+            notificaciones.clear()
+            solicitud_admin = {
+                "comando": "menu",
+                "tipo": "menu",
+                "chat_id": 5583002220,
+                "user_id": 5583002220,
+                "nombre": "Emanuel",
+            }
+            radar.atender_solicitudes([solicitud_admin])
+            notifs_admin_self = [n for n in notificaciones if "inició una sesión" in n[0]]
+            self.assertEqual(len(notifs_admin_self), 0)
+
+            # 4. Pasan mas de 30 min de inactividad -> Notifica de nuevo
+            whitelist._ultimas_sesiones["4444"] -= 1805 # 30 min y 5 seg atras
+            notificaciones.clear()
+            radar.atender_solicitudes([solicitud_1])
+            notifs_admin_3 = [n for n in notificaciones if n[1].get("chat_id") == "5583002220" and "inició una sesión" in n[0]]
+            self.assertEqual(len(notifs_admin_3), 1)
+        finally:
+            config.TELEGRAM_ADMIN_ID = orig_admin
+            telegram.send = orig_send
+            whitelist.limpiar_sesiones()
+
+    def test_es_miembro_del_canal_estados(self):
+        from core import http, telegram
+        orig_post = http.post_json
+        try:
+            # Miembro activo
+            http.post_json = lambda url, payload, **k: {"ok": True, "result": {"status": "member"}}
+            self.assertTrue(telegram.es_miembro_del_canal(12345, channel_id="-100"))
+
+            # Administrador o creador
+            http.post_json = lambda url, payload, **k: {"ok": True, "result": {"status": "administrator"}}
+            self.assertTrue(telegram.es_miembro_del_canal(12345, channel_id="-100"))
+
+            # Salio del canal
+            http.post_json = lambda url, payload, **k: {"ok": True, "result": {"status": "left"}}
+            self.assertFalse(telegram.es_miembro_del_canal(12345, channel_id="-100"))
+
+            # Baneado
+            http.post_json = lambda url, payload, **k: {"ok": True, "result": {"status": "kicked"}}
+            self.assertFalse(telegram.es_miembro_del_canal(12345, channel_id="-100"))
+
+            # Error de API o no encontrado
+            http.post_json = lambda url, payload, **k: {"ok": False, "description": "USER_NOT_PARTICIPANT"}
+            self.assertFalse(telegram.es_miembro_del_canal(12345, channel_id="-100"))
+        finally:
+            http.post_json = orig_post
+
+    def test_teclado_unirse_canal_estructura(self):
+        from core import telegram
+        teclado = telegram.teclado_unirse_canal("https://t.me/test_canal")
+        filas = teclado["inline_keyboard"]
+        self.assertEqual(len(filas), 2)
+        self.assertEqual(filas[0][0]["url"], "https://t.me/test_canal")
+        self.assertEqual(filas[1][0]["callback_data"], "verificar_canal")
+
+    def test_callback_verificar_canal_flujo(self):
+        import server
+        from core import telegram, whitelist
+        import tempfile
+        from pathlib import Path as _Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_wl = whitelist.ARCHIVO_LOCAL
+            whitelist.ARCHIVO_LOCAL = _Path(tmp) / "whitelist_test.json"
+            orig_admin = config.TELEGRAM_ADMIN_ID
+            config.TELEGRAM_ADMIN_ID = "5583002220"
+
+            respuestas_cb = []
+            mensajes_enviados = []
+            mensajes_editados = []
+
+            orig_resp = telegram.responder_callback
+            orig_send = telegram.send
+            orig_edit = telegram.editar_mensaje
+            orig_miembro = telegram.es_miembro_del_canal
+
+            telegram.responder_callback = lambda qid, txt="", alerta=False, **k: respuestas_cb.append((qid, txt, alerta)) or True
+            telegram.send = lambda txt, **k: mensajes_enviados.append((txt, k)) or True
+            telegram.editar_mensaje = lambda chat_id, message_id, texto, **k: mensajes_editados.append((chat_id, message_id, texto)) or True
+
+            try:
+                cb_user = {
+                    "id": "cb_verif",
+                    "from": {"id": 3333, "first_name": "Andres", "username": "andres33"},
+                    "data": "verificar_canal",
+                    "message": {"chat": {"id": 3333}, "message_id": 55},
+                }
+
+                # 1. Aun no se ha unido al canal -> Alerta emergente
+                telegram.es_miembro_del_canal = lambda uid, **k: False
+                server.atender_callback_query(cb_user)
+                self.assertTrue(any(r[2] is True for r in respuestas_cb))
+                self.assertEqual(len(mensajes_enviados), 0)
+
+                # 2. Ya se unio pero no esta en whitelist -> Alerta confirmada, notifica al admin para aprobar
+                respuestas_cb.clear()
+                telegram.es_miembro_del_canal = lambda uid, **k: True
+                server.atender_callback_query(cb_user)
+                self.assertTrue(any("Confirmado" in r[1] for r in respuestas_cb))
+                self.assertTrue(any(m[1].get("chat_id") == "5583002220" and "Unido a Ofertas" in m[0] for m in mensajes_enviados))
+
+                # 3. Ya se unio Y esta en whitelist -> Despliega menu directamente
+                whitelist.aprobar("3333")
+                mensajes_enviados.clear()
+                server.atender_callback_query(cb_user)
+                self.assertTrue(any(m[1].get("chat_id") == 3333 and "Menú Principal" in m[0] for m in mensajes_enviados))
+            finally:
+                whitelist.ARCHIVO_LOCAL = orig_wl
+                config.TELEGRAM_ADMIN_ID = orig_admin
+                telegram.responder_callback = orig_resp
+                telegram.send = orig_send
+                telegram.editar_mensaje = orig_edit
+                telegram.es_miembro_del_canal = orig_miembro
 
 
 if __name__ == "__main__":

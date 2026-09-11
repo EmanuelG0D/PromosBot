@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 promos_co.json
 comandos_estado.json
+whitelist.json

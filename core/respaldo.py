@@ -19,7 +19,7 @@ from core import http
 
 TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
 REPO = os.environ.get("GITHUB_REPO", "").strip()            # formato: usuario/repositorio
-RAMA = os.environ.get("GITHUB_BRANCH", "main").strip()
+RAMA = os.environ.get("GITHUB_BRANCH", "estado").strip()
 RUTA = os.environ.get("GITHUB_STATE_PATH", "estado/radar.db").strip()
 
 # La API de contenidos devuelve el archivo en base64 solo hasta 1 MB.

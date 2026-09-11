@@ -29,8 +29,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+import config
 import radar
-from core import comandos, respaldo, telegram
+from core import comandos, respaldo, telegram, whitelist
 
 PUERTO = int(os.environ.get("PORT", "10000"))
 
@@ -153,35 +154,159 @@ def _ya_atendido(update_id) -> bool:
 def _notificar_inicio_busqueda(solicitudes: list[dict]) -> None:
     """Envia confirmacion inmediata a Telegram antes de entrar al candado de busqueda."""
     for req in solicitudes:
+        chat_id = req.get("chat_id")
         tipo = req.get("tipo")
         if tipo == "categoria":
             cat = req.get("categoria_nombre", "Categoría")
-            tienda = comandos.tienda_activa()
+            tienda = comandos.tienda_activa(chat_id=chat_id)
             if tienda not in comandos.CATALOGO and tienda not in ("objetivos", "estado"):
                 tienda = "colombia"
             _, _, tit = comandos.CATALOGO.get(tienda, ("co", None, "Colombia"))
-            telegram.accion_escribiendo()
-            telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(cat)}</b> en <b>{telegram.esc(tit)}</b>...</i>")
+            telegram.accion_escribiendo(chat_id=chat_id)
+            telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(cat)}</b> en <b>{telegram.esc(tit)}</b>...</i>", chat_id=chat_id)
             req["notificado"] = True
         elif tipo == "todo_tienda":
-            tienda = comandos.tienda_activa()
+            tienda = comandos.tienda_activa(chat_id=chat_id)
             if tienda not in comandos.CATALOGO:
                 tienda = "colombia"
             _, _, tit = comandos.CATALOGO[tienda]
-            telegram.accion_escribiendo()
-            telegram.send(f"🔍 <i>Revisando todo el catálogo de <b>{telegram.esc(tit)}</b>...</i>")
+            telegram.accion_escribiendo(chat_id=chat_id)
+            telegram.send(f"🔍 <i>Revisando todo el catálogo de <b>{telegram.esc(tit)}</b>...</i>", chat_id=chat_id)
             req["notificado"] = True
         else:
             cmd = req.get("comando", "")
             if cmd in comandos.CATALOGO:
                 _, _, tit = comandos.CATALOGO[cmd]
-                telegram.accion_escribiendo()
-                telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(tit)}</b>...</i>")
+                telegram.accion_escribiendo(chat_id=chat_id)
+                telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(tit)}</b>...</i>", chat_id=chat_id)
                 req["notificado"] = True
 
 
+def atender_callback_query(callback_query: dict) -> None:
+    """Procesa botones interactivos (como aprobacion o rechazo de usuarios)."""
+    cq_id = callback_query.get("id")
+    remitente = callback_query.get("from") or {}
+    remitente_id = remitente.get("id")
+    data = (callback_query.get("data") or "").strip()
+    msg = callback_query.get("message") or {}
+    chat_id = (msg.get("chat") or {}).get("id")
+    msg_id = msg.get("message_id")
+
+    # 1. Verificacion de suscripcion al canal (la presiona el propio usuario)
+    if data == "verificar_canal":
+        nombre = remitente.get("first_name") or "Usuario"
+        username = remitente.get("username")
+        user_handle = f" (@{username})" if username else ""
+
+        if not telegram.es_miembro_del_canal(remitente_id):
+            telegram.responder_callback(
+                cq_id,
+                "Aún no apareces en el canal. Por favor únete usando el botón de arriba y vuelve a presionar 'Ya me uní'.",
+                alerta=True,
+            )
+            return
+
+        telegram.responder_callback(cq_id, "¡Confirmado que estás en el canal!")
+
+        # Si ya esta en whitelist: dar la bienvenida con el menu directamente
+        if whitelist.es_permitido(remitente_id):
+            if chat_id and msg_id:
+                telegram.editar_mensaje(
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    texto="✅ <b>¡Membresía verificada!</b> Ya puedes explorar ofertas:",
+                )
+            telegram.send(
+                "🤖 <b>PromosBot — Menú Principal</b>\n\n"
+                "Elige una tienda en los botones abajo para explorar ofertas:",
+                reply_markup=telegram.teclado_tiendas(),
+                chat_id=remitente_id,
+            )
+            return
+
+        # Si aun no esta en whitelist: registrar la solicitud y avisar al admin
+        es_nueva = whitelist.registrar_solicitud(remitente_id, nombre=nombre, username=username)
+        if chat_id and msg_id:
+            telegram.editar_mensaje(
+                chat_id=chat_id,
+                message_id=msg_id,
+                texto="✅ <b>¡Confirmado que estás en el canal!</b>\n\n"
+                      "Tu solicitud de acceso fue enviada al administrador. Te notificaremos apenas sea aprobada.",
+            )
+        if es_nueva:
+            if config.TELEGRAM_ADMIN_ID:
+                telegram.send(
+                    f"🔔 <b>Nueva solicitud de acceso a PromosBot</b>\n\n"
+                    f"👤 <b>Usuario:</b> {telegram.esc(nombre)}{telegram.esc(user_handle)}\n"
+                    f"🆔 <b>ID:</b> <code>{remitente_id}</code>\n"
+                    f"📢 <b>Canal:</b> ✅ Unido a Ofertas\n\n"
+                    f"¿Deseas autorizarlo?",
+                    reply_markup=telegram.teclado_aprobacion(remitente_id),
+                    chat_id=config.TELEGRAM_ADMIN_ID,
+                )
+        return
+
+    # 2. Acciones administrativas (solo el Admin configurado puede ejecutarlas)
+    if not whitelist.es_admin(remitente_id):
+        log(f"callback_query no autorizado de {remitente_id}")
+        telegram.responder_callback(cq_id, "No tienes permisos de administrador.", alerta=True)
+        return
+
+    if data.startswith("aprobar:"):
+        target_id = data.split(":", 1)[1].strip()
+        info = whitelist.aprobar(target_id)
+        nombre = info.get("nombre") or "Usuario"
+        username = info.get("username")
+        handle = f" (@{username})" if username else ""
+        log(f"usuario {target_id} ({nombre}) aprobado por admin")
+
+        telegram.responder_callback(cq_id, f"Aprobado: {nombre}")
+        if chat_id and msg_id:
+            telegram.editar_mensaje(
+                chat_id=chat_id,
+                message_id=msg_id,
+                texto=f"✅ <b>Acceso Autorizado</b>\n\n"
+                      f"El usuario <b>{telegram.esc(nombre)}</b>{telegram.esc(handle)} con ID <code>{target_id}</code> ha sido <b>aprobado</b>.",
+            )
+        # Notificar al usuario con el teclado interactivo ya desplegado
+        telegram.send(
+            f"🎉 <b>¡Tu acceso a PromosBot ha sido aprobado!</b>\n\n"
+            f"Ya puedes explorar ofertas tocando las tiendas en el menú interactivo abajo:",
+            reply_markup=telegram.teclado_tiendas(),
+            chat_id=target_id,
+        )
+
+    elif data.startswith("rechazar:"):
+        target_id = data.split(":", 1)[1].strip()
+        info = whitelist.rechazar(target_id)
+        nombre = info.get("nombre") or "Usuario"
+        username = info.get("username")
+        handle = f" (@{username})" if username else ""
+        log(f"usuario {target_id} ({nombre}) rechazado por admin")
+
+        telegram.responder_callback(cq_id, f"Rechazado: {nombre}")
+        if chat_id and msg_id:
+            telegram.editar_mensaje(
+                chat_id=chat_id,
+                message_id=msg_id,
+                texto=f"❌ <b>Acceso Denegado</b>\n\n"
+                      f"La solicitud de <b>{telegram.esc(nombre)}</b>{telegram.esc(handle)} con ID <code>{target_id}</code> ha sido <b>rechazada</b>.",
+            )
+        telegram.send(
+            "Lo sentimos, tu solicitud de acceso no fue aprobada por el administrador.",
+            chat_id=target_id,
+        )
+    else:
+        telegram.responder_callback(cq_id, "Opción no reconocida.")
+
+
 def atender_comando(actualizacion: dict) -> None:
-    """Responde un comando llegado por webhook. Corre en su propio hilo."""
+    """Responde un comando o evento llegado por webhook. Corre en su propio hilo."""
+    if "callback_query" in actualizacion:
+        atender_callback_query(actualizacion["callback_query"])
+        _estado["comandos_atendidos"] += 1
+        return
+
     solicitud = comandos.leer_comando(actualizacion.get("message") or {})
     if not solicitud:
         return
@@ -191,7 +316,7 @@ def atender_comando(actualizacion: dict) -> None:
 
     tipo = solicitud.get("tipo")
     cmd = solicitud.get("comando")
-    if tipo in ("menu", "elegir_tienda") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
+    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
         radar.atender_solicitudes([solicitud])
         _estado["comandos_atendidos"] += 1
         return
@@ -244,14 +369,21 @@ def sondeo_local() -> None:
         try:
             solicitudes = comandos.pendientes(timeout=2)
             if solicitudes:
-                # Comandos de interfaz pura (menu, elegir tienda, ayuda, objetivos):
+                # Eventos de botones interactivos
+                callbacks = [s for s in solicitudes if s.get("tipo") == "callback_query"]
+                for cb in callbacks:
+                    atender_callback_query(cb["callback_query"])
+                    _estado["comandos_atendidos"] += 1
+
+                resto = [s for s in solicitudes if s.get("tipo") != "callback_query"]
+                # Comandos de interfaz pura (menu, elegir tienda, ayuda, objetivos, solicitud_acceso):
                 # se responden de inmediato en el mismo hilo de sondeo sin bloquear la cola.
                 inmediatas = [
-                    s for s in solicitudes
-                    if s.get("tipo") in ("menu", "elegir_tienda")
+                    s for s in resto
+                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal")
                     or s.get("comando") in ("menu", "start", "ayuda", "help", "objetivos", "estado")
                 ]
-                busquedas = [s for s in solicitudes if s not in inmediatas]
+                busquedas = [s for s in resto if s not in inmediatas]
 
                 if inmediatas:
                     radar.atender_solicitudes(inmediatas)

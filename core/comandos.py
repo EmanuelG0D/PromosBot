@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 
 import config
-from core import http
+from core import http, telegram, whitelist
 
 ESTADO = Path(config.BASE_DIR / "comandos_estado.json")
 
@@ -163,29 +163,46 @@ def _guardar_estado(offset: int) -> None:
     _guardar(datos)
 
 
-def tienda_activa() -> str:
+def tienda_activa(chat_id: int | str = "") -> str:
     """Tienda seleccionada actualmente en el menu de navegacion."""
-    return str(_cargar().get("tienda_activa") or "colombia")
+    datos = _cargar()
+    if chat_id:
+        tiendas = datos.get("tiendas_activas", {})
+        if str(chat_id) in tiendas:
+            return str(tiendas[str(chat_id)])
+    return str(datos.get("tienda_activa") or "colombia")
 
 
-def fijar_tienda_activa(tienda: str) -> None:
+def fijar_tienda_activa(tienda: str, chat_id: int | str = "") -> None:
     """Guarda la tienda activa para que los botones de categoria sepan a quien consultar."""
     datos = _cargar()
     datos["tienda_activa"] = tienda
+    if chat_id:
+        tiendas = datos.setdefault("tiendas_activas", {})
+        tiendas[str(chat_id)] = tienda
     _guardar(datos)
 
 
-def ya_mostradas() -> set:
+def ya_mostradas(chat_id: int | str = "") -> set:
     """Ofertas que ya se enviaron respondiendo comandos."""
-    return set(_cargar().get("mostradas") or [])
+    datos = _cargar()
+    if chat_id:
+        mostradas_chat = datos.get("mostradas_por_chat", {})
+        if str(chat_id) in mostradas_chat:
+            return set(mostradas_chat[str(chat_id)])
+    return set(datos.get("mostradas") or [])
 
 
-def marcar_mostradas(claves) -> None:
+def marcar_mostradas(claves, chat_id: int | str = "") -> None:
     """Recuerda lo enviado para que la proxima vez traiga cosas distintas."""
     datos = _cargar()
     nuevas = list(claves)
     previas = [c for c in (datos.get("mostradas") or []) if c not in set(nuevas)]
     datos["mostradas"] = (previas + nuevas)[-MEMORIA_MOSTRADAS:]
+    if chat_id:
+        mostradas_chat = datos.setdefault("mostradas_por_chat", {})
+        previas_chat = [c for c in (mostradas_chat.get(str(chat_id)) or []) if c not in set(nuevas)]
+        mostradas_chat[str(chat_id)] = (previas_chat + nuevas)[-MEMORIA_MOSTRADAS:]
     _guardar(datos)
 
 
@@ -195,17 +212,54 @@ def leer_comando(mensaje: dict) -> dict | None:
     Soporta comandos tradicionales con '/' y toques en los botones del menu interactivo.
     """
     texto = ((mensaje or {}).get("text") or "").strip()
-    chat = ((mensaje or {}).get("chat") or {}).get("id")
+    chat_obj = (mensaje or {}).get("chat") or {}
+    chat = chat_obj.get("id")
+    chat_type = chat_obj.get("type", "")
     if not texto or chat is None:
         return None
 
-    # Solo se obedece al chat configurado. Sin esto, cualquiera que encuentre
-    # el bot podria ponerlo a trabajar para el, y las respuestas llegarian
-    # igual al grupo del dueno.
-    if str(chat) != str(config.TELEGRAM_CHAT_ID):
+    user = (mensaje or {}).get("from") or {}
+    user_id = user.get("id")
+    nombre = user.get("first_name") or "Usuario"
+    username = user.get("username")
+
+    es_grupo_configurado = str(chat) == str(config.TELEGRAM_CHAT_ID)
+    es_privado = chat_type == "private"
+
+    # Si no es el grupo configurado ni un chat privado, se ignora
+    if not (es_grupo_configurado or es_privado):
         print(f"  [comandos] ignorado: viene del chat {chat}")
         return None
 
+    # En chat privado: verificar suscripcion al canal y lista blanca
+    if es_privado:
+        # El Administrador siempre tiene acceso libre
+        if not whitelist.es_admin(user_id):
+            # 1. Filtro obligatorio: debe estar en el canal oficial
+            if not telegram.es_miembro_del_canal(user_id):
+                return {
+                    "comando": "unirse_canal",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "unirse_canal",
+                }
+
+            # 2. Filtro de aprobacion: debe estar en la whitelist
+            if not whitelist.es_permitido(user_id):
+                es_nueva = whitelist.registrar_solicitud(user_id, nombre=nombre, username=username)
+                return {
+                    "comando": "solicitud_acceso",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "solicitud_acceso",
+                    "es_nueva": es_nueva,
+                }
+
+    res = None
     # 1. Comandos tradicionales con "/"
     if texto.startswith("/"):
         partes = texto[1:].split()
@@ -218,59 +272,63 @@ def leer_comando(mensaje: dict) -> dict | None:
         cantidad = None
         if len(partes) > 1 and partes[1].isdigit():
             cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
-        return {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
+        res = {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
 
     # 2. Botones del teclado interactivo (sin "/")
-    texto_norm = texto.lower()
+    else:
+        texto_norm = texto.lower()
 
-    # Volver a la lista de tiendas
-    if "volver a tiendas" in texto_norm or "volver" in texto_norm:
-        return {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
+        # Volver a la lista de tiendas
+        if "volver a tiendas" in texto_norm or "volver" in texto_norm:
+            res = {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
 
-    # Boton de tienda
-    for btn_key, (tienda_key, tienda_nombre) in BOTONES_TIENDA.items():
-        if texto_norm == btn_key:
-            if tienda_key == "objetivos":
-                return {"comando": "objetivos", "chat_id": chat, "cantidad": None}
-            return {
-                "comando": "elegir_tienda",
-                "tienda": tienda_key,
-                "tienda_nombre": tienda_nombre,
+        # Boton de tienda
+        if not res:
+            for btn_key, (tienda_key, tienda_nombre) in BOTONES_TIENDA.items():
+                if texto_norm == btn_key:
+                    if tienda_key == "objetivos":
+                        res = {"comando": "objetivos", "chat_id": chat, "cantidad": None}
+                    else:
+                        res = {
+                            "comando": "elegir_tienda",
+                            "tienda": tienda_key,
+                            "tienda_nombre": tienda_nombre,
+                            "chat_id": chat,
+                            "cantidad": None,
+                            "tipo": "elegir_tienda",
+                        }
+                    break
+
+        # Boton '🌟 TODO'
+        if not res and "todo" in texto_norm:
+            res = {
+                "comando": "todo_tienda",
                 "chat_id": chat,
                 "cantidad": None,
-                "tipo": "elegir_tienda",
+                "tipo": "todo_tienda",
             }
 
-    # Boton '🌟 TODO'
-    if "todo" in texto_norm:
-        return {
-            "comando": "todo_tienda",
-            "chat_id": chat,
-            "cantidad": None,
-            "tipo": "todo_tienda",
-        }
+        # Boton de categoria
+        if not res:
+            for cat_label, queries in CATEGORIAS_BUSQUEDA.items():
+                sin_emoji = cat_label.split(" ", 1)[-1].lower()
+                if texto_norm == cat_label.lower() or texto_norm == sin_emoji:
+                    res = {
+                        "comando": "categoria",
+                        "categoria_nombre": cat_label,
+                        "consultas": queries,
+                        "chat_id": chat,
+                        "cantidad": None,
+                        "tipo": "categoria",
+                    }
+                    break
 
-    # Boton de categoria
-    for cat_label, queries in CATEGORIAS_BUSQUEDA.items():
-        if texto_norm == cat_label.lower():
-            return {
-                "comando": "categoria",
-                "categoria_nombre": cat_label,
-                "consultas": queries,
-                "chat_id": chat,
-                "cantidad": None,
-                "tipo": "categoria",
-            }
-        sin_emoji = cat_label.split(" ", 1)[-1].lower()
-        if texto_norm == sin_emoji:
-            return {
-                "comando": "categoria",
-                "categoria_nombre": cat_label,
-                "consultas": queries,
-                "chat_id": chat,
-                "cantidad": None,
-                "tipo": "categoria",
-            }
+    if res:
+        if user_id is not None:
+            res["user_id"] = user_id
+            res["nombre"] = nombre
+            res["username"] = username
+        return res
 
     return None
 
@@ -286,7 +344,7 @@ def pendientes(timeout: int = 0) -> list[dict]:
 
     offset = _leer_estado()
     url = (f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/getUpdates"
-           f"?timeout={timeout}&allowed_updates=%5B%22message%22%5D")
+           f"?timeout={timeout}&allowed_updates=%5B%22message%22%2C%22callback_query%22%5D")
     if offset:
         url += f"&offset={offset}"
 
@@ -303,6 +361,13 @@ def pendientes(timeout: int = 0) -> list[dict]:
     ultimo = offset
     for update in datos.get("result", []):
         ultimo = max(ultimo, int(update.get("update_id", 0)) + 1)
+        if "callback_query" in update:
+            encontrados.append({
+                "tipo": "callback_query",
+                "callback_query": update["callback_query"],
+                "update_id": update.get("update_id"),
+            })
+            continue
         solicitud = leer_comando(update.get("message") or {})
         if solicitud:
             encontrados.append(solicitud)

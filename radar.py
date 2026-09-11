@@ -17,7 +17,7 @@ import time
 import unicodedata
 
 import config
-from core import filtros, fx, telegram
+from core import filtros, fx, telegram, whitelist
 from core import comandos as mod_comandos
 from core import objetivos as mod_objetivos
 from core import veracidad as mod_veracidad
@@ -471,13 +471,73 @@ def atender_solicitudes(solicitudes: list[dict],
     for solicitud in solicitudes:
         comando = solicitud["comando"]
         tipo = solicitud.get("tipo", "slash")
+        chat_id = solicitud.get("chat_id")
         # El numero que pediste manda; si no pediste, el valor por defecto.
         cuantas = (solicitud.get("cantidad") or por_comando
                    or config.COMANDO_RESULTADOS)
-        print(f"-> comando /{comando} (tipo={tipo}, {cuantas} resultados)")
+        print(f"-> comando /{comando} (tipo={tipo}, chat={chat_id}, {cuantas} resultados)")
+
+        user_id = solicitud.get("user_id")
+        if user_id and tipo not in ("solicitud_acceso", "unirse_canal"):
+            if whitelist.registrar_inicio_sesion(user_id, ventana_segundos=1800):
+                nombre_u = solicitud.get("nombre") or "Usuario"
+                user_u = solicitud.get("username")
+                handle_u = f" (@{user_u})" if user_u else ""
+                if config.TELEGRAM_ADMIN_ID:
+                    telegram.send(
+                        f"👤 <b>{telegram.esc(nombre_u)}</b>{telegram.esc(handle_u)} inició una sesión en PromosBot.",
+                        chat_id=config.TELEGRAM_ADMIN_ID,
+                    )
+
+        if tipo == "unirse_canal":
+            nombre = solicitud.get("nombre", "Usuario")
+            telegram.send(
+                f"👋 <b>¡Hola, {telegram.esc(nombre)}!</b>\n\n"
+                f"Para poder usar <b>PromosBot</b> y consultar todas las ofertas, "
+                f"primero debes estar unido a nuestro canal oficial:\n\n"
+                f"📢 <b>Ofertas</b>\n\n"
+                f"<i>Únete con el botón de abajo y luego presiona 'Ya me uní':</i>",
+                reply_markup=telegram.teclado_unirse_canal(),
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "solicitud_acceso":
+            user_id = solicitud.get("user_id")
+            nombre = solicitud.get("nombre", "Usuario")
+            username = solicitud.get("username", "")
+            es_nueva = solicitud.get("es_nueva", False)
+            user_handle = f"@{username}" if username else "(sin username)"
+
+            if es_nueva:
+                telegram.send(
+                    f"👋 <b>¡Hola, {telegram.esc(nombre)}!</b>\n\n"
+                    f"✅ Confirmamos que estás unido a nuestro canal oficial.\n"
+                    f"Tu solicitud de acceso a PromosBot fue enviada al administrador. "
+                    f"Te notificaremos automáticamente apenas sea aprobada.",
+                    chat_id=chat_id,
+                )
+                if config.TELEGRAM_ADMIN_ID:
+                    telegram.send(
+                        f"🔔 <b>Nueva solicitud de acceso a PromosBot</b>\n\n"
+                        f"👤 <b>Usuario:</b> {telegram.esc(nombre)} ({telegram.esc(user_handle)})\n"
+                        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+                        f"📢 <b>Canal:</b> ✅ Unido a Ofertas\n\n"
+                        f"¿Deseas autorizarlo?",
+                        reply_markup=telegram.teclado_aprobacion(user_id),
+                        chat_id=config.TELEGRAM_ADMIN_ID,
+                    )
+            else:
+                telegram.send(
+                    "⏳ Tu solicitud aún está pendiente de aprobación por el administrador.",
+                    chat_id=chat_id,
+                )
+            atendidos += 1
+            continue
 
         if comando in ("ayuda", "help"):
-            telegram.send(mod_comandos.AYUDA, reply_markup=telegram.teclado_tiendas())
+            telegram.send(mod_comandos.AYUDA, reply_markup=telegram.teclado_tiendas(), chat_id=chat_id)
             atendidos += 1
             continue
 
@@ -487,6 +547,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 "Toca una tienda en el menú inferior para ver sus departamentos y ofertas:\n"
                 "<i>O escribe directamente un comando como <code>/alkosto</code>, <code>/exito</code>, etc.</i>",
                 reply_markup=telegram.teclado_tiendas(),
+                chat_id=chat_id,
             )
             atendidos += 1
             continue
@@ -505,7 +566,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 "",
                 "<i>En 'Todo Colombia' se monitorean en las 6 tiendas: Éxito, Carulla, Alkosto, K-tronix, Falabella y Olímpica.</i>",
             ]
-            telegram.send(telegram.NL.join(lineas), reply_markup=telegram.teclado_tiendas())
+            telegram.send(telegram.NL.join(lineas), reply_markup=telegram.teclado_tiendas(), chat_id=chat_id)
             atendidos += 1
             continue
 
@@ -519,6 +580,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 f"Alertas enviadas hoy: <b>{enviadas}</b> de {config.MAX_ALERTS_PER_DAY}"
                 f"{telegram.NL}Ofertas en memoria: <b>{archivadas}</b>",
                 reply_markup=telegram.teclado_tiendas(),
+                chat_id=chat_id,
             )
             atendidos += 1
             continue
@@ -526,11 +588,12 @@ def atender_solicitudes(solicitudes: list[dict],
         if tipo == "elegir_tienda":
             tienda = solicitud.get("tienda", "colombia")
             tienda_nombre = solicitud.get("tienda_nombre", tienda.capitalize())
-            mod_comandos.fijar_tienda_activa(tienda)
+            mod_comandos.fijar_tienda_activa(tienda, chat_id=chat_id)
             telegram.send(
                 f"🏬 <b>{telegram.esc(tienda_nombre)} seleccionado</b>\n\n"
                 f"Elige una categoría abajo para buscar rebajas específicas o presiona <b>🌟 TODO</b> para ver las mejores ofertas generales de la tienda:",
                 reply_markup=telegram.teclado_categorias(tienda_nombre),
+                chat_id=chat_id,
             )
             atendidos += 1
             continue
@@ -539,7 +602,7 @@ def atender_solicitudes(solicitudes: list[dict],
         if tipo == "categoria":
             token_actual = _token_busqueda_activa
             categoria_nombre = solicitud.get("categoria_nombre", "Categoría")
-            tienda = mod_comandos.tienda_activa()
+            tienda = mod_comandos.tienda_activa(chat_id=chat_id)
             if tienda not in mod_comandos.CATALOGO and tienda not in ("objetivos", "estado"):
                 tienda = "colombia"
 
@@ -548,15 +611,15 @@ def atender_solicitudes(solicitudes: list[dict],
 
             # Notificar de inmediato al usuario que se inicio la revision si no se envio antes
             if not solicitud.get("notificado"):
-                telegram.accion_escribiendo()
-                telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(categoria_nombre)}</b> en <b>{telegram.esc(titulo_tienda)}</b>...</i>")
+                telegram.accion_escribiendo(chat_id=chat_id)
+                telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(categoria_nombre)}</b> en <b>{telegram.esc(titulo_tienda)}</b>...</i>", chat_id=chat_id)
 
             if watchlist is None:
                 watchlist = config.load_watchlist()
             if (tienda in ("exterior", "todo") or fuente in ("slickdeals", "*")) and trm is None:
                 trm, _origen = fx.get_trm(None)
             if vistas is None:
-                vistas = mod_comandos.ya_mostradas()
+                vistas = mod_comandos.ya_mostradas(chat_id=chat_id)
                 try:
                     with Store() as store:
                         vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
@@ -590,6 +653,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.send(
                     f"Ahora mismo no encontré rebajas destacadas en {telegram.esc(categoria_nombre)} para <b>{telegram.esc(titulo_tienda)}</b>.",
                     reply_markup=telegram.teclado_categorias(titulo_tienda),
+                    chat_id=chat_id,
                 )
                 atendidos += 1
                 continue
@@ -598,6 +662,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 f"🏬 <b>{telegram.esc(titulo_tienda)}</b> \u00b7 {telegram.esc(categoria_nombre)}\n"
                 f"<i>Mejores rebajas encontradas ahora mismo:</i>",
                 reply_markup=telegram.teclado_categorias(titulo_tienda),
+                chat_id=chat_id,
             )
             enviadas_ahora = []
             for deal, verdict in seleccion:
@@ -609,40 +674,41 @@ def atender_solicitudes(solicitudes: list[dict],
                     if trm is None:
                         trm, _origen = fx.get_trm(None)
                     landed = calcular(deal.price, trm, deal.weight_lb)
-                telegram.enviar_oferta(deal, verdict, landed)
+                telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
                 enviadas_ahora.append(deal.key)
                 time.sleep(1.2)
             if token_actual != _token_busqueda_activa:
                 atendidos += 1
                 continue
-            mod_comandos.marcar_mostradas(enviadas_ahora)
+            mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
             vistas.update(enviadas_ahora)
             telegram.send(
                 f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas de {telegram.esc(categoria_nombre)} en {telegram.esc(titulo_tienda)}.\n"
                 f"<i>Puedes elegir otra opción en los botones:</i>",
                 reply_markup=telegram.teclado_categorias(titulo_tienda),
+                chat_id=chat_id,
             )
             atendidos += 1
             continue
 
         if tipo == "todo_tienda":
             token_actual = _token_busqueda_activa
-            tienda = mod_comandos.tienda_activa()
+            tienda = mod_comandos.tienda_activa(chat_id=chat_id)
             if tienda not in mod_comandos.CATALOGO:
                 tienda = "colombia"
             fuente, tiendas, titulo = mod_comandos.CATALOGO[tienda]
 
             # Notificar de inmediato al usuario si no se envio antes
             if not solicitud.get("notificado"):
-                telegram.accion_escribiendo()
-                telegram.send(f"🔍 <i>Revisando las mejores ofertas en <b>{telegram.esc(titulo)}</b>...</i>")
+                telegram.accion_escribiendo(chat_id=chat_id)
+                telegram.send(f"🔍 <i>Revisando las mejores ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
 
             if watchlist is None:
                 watchlist = config.load_watchlist()
             if (tienda in ("exterior", "todo") or fuente in ("slickdeals", "*")) and trm is None:
                 trm, _origen = fx.get_trm(None)
             if vistas is None:
-                vistas = mod_comandos.ya_mostradas()
+                vistas = mod_comandos.ya_mostradas(chat_id=chat_id)
                 try:
                     with Store() as store:
                         vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
@@ -667,12 +733,14 @@ def atender_solicitudes(solicitudes: list[dict],
 
             if not seleccion:
                 telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
-                              reply_markup=telegram.teclado_categorias(titulo))
+                              reply_markup=telegram.teclado_categorias(titulo),
+                              chat_id=chat_id)
                 atendidos += 1
                 continue
 
             telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — lo mejor de ahora mismo",
-                          reply_markup=telegram.teclado_categorias(titulo))
+                          reply_markup=telegram.teclado_categorias(titulo),
+                          chat_id=chat_id)
             enviadas_ahora = []
             for deal, verdict in seleccion:
                 if token_actual != _token_busqueda_activa:
@@ -683,42 +751,44 @@ def atender_solicitudes(solicitudes: list[dict],
                     if trm is None:
                         trm, _origen = fx.get_trm(None)
                     landed = calcular(deal.price, trm, deal.weight_lb)
-                telegram.enviar_oferta(deal, verdict, landed)
+                telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
                 enviadas_ahora.append(deal.key)
                 time.sleep(1.2)
             if token_actual != _token_busqueda_activa:
                 atendidos += 1
                 continue
-            mod_comandos.marcar_mostradas(enviadas_ahora)
+            mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
             vistas.update(enviadas_ahora)
             telegram.send(
                 f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas de {telegram.esc(titulo)}.\n"
                 f"<i>Puedes seguir explorando en los botones:</i>",
                 reply_markup=telegram.teclado_categorias(titulo),
+                chat_id=chat_id,
             )
             atendidos += 1
             continue
 
         if comando not in mod_comandos.CATALOGO:
             telegram.send(f"No conozco /{telegram.esc(comando)}. Escribe /ayuda o usa el menú interactivo.",
-                          reply_markup=telegram.teclado_tiendas())
+                          reply_markup=telegram.teclado_tiendas(),
+                          chat_id=chat_id)
             continue
 
         token_actual = _token_busqueda_activa
-        mod_comandos.fijar_tienda_activa(comando)
+        mod_comandos.fijar_tienda_activa(comando, chat_id=chat_id)
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
 
         # Notificar de inmediato al usuario si no se envio antes
         if not solicitud.get("notificado"):
-            telegram.accion_escribiendo()
-            telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(titulo)}</b>...</i>")
+            telegram.accion_escribiendo(chat_id=chat_id)
+            telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
 
         if watchlist is None:
             watchlist = config.load_watchlist()
         if (comando in ("exterior", "todo") or fuente in ("slickdeals", "*")) and trm is None:
             trm, _origen = fx.get_trm(None)
         if vistas is None:
-            vistas = mod_comandos.ya_mostradas()
+            vistas = mod_comandos.ya_mostradas(chat_id=chat_id)
             try:
                 with Store() as store:
                     vistas.update(f["key"] for f in store.conn.execute("SELECT key FROM alerts"))
@@ -748,13 +818,15 @@ def atender_solicitudes(solicitudes: list[dict],
                           else telegram.teclado_categorias(titulo))
         if not seleccion:
             telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
-                          reply_markup=teclado_salida)
+                          reply_markup=teclado_salida,
+                          chat_id=chat_id)
             atendidos += 1
             continue
 
         telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — "
                       f"lo mejor de ahora mismo",
-                      reply_markup=teclado_salida)
+                      reply_markup=teclado_salida,
+                      chat_id=chat_id)
         enviadas_ahora = []
         for deal, verdict in seleccion:
             if token_actual != _token_busqueda_activa:
@@ -765,18 +837,19 @@ def atender_solicitudes(solicitudes: list[dict],
                 if trm is None:
                     trm, _origen = fx.get_trm(None)
                 landed = calcular(deal.price, trm, deal.weight_lb)
-            telegram.enviar_oferta(deal, verdict, landed)
+            telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
             enviadas_ahora.append(deal.key)
             time.sleep(1.2)
         if token_actual != _token_busqueda_activa:
             atendidos += 1
             continue
-        mod_comandos.marcar_mostradas(enviadas_ahora)
+        mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
         vistas.update(enviadas_ahora)
         telegram.send(
             f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> ofertas de {telegram.esc(titulo)}.\n"
             f"<i>Puedes seguir buscando con los botones:</i>",
             reply_markup=teclado_salida,
+            chat_id=chat_id,
         )
         atendidos += 1
 
