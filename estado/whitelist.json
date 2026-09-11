@@ -1,17 +1,13 @@
 {
   "admin": "5583002220",
   "usuarios_permitidos": [
-    "8888",
     "8548661045",
+    "8888",
     "5583002220",
     "9999",
+    "5639051317",
     "3333",
     "8540319832"
   ],
-  "solicitudes_pendientes": {
-    "5639051317": {
-      "nombre": "Greimer",
-      "username": ""
-    }
-  }
+  "solicitudes_pendientes": {}
 }
