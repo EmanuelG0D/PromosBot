@@ -223,6 +223,11 @@ def leer_comando(mensaje: dict) -> dict | None:
     nombre = user.get("first_name") or "Usuario"
     username = user.get("username")
 
+    # En grupos y canales no se atiende ningun comando ni menu:
+    # el bot solo difunde ofertas automaticas y toda interaccion es por privado.
+    if chat_type in ("group", "supergroup", "channel"):
+        return None
+
     es_grupo_configurado = str(chat) == str(config.TELEGRAM_CHAT_ID)
     es_privado = chat_type == "private"
 
@@ -396,13 +401,23 @@ MENU = [
 
 
 def registrar_menu() -> bool:
-    """Publica los comandos para que Telegram los sugiera al escribir "/"."""
+    """Publica los comandos SOLO para chats privados (nunca en grupos ni canales)."""
     if not config.TELEGRAM_BOT_TOKEN:
         return False
-    url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyCommands"
-    cuerpo = {"commands": [{"command": c, "description": d} for c, d in MENU]}
     try:
-        return bool(http.post_json(url, cuerpo, retries=1).get("ok"))
+        # 1. Asegurar que en grupos y por defecto no haya comandos ni boton de menu
+        url_del = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/deleteMyCommands"
+        http.post_json(url_del, {"scope": {"type": "default"}}, retries=1)
+        http.post_json(url_del, {"scope": {"type": "all_group_chats"}}, retries=1)
+        http.post_json(url_del, {"scope": {"type": "all_chat_administrators"}}, retries=1)
+
+        # 2. Publicar comandos UNICAMENTE en chats privados
+        url_set = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyCommands"
+        cuerpo = {
+            "commands": [{"command": c, "description": d} for c, d in MENU],
+            "scope": {"type": "all_private_chats"},
+        }
+        return bool(http.post_json(url_set, cuerpo, retries=1).get("ok"))
     except Exception as exc:
         print(f"  [comandos] no se pudo registrar el menu: {exc}")
         return False

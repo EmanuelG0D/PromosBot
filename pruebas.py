@@ -635,6 +635,14 @@ class PruebaComandos(unittest.TestCase):
         finally:
             config.TELEGRAM_CHAT_ID = original
 
+    def test_ignora_mensajes_en_grupos_y_canales(self):
+        """Los comandos y menus interactivos no deben responder en grupos ni canales."""
+        from core import comandos
+        msg_grupo = {"text": "/menu", "chat": {"id": -1004476593255, "type": "supergroup"}}
+        msg_canal = {"text": "/alkosto", "chat": {"id": -1004476593255, "type": "channel"}}
+        self.assertIsNone(comandos.leer_comando(msg_grupo))
+        self.assertIsNone(comandos.leer_comando(msg_canal))
+
     def test_el_menu_no_ofrece_lo_que_se_retiro(self):
         """objetivos y estado se quitaron del menu por pedido del usuario."""
         from core.comandos import MENU
