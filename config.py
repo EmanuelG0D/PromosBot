@@ -91,12 +91,12 @@ FLASH_MIN_DISCOUNT_PCT = _float("FLASH_MIN_DISCOUNT_PCT", 20.0)
 # Si es true, una rebaja que no mejora el minimo de la ventana no se avisa.
 SUPPRESS_FAKE_DISCOUNTS = _bool("SUPPRESS_FAKE_DISCOUNTS", True)
 
-SEED_ON_EMPTY_DB = _bool("SEED_ON_EMPTY_DB", True)
+SEED_ON_EMPTY_DB = _bool("SEED_ON_EMPTY_DB", False)
 SEED_MAX_ALERTS = _int("SEED_MAX_ALERTS", 5)
 GLITCH_DISCOUNT_PCT = _float("GLITCH_DISCOUNT_PCT", 75.0)
-# Con rondas cada 15 minutos, 8 por ronda reparten el cupo diario a lo largo
-# del dia en vez de vaciarlo de golpe en la primera media hora.
-MAX_ALERTS_PER_RUN = _int("MAX_ALERTS_PER_RUN", 8)
+# Dosificacion elastica: maximo 4 por ronda para repartir el cupo diario a lo largo
+# del dia (manana, tarde, noche) sin saturar el grupo y priorizando siempre calidad.
+MAX_ALERTS_PER_RUN = _int("MAX_ALERTS_PER_RUN", 4)
 # Freno de mano: con rondas cada 15 minutos, un dia malo podria significar
 # cientos de mensajes. Este tope es lo que separa un bot util de uno molesto.
 MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 40)
@@ -110,7 +110,7 @@ COMANDO_MAX_RESULTADOS = _int("COMANDO_MAX_RESULTADOS", 30)
 # configurar una variable mas.
 TELEGRAM_WEBHOOK_SECRET = _str("TELEGRAM_WEBHOOK_SECRET")
 REALERT_DROP_PCT = _float("REALERT_DROP_PCT", 10.0)
-REALERT_DAYS = _int("REALERT_DAYS", 14)
+REALERT_DAYS = _int("REALERT_DAYS", 3)
 
 # Hasta que porcentaje se le cree el precio de lista a un vendedor externo.
 # Medido: el mismo televisor Kalley aparece con identico precio de lista

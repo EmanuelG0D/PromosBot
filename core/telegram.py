@@ -107,6 +107,11 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
         )
         lineas.append(f"   <i>{esc(detalle)} \u00b7 TRM {money(landed.trm, 'COP')}</i>")
 
+    if "sigue vigente tras" in verdict.motivo.lower():
+        lineas.append("🔁 <b>¡Sigue disponible!</b> <i>· Oferta aún activa</i>")
+    elif "mas desde la ultima alerta" in verdict.motivo.lower():
+        lineas.append("📉 <b>¡Bajó aún más de precio!</b>")
+
     if verdict.etiquetas:
         lineas.append(f"\U0001F4CC <i>{esc(' \u00b7 '.join(verdict.etiquetas[:4]))}</i>")
 

@@ -2277,6 +2277,19 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
             # No deben repetirse
             self.assertEqual(set(primera_tanda) & set(segunda_tanda), set())
 
+    def test_recordatorio_sigue_disponible_a_los_tres_dias(self):
+        from core import telegram
+        from core.models import Deal
+        from core.scoring import Verdict
+
+        d = Deal("vtex", "Alkosto", "CO", "k_test", "Smart TV 55 Pulgadas", "http://tv", 1_500_000, "COP", 2_200_000, in_stock=True)
+        v = Verdict(alertar=True, motivo="sigue vigente tras 3 dias", confianza="alta")
+        renderizado = telegram.render(d, v)
+        self.assertIn("Sigue disponible", renderizado)
+        self.assertEqual(config.REALERT_DAYS, 3)
+        self.assertEqual(config.MAX_ALERTS_PER_RUN, 4)
+        self.assertFalse(config.SEED_ON_EMPTY_DB)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

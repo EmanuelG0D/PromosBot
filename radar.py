@@ -1314,9 +1314,6 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             # Sin resumen: todo lo que vale la pena va como tarjeta propia.
             inmediatas, para_resumen = candidatas, []
         tope = top or limite or config.MAX_ALERTS_PER_RUN
-        primera = (not top) and store.get_meta("ronda_inicial") is None
-        if primera and config.SEED_ON_EMPTY_DB:
-            tope = min(tope, config.SEED_MAX_ALERTS)
         seleccion = inmediatas[:tope]
 
         print(f"{len(candidatas)} candidatas ({colapsadas} variantes colapsadas): "
@@ -1373,14 +1370,6 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                     _marcar_avisada(store, deal, hermanas)
                 store.set_meta("ultimo_resumen", dt.datetime.now(dt.timezone.utc).isoformat())
                 en_resumen = len(lote)
-
-        if primera and config.SEED_ON_EMPTY_DB and not dry_run:
-            # Se archiva el resto del catalogo como punto de partida: a partir
-            # de aqui el bot avisa de cambios, no del inventario que ya existia.
-            for deal, _verdict in candidatas:
-                _marcar_avisada(store, deal, hermanas)
-            store.set_meta("ronda_inicial", dt.datetime.now(dt.timezone.utc).isoformat())
-            print(f"Ronda inicial: {len(candidatas)} ofertas archivadas como linea base.")
 
         if dry_run:
             print("(dry-run: no se envio nada ni se marco como avisada)")
