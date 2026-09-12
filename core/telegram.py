@@ -271,7 +271,6 @@ def teclado_tiendas() -> dict:
             [{"text": "👞 Vélez"}, {"text": "👗 Studio F"}],
             [{"text": "🦅 Americanino"}, {"text": "📦 Promocajita"}],
             [{"text": "🇨🇴 Comparar Tiendas"}, {"text": "🇺🇸 Exterior (EE. UU.)"}],
-            [{"text": "🎯 Mis Objetivos"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,

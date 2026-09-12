@@ -747,7 +747,8 @@ class PruebaComandos(unittest.TestCase):
         self.assertIn("🟢 Carulla", botones_tiendas)
         self.assertIn("🟠 Homecenter", botones_tiendas)
         self.assertIn("📦 Promocajita", botones_tiendas)
-        self.assertIn("🎯 Mis Objetivos", botones_tiendas)
+        self.assertIn("🇨🇴 Comparar Tiendas", botones_tiendas)
+        self.assertNotIn("🎯 Mis Objetivos", botones_tiendas)
         self.assertNotIn("pepeganga", vtex.TIENDAS)
 
         categorias = telegram.teclado_categorias("Éxito")
