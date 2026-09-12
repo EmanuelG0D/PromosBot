@@ -30,6 +30,10 @@ ACCESORIOS = (
     # departamento los devuelven al buscar "televisor" y llenan la ronda.
     "rack", "panel", "centro de entretenimiento", "mesa para", "mueble para",
     "organizador", "porta",
+    # Repuestos y partes internas de electrodomésticos (ej. Haceb, Whirlpool)
+    "compresor", "motor", "termostato", "resistencia", "valvula", "tarjeta",
+    "tarjeta electronica", "condensador", "evaporador", "perilla", "manguera",
+    "bomba", "bomba de desague", "filtro secador",
 )
 
 # Categorias que no interesan aunque la tienda las tenga en oferta. Las tiendas
@@ -94,22 +98,32 @@ def es_accesorio(titulo: str, palabras: tuple | list | None = None) -> bool:
                for p in palabras)
 
 
+def _palabra_coincide(p_titulo: str, p_termino: str) -> bool:
+    if p_titulo == p_termino:
+        return True
+    if len(p_termino) >= 4:
+        # Flexibilidad para plurales habituales en español (camiseta/camisetas, pantalon/pantalones)
+        if p_titulo == p_termino + "s" or p_titulo == p_termino + "es":
+            return True
+        if p_termino == p_titulo + "s" or p_termino == p_titulo + "es":
+            return True
+    return False
+
+
 def menciona(titulo: str, termino: str) -> bool:
-    """True si el titulo nombra el termino como palabra, no como pedazo.
+    """True si el titulo nombra el termino como palabra o secuencia de palabras.
 
-    Los buscadores de tienda casan subcadenas: pedir "puma" en Olimpica
-    devuelve colchones "esPUMAdos" y adaptadores "ComPUMAx". Con las marcas
-    hay que exigir la palabra entera; con un termino generico no, porque
-    "televisor" tiene que poder traer un "TV LG 55".
-
-    Se compara por palabras y no con una expresion regular a proposito:
-    _normalizar ya deja el titulo como palabras separadas por espacios, asi
-    que basta buscar la secuencia, y no hay que escapar nada.
+    Soporta coincidencia exacta y plural/singular en español (ej. camiseta/camisetas),
+    evitando falsos positivos por subcadenas (ej. "puma" en "espumados").
     """
     palabras = _normalizar(termino).split()
     if not palabras:
         return True
     titulo_palabras = _normalizar(titulo).split()
     n = len(palabras)
-    return any(titulo_palabras[i:i + n] == palabras
+
+    def _secuencia_coincide(sub_titulo: list[str]) -> bool:
+        return all(_palabra_coincide(t, q) for t, q in zip(sub_titulo, palabras))
+
+    return any(_secuencia_coincide(titulo_palabras[i:i + n])
                for i in range(len(titulo_palabras) - n + 1))

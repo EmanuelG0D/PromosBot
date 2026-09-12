@@ -2025,7 +2025,7 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             return []
 
         with patch.object(radar, "_ofertas_de", side_effect=_mock_ofertas):
-            seleccion = radar._mejores_colombia({}, set(), cuantas=15, consultas_custom=["nevera"], max_por_tienda=3)
+            seleccion = radar._mejores_colombia({}, set(), cuantas=15, consultas_custom=["nevera", "refrigerador", "nevecon"], max_por_tienda=3)
             conteo = {}
             for deal, _ in seleccion:
                 conteo[deal.store] = conteo.get(deal.store, 0) + 1
@@ -2034,6 +2034,45 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             self.assertEqual(conteo.get("Exito"), 3)
             self.assertEqual(conteo.get("Haceb"), 2)
             self.assertEqual(len(seleccion), 8)
+
+    def test_filtro_accesorios_bloquea_compresor(self):
+        from core import filtros
+        self.assertTrue(filtros.es_accesorio("Compresor GMCC 1/5 HP para Nevera"))
+        self.assertTrue(filtros.es_accesorio("Motor ventilador para lavadora"))
+        self.assertTrue(filtros.es_accesorio("Termostato para nevera Haceb"))
+        # Un producto completo que menciona compresor en su descripción no se descarta
+        self.assertFalse(filtros.es_accesorio("Nevera Haceb No Frost 300L con compresor inverter"))
+
+    def test_menciona_singular_y_plural(self):
+        from core import filtros
+        self.assertTrue(filtros.menciona("Pack x3 Camisetas Hombre", "camiseta"))
+        self.assertTrue(filtros.menciona("Pantalones de Vestir", "pantalon"))
+        self.assertTrue(filtros.menciona("Neveras No Frost", "nevera"))
+        self.assertFalse(filtros.menciona("Pelota Teknofit", "camiseta"))
+        self.assertFalse(filtros.menciona("Llanta Michelin", "camiseta"))
+        self.assertFalse(filtros.menciona("Jean Unicolor", "camiseta"))
+
+    def test_categoria_descarta_productos_irrelevantes(self):
+        import radar
+        from core.models import Deal
+        from unittest.mock import patch
+
+        ofertas_variadas = [
+            Deal("algolia_co", "Alkosto", "CO", "k1", "Pelota Teknofit", "http://a", 50, "COP", 100, in_stock=True),
+            Deal("algolia_co", "Alkosto", "CO", "k2", "Llanta Michelin 185", "http://a", 200, "COP", 400, in_stock=True),
+            Deal("vtex", "Arturo Calle", "CO", "k3", "Jean Unicolor", "http://ac", 40, "COP", 100, in_stock=True),
+            Deal("vtex", "Totto", "CO", "k4", "Camiseta Manga Corta", "http://to", 30, "COP", 100, in_stock=True),
+            Deal("vtex", "Falabella", "CO", "k5", "Polo Clásica Algodón", "http://fa", 25, "COP", 80, in_stock=True),
+        ]
+
+        with patch.object(radar, "_ofertas_de", return_value=ofertas_variadas):
+            res = radar._mejores_colombia({}, set(), cuantas=10, consultas_custom=["camiseta", "polo", "camisa"], max_por_tienda=3)
+            titulos = [d.title for d, _ in res]
+            self.assertIn("Camiseta Manga Corta", titulos)
+            self.assertIn("Polo Clásica Algodón", titulos)
+            self.assertNotIn("Pelota Teknofit", titulos)
+            self.assertNotIn("Llanta Michelin 185", titulos)
+            self.assertNotIn("Jean Unicolor", titulos)
 
 
 if __name__ == "__main__":

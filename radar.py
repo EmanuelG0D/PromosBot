@@ -397,6 +397,9 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
+    if consultas_custom:
+        disponibles = [d for d in disponibles
+                       if any(filtros.menciona(d.title, c) for c in consultas_custom)]
     candidatas = [(d, Verdict(True, "pedido a mano")) for d in disponibles
                   if d.discount_verificable > 0]
     candidatas.sort(key=lambda par: -par[0].discount_verificable)
@@ -446,6 +449,9 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
 
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
+    if consultas_custom:
+        disponibles = [d for d in disponibles
+                       if any(filtros.menciona(d.title, c) for c in consultas_custom)]
     if all(f in SIN_PRECIO_DE_LISTA for f in fuentes):
         # Ni Slickdeals ni PROMOCAJITA publican precio de lista: no hay
         # porcentaje que ordenar, pero ya vienen ordenadas por la comunidad.
