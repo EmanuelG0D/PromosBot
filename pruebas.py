@@ -2101,6 +2101,96 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertEqual(len(fala_todas), 2)
 
 
+class PruebaCacheYTopesCategoria(unittest.TestCase):
+    def setUp(self):
+        import radar
+        radar.limpiar_cache()
+
+    def tearDown(self):
+        import radar
+        radar.limpiar_cache()
+
+    def test_cache_memoria_reutiliza_ofertas(self):
+        import radar
+        from core.models import Deal
+        from unittest.mock import patch
+
+        deal_prueba = Deal("vtex", "Totto", "CO", "k_totto", "Camiseta Polo", "http://t", 45000, "COP", 90000, in_stock=True)
+
+        with patch("sources.vtex.fetch", return_value=[deal_prueba]) as mock_fetch:
+            # 1ra llamada: debe consultar la fuente y guardar en cache
+            res1 = radar._ofertas_de({"vtex": {"tiendas": ["totto"]}}, "vtex", ["totto"], ["camiseta"])
+            self.assertEqual(len(res1), 1)
+            self.assertEqual(mock_fetch.call_count, 1)
+
+            # 2da llamada con los mismos parametros: debe salir de cache sin volver a llamar a vtex
+            res2 = radar._ofertas_de({"vtex": {"tiendas": ["totto"]}}, "vtex", ["totto"], ["camiseta"])
+            self.assertEqual(len(res2), 1)
+            self.assertEqual(mock_fetch.call_count, 1)
+            self.assertEqual(res1[0].title, res2[0].title)
+
+    def test_cache_memoria_expira_tras_35_min(self):
+        import time
+        import radar
+        from core.models import Deal
+
+        deal_prueba = Deal("vtex", "Totto", "CO", "k_exp", "Camiseta Vencida", "http://t", 40000, "COP", 80000, in_stock=True)
+        clave = radar._clave_cache("vtex", ["totto"], ["camiseta"])
+
+        # Simular que se guardo hace 36 minutos
+        radar._CACHE_OFERTAS[clave] = (time.time() - (36 * 60), [deal_prueba])
+
+        # Debe expirar y retornar None
+        self.assertIsNone(radar._obtener_de_cache(clave))
+        self.assertNotIn(clave, radar._CACHE_OFERTAS)
+
+    def test_cache_memoria_respeta_tope_maximo_60(self):
+        import radar
+        from core.models import Deal
+
+        deal_prueba = Deal("vtex", "Totto", "CO", "k", "Item", "http://t", 10000, "COP", 20000, in_stock=True)
+        for i in range(70):
+            clave = ("vtex", f"tienda_{i}", (f"query_{i}",))
+            radar._guardar_en_cache(clave, [deal_prueba])
+
+        # No debe sobrepasar el maximo de 60 entradas
+        self.assertLessEqual(len(radar._CACHE_OFERTAS), 60)
+
+    def test_topes_categoria_admisibles(self):
+        import radar
+        from core.models import Deal
+
+        # Televisores: acordado en $2.200.000 COP
+        tv_bueno = Deal("vtex", "Exito", "CO", "tv1", "Smart TV Samsung 55 UHD", "http://tv", 2_100_000, "COP", in_stock=True)
+        tv_caro = Deal("vtex", "Exito", "CO", "tv2", "Smart TV Samsung 65 OLED", "http://tv", 2_350_000, "COP", in_stock=True)
+        self.assertTrue(radar._precio_admisible(tv_bueno))
+        self.assertFalse(radar._precio_admisible(tv_caro))
+
+        # Monitores: maximo $800.000 COP
+        mon_bueno = Deal("algolia_co", "Alkosto", "CO", "m1", "Monitor Gamer Asus 24", "http://m", 750_000, "COP", in_stock=True)
+        mon_caro = Deal("algolia_co", "Alkosto", "CO", "m2", "Monitor Curvo 34", "http://m", 950_000, "COP", in_stock=True)
+        self.assertTrue(radar._precio_admisible(mon_bueno))
+        self.assertFalse(radar._precio_admisible(mon_caro))
+
+        # Neveras: maximo $2.200.000 COP
+        nev_buena = Deal("vtex", "Haceb", "CO", "n1", "Nevera Haceb No Frost 240L", "http://n", 2_050_000, "COP", in_stock=True)
+        nev_cara = Deal("vtex", "Haceb", "CO", "n2", "Nevecon Whirlpool Frances", "http://n", 2_400_000, "COP", in_stock=True)
+        self.assertTrue(radar._precio_admisible(nev_buena))
+        self.assertFalse(radar._precio_admisible(nev_cara))
+
+        # Portátiles: maximo $2.500.000 COP
+        lap_bueno = Deal("algolia_co", "Ktronix", "CO", "l1", "Portátil Lenovo Ideapad Core i5", "http://l", 2_300_000, "COP", in_stock=True)
+        lap_caro = Deal("algolia_co", "Ktronix", "CO", "l2", "Portátil Gamer Legion RTX 4060", "http://l", 2_700_000, "COP", in_stock=True)
+        self.assertTrue(radar._precio_admisible(lap_bueno))
+        self.assertFalse(radar._precio_admisible(lap_caro))
+
+        # Ropa (Camisetas): maximo $60.000 COP
+        cam_buena = Deal("vtex", "Koaj", "CO", "c1", "Camiseta Polo Clásica", "http://c", 55_000, "COP", in_stock=True)
+        cam_cara = Deal("vtex", "Koaj", "CO", "c2", "Camiseta Estampada Premium", "http://c", 75_000, "COP", in_stock=True)
+        self.assertTrue(radar._precio_admisible(cam_buena))
+        self.assertFalse(radar._precio_admisible(cam_cara))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

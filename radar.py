@@ -290,9 +290,55 @@ def _sin_ruido(ofertas: list[Deal], cfg: dict) -> list[Deal]:
             and not filtros.es_accesorio(d.title)]
 
 
+# --- Cache en memoria RAM para busquedas de tiendas (TTL 35 min, max 60 entradas) ---
+_CACHE_OFERTAS: dict[tuple, tuple[float, list[Deal]]] = {}
+CACHE_TTL_SEGUNDOS: float = 35.0 * 60.0  # 35 minutos
+MAX_CACHE_ENTRIES: int = 60
+
+
+def limpiar_cache() -> None:
+    """Vacia la cache en memoria de busquedas."""
+    _CACHE_OFERTAS.clear()
+
+
+def _clave_cache(fuente: str, tiendas, consultas_custom: list[str] | None) -> tuple:
+    tiendas_tupla = tuple(sorted(tiendas)) if isinstance(tiendas, (list, set, tuple)) else (str(tiendas) if tiendas else "")
+    consultas_tupla = tuple(sorted(consultas_custom)) if consultas_custom else ()
+    return (fuente, tiendas_tupla, consultas_tupla)
+
+
+def _obtener_de_cache(clave: tuple) -> list[Deal] | None:
+    if clave in _CACHE_OFERTAS:
+        guardado_en, ofertas = _CACHE_OFERTAS[clave]
+        if (time.time() - guardado_en) <= CACHE_TTL_SEGUNDOS:
+            return list(ofertas)
+        else:
+            del _CACHE_OFERTAS[clave]
+    return None
+
+
+def _guardar_en_cache(clave: tuple, ofertas: list[Deal]) -> None:
+    ahora = time.time()
+    if len(_CACHE_OFERTAS) >= MAX_CACHE_ENTRIES:
+        # Purgar expirados primero
+        expirados = [k for k, (t, _) in _CACHE_OFERTAS.items() if (ahora - t) > CACHE_TTL_SEGUNDOS]
+        for k in expirados:
+            del _CACHE_OFERTAS[k]
+        # Si aun supera el limite, sacar la entrada mas vieja (LRU / FIFO)
+        if len(_CACHE_OFERTAS) >= MAX_CACHE_ENTRIES:
+            mas_vieja = min(_CACHE_OFERTAS.keys(), key=lambda k: _CACHE_OFERTAS[k][0])
+            del _CACHE_OFERTAS[mas_vieja]
+    _CACHE_OFERTAS[clave] = (ahora, list(ofertas))
+
+
 def _ofertas_de(watchlist: dict, fuente: str, tiendas,
                 consultas_custom: list[str] | None = None) -> list[Deal]:
     """Trae las ofertas de una sola fuente, opcionalmente de tiendas concretas."""
+    clave = _clave_cache(fuente, tiendas, consultas_custom)
+    en_cache = _obtener_de_cache(clave)
+    if en_cache is not None:
+        return en_cache
+
     cfg = watchlist.get(fuente, {})
 
     # PROMOCAJITA se configura con "canales", no con "queries": no se le buscan
@@ -307,13 +353,17 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
         else:
             incluir = cfg.get("incluir")
             por_canal = cfg.get("por_canal", 20)
-        return promocajita.fetch(cfg["canales"], por_canal,
-                                 incluir, cfg.get("excluir"))
+        resultado = promocajita.fetch(cfg["canales"], por_canal,
+                                      incluir, cfg.get("excluir"))
+        _guardar_en_cache(clave, resultado)
+        return resultado
 
     if fuente == "mercadolibre":
         consultas = consultas_custom if consultas_custom is not None else cfg.get("queries")
         crudas = mercadolibre.fetch(consultas, por_consulta=cfg.get("por_consulta", 48))
-        return _sin_ruido(crudas, cfg)
+        resultado = _sin_ruido(crudas, cfg)
+        _guardar_en_cache(clave, resultado)
+        return resultado
 
     consultas = consultas_custom if consultas_custom is not None else cfg.get("queries", [])
     if not consultas:
@@ -333,44 +383,85 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
                                   cfg.get("excluir"), cfg.get("incluir"))
     else:
         return []
-    return _sin_ruido(crudas, cfg)
+    resultado = _sin_ruido(crudas, cfg)
+    _guardar_en_cache(clave, resultado)
+    return resultado
 
 
-# Topes de precio especificos solicitados por el usuario para categorias clave
+# Topes de precio especificos calibrados para que solo pasen verdaderas promociones accesibles
 TOPES_CATEGORIA_COP: list[tuple[tuple[str, ...], float]] = [
-    # 1. Ropa: menos de 50.000
-    (("camiseta", "pantalon", "jean", "jeans", "camisa", "sudadera", "bermuda",
-      "polo", "chaqueta", "buzo", "blusa", "ropa"), 50000.0),
+    # 1. Monitores (antes de tv para evitar colisiones con 'monitor tv')
+    (("monitor", "monitores", "monitor gamer"), 800000.0),
 
-    # 2. Zapatos: menos de 150.000
-    (("tenis", "zapatos", "zapatillas", "sneakers", "botas", "sandalias", "calzado"), 150000.0),
+    # 2. Televisores y Smart TV (acordado $2.2M para incluir 50" y 55" en descuento)
+    (("televisor", "televisores", "smart tv", "tv oled", "tv qled", "tv led", "tv 4k", "tv"), 2200000.0),
 
-    # 3. Monitores: menos de 800.000 (antes de tv para no confundir 'monitor tv')
-    (("monitor", "monitores"), 800000.0),
+    # 3. Portátiles y computadores
+    (("portatil", "portatiles", "laptop", "laptops", "computador", "computadores", "macbook", "notebook"), 2500000.0),
 
-    # 4. TV: menos de 1.500.000
-    (("televisor", "televisores", "smart tv", "tv oled", "tv qled", "tv led", "tv 4k", "tv"), 1500000.0),
+    # 4. Celulares
+    (("celular", "celulares", "smartphone", "smartphones", "iphone", "samsung galaxy", "telefono"), 1300000.0),
 
-    # 5. Lavadoras: menos de 1.500.000
-    (("lavadora", "lavadoras", "torre de lavado", "lavaseca"), 1500000.0),
+    # 5. Neveras
+    (("nevera", "neveras", "refrigerador", "refrigeradores", "nevecon", "nevecones", "refrigeradora", "freezer"), 2200000.0),
 
-    # 6. Neveras: menos de 1.800.000
-    (("nevera", "neveras", "refrigerador", "nevecon"), 1800000.0),
+    # 6. Lavadoras y secadoras
+    (("lavadora", "lavadoras", "secadora", "secadoras", "torre de lavado", "lavaseca"), 1800000.0),
 
-    # 7. Pequeños electrodomésticos: menos de 250.000
-    (("freidora", "air fryer", "licuadora", "microondas", "cafetera", "aspiradora",
-      "plancha", "ventilador", "sanduchera", "waflera", "batidora", "procesador de alimentos",
-      "arrocera", "tostador", "tostadora", "exprimidor", "hervidor"), 250000.0),
+    # 7. Estufas y hornos
+    (("estufa", "estufas", "cubierta a gas", "horno", "hornos"), 900000.0),
+
+    # 8. Aires acondicionados
+    (("aire acondicionado", "aires acondicionados", "climatizador"), 1500000.0),
+
+    # 9. Consolas y videojuegos
+    (("consola", "consolas", "nintendo switch", "playstation", "xbox"), 1600000.0),
+
+    # 10. Smartwatches
+    (("smartwatch", "smartwatches", "reloj inteligente"), 350000.0),
+
+    # 11. Audífonos y sonido
+    (("audifonos", "diadema", "diademas", "parlante", "parlantes", "auriculares"), 300000.0),
+
+    # 12. Tenis y calzado
+    (("tenis", "zapatos", "zapatillas", "sneakers", "botas", "sandalias", "calzado"), 160000.0),
+
+    # 13. Chaquetas y buzos
+    (("chaqueta", "chaquetas", "buzo", "buzos", "hoodie"), 110000.0),
+
+    # 14. Bolsos y morrales
+    (("morral", "morrales", "maleta", "maletas", "billetera", "billeteras", "bolso", "bolsos", "mochila", "mochilas"), 100000.0),
+
+    # 15. Jeans y pantalones
+    (("jean", "jeans", "pantalon", "pantalones", "sudadera", "sudaderas", "bermuda", "bermudas", "pantaloneta"), 90000.0),
+
+    # 16. Camisetas y polos
+    (("camiseta", "camisetas", "polo", "polos", "camisa", "camisas", "t-shirt", "tshirt", "playera", "esqueleto"), 60000.0),
+
+    # 17. Pequeños electrodomésticos y cocina
+    (("freidora", "freidoras", "air fryer", "airfryer", "freidora de aire", "microondas",
+      "licuadora", "licuadoras", "cafetera", "cafeteras", "sanduchera", "sandwichera",
+      "waflera", "batidora", "procesador de alimentos", "arrocera", "arroceras",
+      "olla", "ollas", "sarten", "sartenes", "bateria de cocina",
+      "aspiradora", "aspiradoras", "robot aspiradora", "ventilador", "ventiladores",
+      "taladro", "taladros", "herramientas", "destornillador"), 250000.0),
 ]
 
 
 def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
-    """Verifica que el precio este dentro del tope general ($2.000.000 COP hacia abajo)."""
-    if config.MAX_PRICE_COP <= 0:
-        return True
+    """Verifica que el precio este dentro del tope especifico de su categoria o tope general."""
     if deal.price is None:
         return True
     precio_cop = deal.price if deal.currency == "COP" else (deal.price * trm)
+
+    # 1. Buscar si coincide con alguna categoria especifica
+    for keywords, tope in TOPES_CATEGORIA_COP:
+        if any(filtros.menciona(deal.title, kw) for kw in keywords):
+            return precio_cop <= tope
+
+    # 2. Si no coincide con ninguna categoria especifica, aplicar el tope general (si esta configurado)
+    if config.MAX_PRICE_COP <= 0:
+        return True
     return precio_cop <= config.MAX_PRICE_COP
 
 
