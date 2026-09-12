@@ -1811,7 +1811,232 @@ class PruebaControlAccesoWhitelist(unittest.TestCase):
                 telegram.es_miembro_del_canal = orig_miembro
 
 
+
+class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
+    """Verifica que las tiendas VTEX agregadas y las cositas especificas funcionen."""
+
+    def test_tiendas_vtex_nuevas_registradas(self):
+        from sources import vtex
+        from core import comandos
+        tiendas_esperadas = ["totto", "studiof", "velez", "americanino", "arturocalle"]
+        for t in tiendas_esperadas:
+            self.assertIn(t, vtex.TIENDAS)
+            self.assertIn(t, comandos.CATALOGO)
+            self.assertEqual(comandos.CATALOGO[t][0], "vtex")
+
+    def test_botones_tiendas_nuevas(self):
+        from core import comandos
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+        try:
+            def parsear(txt):
+                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+
+            self.assertEqual(parsear("🎒 Totto")["tienda"], "totto")
+            self.assertEqual(parsear("👗 Studio F")["tienda"], "studiof")
+            self.assertEqual(parsear("👞 Vélez")["tienda"], "velez")
+            self.assertEqual(parsear("🦅 Americanino")["tienda"], "americanino")
+            self.assertEqual(parsear("👔 Arturo Calle")["tienda"], "arturocalle")
+        finally:
+            config.TELEGRAM_CHAT_ID = original
+
+    def test_grupos_de_productos_cotidianos(self):
+        from core import comandos
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+        try:
+            def parsear(txt):
+                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+
+            res_cocina = parsear("🍳 Cocina")
+            self.assertEqual(res_cocina["tipo"], "grupo_categoria")
+            self.assertEqual(res_cocina["grupo"], "cocina")
+
+            res_tec = parsear("💻 Tecnología")
+            self.assertEqual(res_tec["tipo"], "grupo_categoria")
+            self.assertEqual(res_tec["grupo"], "tecnologia")
+
+            res_nev = parsear("❄️ Neveras y Lavadoras")
+            self.assertEqual(res_nev["tipo"], "grupo_categoria")
+            self.assertEqual(res_nev["grupo"], "neveras")
+
+            res_ropa = parsear("👟 Ropa y Tenis")
+            self.assertEqual(res_ropa["tipo"], "grupo_categoria")
+            self.assertEqual(res_ropa["grupo"], "ropa")
+
+            res_hogar = parsear("🏠 Hogar")
+            self.assertEqual(res_hogar["tipo"], "grupo_categoria")
+            self.assertEqual(res_hogar["grupo"], "hogar")
+
+            res_volver = parsear("⬅️ Volver a Grupos")
+            self.assertEqual(res_volver["tipo"], "grupo_categoria")
+            self.assertEqual(res_volver["grupo"], "volver")
+        finally:
+            config.TELEGRAM_CHAT_ID = original
+
+    def test_cositas_especificas_consultas(self):
+        from core import comandos
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+        try:
+            def parsear(txt):
+                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+
+            # Cocina: Airfryers y Sandwicheras
+            r_air = parsear("🍟 Airfryers")
+            self.assertEqual(r_air["tipo"], "categoria")
+            self.assertIn("freidora de aire", r_air["consultas"])
+
+            r_sand = parsear("🥪 Sandwicheras")
+            self.assertEqual(r_sand["tipo"], "categoria")
+            self.assertIn("sandwichera", r_sand["consultas"])
+
+            # Neveras y Lavadoras
+            r_nev = parsear("❄️ Neveras")
+            self.assertEqual(r_nev["tipo"], "categoria")
+            self.assertIn("nevera", r_nev["consultas"])
+
+            r_lav = parsear("🧺 Lavadoras")
+            self.assertEqual(r_lav["tipo"], "categoria")
+            self.assertIn("lavadora", r_lav["consultas"])
+
+            # Calzado
+            r_zap = parsear("👟 Tenis y Zapatos")
+            self.assertEqual(r_zap["tipo"], "categoria")
+            self.assertIn("tenis", r_zap["consultas"])
+
+            # Hogar
+            r_asp = parsear("🧹 Aspiradoras")
+            self.assertEqual(r_asp["tipo"], "categoria")
+            self.assertIn("aspiradora", r_asp["consultas"])
+        finally:
+            config.TELEGRAM_CHAT_ID = original
+
+    def test_teclados_especificos_bien_formados(self):
+        from core import telegram
+        # Teclado tiendas incluye las nuevas
+        t_tiendas = telegram.teclado_tiendas()
+        textos_tiendas = [b["text"] for row in t_tiendas["keyboard"] for b in row]
+        self.assertIn("🎒 Totto", textos_tiendas)
+        self.assertIn("👗 Studio F", textos_tiendas)
+        self.assertIn("👞 Vélez", textos_tiendas)
+        self.assertIn("🦅 Americanino", textos_tiendas)
+        self.assertIn("👔 Arturo Calle", textos_tiendas)
+
+        # Tienda de ropa despliega moda directamente
+        t_totto = telegram.teclado_categorias("Totto")
+        textos_totto = [b["text"] for row in t_totto["keyboard"] for b in row]
+        self.assertIn("👟 Tenis y Zapatos", textos_totto)
+        self.assertIn("👕 Camisetas y Polos", textos_totto)
+
+        # Teclado Cocina
+        t_cocina = telegram.teclado_cocina()
+        textos_cocina = [b["text"] for row in t_cocina["keyboard"] for b in row]
+        self.assertIn("🍟 Airfryers", textos_cocina)
+        self.assertIn("🥪 Sandwicheras", textos_cocina)
+        self.assertIn("🍹 Licuadoras", textos_cocina)
+
+        # Teclado Tecnologia
+        t_tec = telegram.teclado_tecnologia()
+        textos_tec = [b["text"] for row in t_tec["keyboard"] for b in row]
+        self.assertIn("📺 Televisores", textos_tec)
+        self.assertIn("💻 Portátiles", textos_tec)
+        self.assertIn("📱 Celulares", textos_tec)
+
+        # Tiendas de electrodomésticos en teclado_tiendas
+        self.assertIn("🟢 Jumbo", textos_tiendas)
+        self.assertIn("🔵 Alkomprar", textos_tiendas)
+        self.assertIn("🔴 Haceb", textos_tiendas)
+        self.assertIn("🌀 Whirlpool", textos_tiendas)
+        self.assertIn("🍳 Imusa", textos_tiendas)
+        self.assertIn("☕ Oster", textos_tiendas)
+
+        # Enrutamiento inteligente a teclados de cocina y línea blanca
+        t_imusa = telegram.teclado_categorias("Imusa")
+        textos_imusa = [b["text"] for row in t_imusa["keyboard"] for b in row]
+        self.assertIn("🍟 Airfryers", textos_imusa)
+        self.assertIn("🥪 Sandwicheras", textos_imusa)
+
+        t_haceb = telegram.teclado_categorias("Haceb")
+        textos_haceb = [b["text"] for row in t_haceb["keyboard"] for b in row]
+        self.assertIn("❄️ Neveras", textos_haceb)
+        self.assertIn("🧺 Lavadoras", textos_haceb)
+
+    def test_tiendas_electrodomesticos_registradas(self):
+        from sources import vtex, algolia_co
+        from core import comandos
+
+        for t in ["jumbo", "haceb", "whirlpool", "imusa", "oster"]:
+            self.assertIn(t, vtex.TIENDAS)
+            self.assertIn(t, comandos.CATALOGO)
+            self.assertEqual(comandos.CATALOGO[t][0], "vtex")
+
+        self.assertIn("alkomprar", algolia_co.TIENDAS)
+        self.assertIn("alkomprar", comandos.CATALOGO)
+        self.assertEqual(comandos.CATALOGO["alkomprar"][0], "algolia_co")
+
+        original = config.TELEGRAM_CHAT_ID
+        config.TELEGRAM_CHAT_ID = "-100"
+        try:
+            def parsear(txt):
+                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+
+            self.assertEqual(parsear("🟢 Jumbo")["tienda"], "jumbo")
+            self.assertEqual(parsear("🔵 Alkomprar")["tienda"], "alkomprar")
+            self.assertEqual(parsear("🔴 Haceb")["tienda"], "haceb")
+            self.assertEqual(parsear("🌀 Whirlpool")["tienda"], "whirlpool")
+            self.assertEqual(parsear("🍳 Imusa")["tienda"], "imusa")
+            self.assertEqual(parsear("☕ Oster")["tienda"], "oster")
+            self.assertEqual(parsear("🇨🇴 Comparar Tiendas")["tienda"], "colombia")
+            self.assertEqual(parsear("🇨🇴 Todo Colombia")["tienda"], "colombia")
+        finally:
+            config.TELEGRAM_CHAT_ID = original
+
+    def test_teclado_tiendas_incluye_comparar_tiendas(self):
+        from core import telegram
+        t = telegram.teclado_tiendas()
+        textos = [b["text"] for row in t["keyboard"] for b in row]
+        self.assertIn("🇨🇴 Comparar Tiendas", textos)
+
+    def test_balance_top3_por_tienda(self):
+        import radar
+        from core.models import Deal
+        from unittest.mock import patch
+
+        alkosto_deals = [
+            Deal("algolia_co", "Alkosto", "CO", f"k:alk:{i}", f"Nevera Modelo {i} Alkosto", "http://a", 100 + i * 10, "COP", 250, in_stock=True)
+            for i in range(5)
+        ]
+        exito_deals = [
+            Deal("vtex", "Exito", "CO", f"k:exi:{i}", f"Refrigerador Serie {i} Exito", "http://e", 120 + i * 10, "COP", 250, in_stock=True)
+            for i in range(4)
+        ]
+        haceb_deals = [
+            Deal("vtex", "Haceb", "CO", f"k:hac:{i}", f"Nevecon Linea {i} Haceb", "http://h", 150 + i * 10, "COP", 250, in_stock=True)
+            for i in range(2)
+        ]
+
+        def _mock_ofertas(_wl, fuente, _tiendas, **_kw):
+            if fuente == "algolia_co":
+                return alkosto_deals
+            elif fuente == "vtex":
+                return exito_deals + haceb_deals
+            return []
+
+        with patch.object(radar, "_ofertas_de", side_effect=_mock_ofertas):
+            seleccion = radar._mejores_colombia({}, set(), cuantas=15, consultas_custom=["nevera"], max_por_tienda=3)
+            conteo = {}
+            for deal, _ in seleccion:
+                conteo[deal.store] = conteo.get(deal.store, 0) + 1
+
+            self.assertEqual(conteo.get("Alkosto"), 3)
+            self.assertEqual(conteo.get("Exito"), 3)
+            self.assertEqual(conteo.get("Haceb"), 2)
+            self.assertEqual(len(seleccion), 8)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
 

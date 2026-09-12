@@ -376,13 +376,24 @@ def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
 
 def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
                       consultas_custom: list[str] | None = None,
-                      trm: float = 4000.0) -> list:
-    """Las mejores ofertas de las 6 tiendas de Todo Colombia:
-    Alkosto, K-tronix, Éxito, Carulla, Olímpica y Falabella."""
+                      trm: float = 4000.0,
+                      max_por_tienda: int = 3) -> list:
+    """Las mejores ofertas de tiendas de Todo Colombia, garantizando el Top 3 por tienda en comparaciones."""
     ofertas: list[Deal] = []
-    ofertas += _ofertas_de(watchlist, "algolia_co", ["alkosto", "ktronix"], consultas_custom=consultas_custom)
-    ofertas += _ofertas_de(watchlist, "vtex", ["exito", "carulla", "olimpica"], consultas_custom=consultas_custom)
-    ofertas += _ofertas_de(watchlist, "falabella", ["falabella"], consultas_custom=consultas_custom)
+
+    # Tiendas Algolia (Alkosto, K-tronix, Alkomprar)
+    tiendas_algolia = ["alkosto", "ktronix", "alkomprar"]
+    ofertas += _ofertas_de(watchlist, "algolia_co", tiendas_algolia, consultas_custom=consultas_custom)
+
+    # Tiendas VTEX (Éxito, Carulla, Olímpica, Jumbo, Haceb, Whirlpool, Imusa, Oster, Arturo Calle, Totto, Studio F, Vélez, Americanino)
+    tiendas_vtex = [
+        "exito", "carulla", "olimpica", "jumbo", "haceb", "whirlpool", "imusa", "oster",
+        "arturocalle", "totto", "studiof", "velez", "americanino"
+    ]
+    ofertas += _ofertas_de(watchlist, "vtex", tiendas_vtex, consultas_custom=consultas_custom)
+
+    # Falabella y Homecenter
+    ofertas += _ofertas_de(watchlist, "falabella", ["falabella", "homecenter"], consultas_custom=consultas_custom)
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
@@ -390,9 +401,32 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
                   if d.discount_verificable > 0]
     candidatas.sort(key=lambda par: -par[0].discount_verificable)
     unicas, _hermanas = _colapsar_variantes(candidatas)
-    nuevas = [par for par in unicas if par[0].key not in vistas]
-    repetidas = [par for par in unicas if par[0].key in vistas]
-    seleccion = (nuevas + repetidas)[:cuantas]
+
+    # En comparacion de categorias: garantizar el Top 3 de cada tienda
+    if consultas_custom and max_por_tienda > 0:
+        por_tienda_nuevas: dict[str, list] = {}
+        por_tienda_repetidas: dict[str, list] = {}
+        for par in unicas:
+            tienda_nombre = par[0].store or par[0].source
+            if par[0].key in vistas:
+                por_tienda_repetidas.setdefault(tienda_nombre, []).append(par)
+            else:
+                por_tienda_nuevas.setdefault(tienda_nombre, []).append(par)
+
+        todas_tiendas = list(dict.fromkeys(list(por_tienda_nuevas.keys()) + list(por_tienda_repetidas.keys())))
+        balanceadas = []
+        for tienda_nombre in todas_tiendas:
+            nuevas_t = por_tienda_nuevas.get(tienda_nombre, [])
+            repetidas_t = por_tienda_repetidas.get(tienda_nombre, [])
+            balanceadas.extend((nuevas_t + repetidas_t)[:max_por_tienda])
+
+        limite = max(cuantas, len(balanceadas))
+        seleccion = balanceadas[:limite]
+    else:
+        nuevas = [par for par in unicas if par[0].key not in vistas]
+        repetidas = [par for par in unicas if par[0].key in vistas]
+        seleccion = (nuevas + repetidas)[:cuantas]
+
     for deal, verdict in seleccion:
         if deal.key in vistas:
             verdict.etiquetas.append("ya te la habia mostrado")
@@ -544,8 +578,7 @@ def atender_solicitudes(solicitudes: list[dict],
         if comando in ("start", "menu") or tipo == "menu":
             telegram.send(
                 "🤖 <b>PromosBot — Menú Principal</b>\n\n"
-                "Toca una tienda en el menú inferior para ver sus departamentos y ofertas:\n"
-                "<i>O escribe directamente un comando como <code>/alkosto</code>, <code>/exito</code>, etc.</i>",
+                "Toca una tienda o el <b>🇨🇴 Comparador</b> en los botones inferiores para explorar ofertas:",
                 reply_markup=telegram.teclado_tiendas(),
                 chat_id=chat_id,
             )
@@ -589,12 +622,65 @@ def atender_solicitudes(solicitudes: list[dict],
             tienda = solicitud.get("tienda", "colombia")
             tienda_nombre = solicitud.get("tienda_nombre", tienda.capitalize())
             mod_comandos.fijar_tienda_activa(tienda, chat_id=chat_id)
-            telegram.send(
-                f"🏬 <b>{telegram.esc(tienda_nombre)} seleccionado</b>\n\n"
-                f"Elige una categoría abajo para buscar rebajas específicas o presiona <b>🌟 TODO</b> para ver las mejores ofertas generales de la tienda:",
-                reply_markup=telegram.teclado_categorias(tienda_nombre),
-                chat_id=chat_id,
-            )
+            if tienda == "colombia":
+                telegram.send(
+                    "🇨🇴 <b>Comparador Nacional de Tiendas</b>\n\n"
+                    "Elige un departamento o producto abajo para comparar y ver el <b>Top 3 de cada tienda</b> en Colombia:\n"
+                    "<i>(O presiona 🌟 TODO para ver las mejores rebajas generales)</i>",
+                    reply_markup=telegram.teclado_categorias(tienda_nombre),
+                    chat_id=chat_id,
+                )
+            else:
+                telegram.send(
+                    f"🏬 <b>{telegram.esc(tienda_nombre)} seleccionado</b>\n\n"
+                    f"Elige una opción abajo para buscar rebajas específicas o presiona <b>🌟 TODO</b> para ver las mejores ofertas generales de la tienda:",
+                    reply_markup=telegram.teclado_categorias(tienda_nombre),
+                    chat_id=chat_id,
+                )
+            atendidos += 1
+            continue
+
+        if tipo == "grupo_categoria":
+            grupo = solicitud.get("grupo")
+            tienda = mod_comandos.tienda_activa(chat_id=chat_id)
+            fuente, _, titulo_tienda = mod_comandos.CATALOGO.get(tienda, ("co", None, "Colombia"))
+
+            if grupo == "cocina":
+                telegram.send(
+                    f"🍳 <b>Cocina en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    reply_markup=telegram.teclado_cocina(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "tecnologia":
+                telegram.send(
+                    f"💻 <b>Tecnología en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    reply_markup=telegram.teclado_tecnologia(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "neveras":
+                telegram.send(
+                    f"❄️ <b>Neveras y Lavadoras en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    reply_markup=telegram.teclado_neveras_lavadoras(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "ropa":
+                telegram.send(
+                    f"👟 <b>Ropa y Calzado en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    reply_markup=telegram.teclado_ropa(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "hogar":
+                telegram.send(
+                    f"🏠 <b>Hogar y Herramientas en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    reply_markup=telegram.teclado_hogar(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "volver":
+                telegram.send(
+                    f"🏬 <b>{telegram.esc(titulo_tienda)}</b>\n\nElige un grupo o presiona <b>🌟 TODO</b>:",
+                    reply_markup=telegram.teclado_categorias(titulo_tienda),
+                    chat_id=chat_id,
+                )
             atendidos += 1
             continue
 
@@ -612,7 +698,10 @@ def atender_solicitudes(solicitudes: list[dict],
             # Notificar de inmediato al usuario que se inicio la revision si no se envio antes
             if not solicitud.get("notificado"):
                 telegram.accion_escribiendo(chat_id=chat_id)
-                telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(categoria_nombre)}</b> en <b>{telegram.esc(titulo_tienda)}</b>...</i>", chat_id=chat_id)
+                if fuente == "co":
+                    telegram.send(f"🇨🇴 <i>Comparando el <b>Top 3 de {telegram.esc(categoria_nombre)}</b> en todas las tiendas de Colombia...</i>", chat_id=chat_id)
+                else:
+                    telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(categoria_nombre)}</b> en <b>{telegram.esc(titulo_tienda)}</b>...</i>", chat_id=chat_id)
 
             if watchlist is None:
                 watchlist = config.load_watchlist()
@@ -633,7 +722,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 consultas = solicitud.get("consultas", [])
 
             if fuente == "co":
-                # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
+                # Consulta las tiendas autorizadas garantizando Top 3 por tienda
                 seleccion = _mejores_colombia(watchlist, vistas, cuantas, consultas_custom=consultas, trm=trm or 4000.0)
             elif fuente == "*":
                 del_exterior = max(cuantas // 5, 1)
@@ -658,9 +747,15 @@ def atender_solicitudes(solicitudes: list[dict],
                 atendidos += 1
                 continue
 
+            if fuente == "co":
+                encabezado = (f"🇨🇴 <b>Comparador Nacional · {telegram.esc(categoria_nombre)}</b>\n"
+                              f"<i>Top 3 mejores rebajas de cada tienda en Colombia:</i>")
+            else:
+                encabezado = (f"🏬 <b>{telegram.esc(titulo_tienda)}</b> · {telegram.esc(categoria_nombre)}\n"
+                              f"<i>Mejores rebajas encontradas ahora mismo:</i>")
+
             telegram.send(
-                f"🏬 <b>{telegram.esc(titulo_tienda)}</b> \u00b7 {telegram.esc(categoria_nombre)}\n"
-                f"<i>Mejores rebajas encontradas ahora mismo:</i>",
+                encabezado,
                 reply_markup=telegram.teclado_categorias(titulo_tienda),
                 chat_id=chat_id,
             )
@@ -682,9 +777,18 @@ def atender_solicitudes(solicitudes: list[dict],
                 continue
             mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
             vistas.update(enviadas_ahora)
+
+            if fuente == "co":
+                msg_fin = (f"🏁 <b>Comparación finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas "
+                           f"(Top 3 por tienda) de {telegram.esc(categoria_nombre)} en Colombia.\n"
+                           f"<i>Puedes elegir otra opción en los botones:</i>")
+            else:
+                msg_fin = (f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas "
+                           f"de {telegram.esc(categoria_nombre)} en {telegram.esc(titulo_tienda)}.\n"
+                           f"<i>Puedes elegir otra opción en los botones:</i>")
+
             telegram.send(
-                f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas de {telegram.esc(categoria_nombre)} en {telegram.esc(titulo_tienda)}.\n"
-                f"<i>Puedes elegir otra opción en los botones:</i>",
+                msg_fin,
                 reply_markup=telegram.teclado_categorias(titulo_tienda),
                 chat_id=chat_id,
             )

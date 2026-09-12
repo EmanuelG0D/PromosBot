@@ -316,7 +316,7 @@ def atender_comando(actualizacion: dict) -> None:
 
     tipo = solicitud.get("tipo")
     cmd = solicitud.get("comando")
-    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
+    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
         radar.atender_solicitudes([solicitud])
         _estado["comandos_atendidos"] += 1
         return
@@ -380,7 +380,7 @@ def sondeo_local() -> None:
                 # se responden de inmediato en el mismo hilo de sondeo sin bloquear la cola.
                 inmediatas = [
                     s for s in resto
-                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal")
+                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria")
                     or s.get("comando") in ("menu", "start", "ayuda", "help", "objetivos", "estado")
                 ]
                 busquedas = [s for s in resto if s not in inmediatas]

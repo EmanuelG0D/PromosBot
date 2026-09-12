@@ -19,6 +19,7 @@ API_KEY = os.environ.get("ALGOLIA_API_KEY", "7a8800d62203ee3a9ff1cdf74f99b268")
 TIENDAS = {
     "alkosto": {"nombre": "Alkosto", "indice": "alkostoIndexAlgoliaPRD", "web": "https://www.alkosto.com"},
     "ktronix": {"nombre": "K-tronix", "indice": "ktronixIndexAlgoliaPRD", "web": "https://www.ktronix.com"},
+    "alkomprar": {"nombre": "Alkomprar", "indice": "alkomprarIndexAlgoliaPRD", "web": "https://www.alkomprar.com"},
 }
 
 URL = "https://{app}-dsn.algolia.net/1/indexes/*/queries"

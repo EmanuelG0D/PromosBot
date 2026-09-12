@@ -102,7 +102,8 @@
   "algolia_co": {
     "tiendas": [
       "alkosto",
-      "ktronix"
+      "ktronix",
+      "alkomprar"
     ],
     "queries": [
       "televisor",
@@ -132,7 +133,15 @@
       "carulla",
       "olimpica",
       "jumbo",
-      "arturocalle"
+      "arturocalle",
+      "totto",
+      "studiof",
+      "velez",
+      "americanino",
+      "haceb",
+      "whirlpool",
+      "imusa",
+      "oster"
     ],
     "queries": [
       "televisor",

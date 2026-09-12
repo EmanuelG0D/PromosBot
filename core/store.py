@@ -34,8 +34,18 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 
+import time
+
+_ultimo_ts = 0.0
+
+
 def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds")
+    global _ultimo_ts
+    ahora = time.time()
+    if ahora <= _ultimo_ts:
+        ahora = _ultimo_ts + 0.000001
+    _ultimo_ts = ahora
+    return dt.datetime.fromtimestamp(ahora, tz=dt.timezone.utc).isoformat(timespec="microseconds")
 
 
 _DBS_INICIALIZADAS: set[str] = set()

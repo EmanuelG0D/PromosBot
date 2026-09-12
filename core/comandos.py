@@ -36,6 +36,17 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "cajita":   ("promocajita", None,        "PROMOCAJITA"),
     "mercadolibre": ("mercadolibre", None,   "Mercado Libre"),
     "meli":     ("mercadolibre", None,       "Mercado Libre"),
+    "totto":        ("vtex",   ["totto"],        "Totto"),
+    "studiof":      ("vtex",   ["studiof"],      "Studio F"),
+    "velez":        ("vtex",   ["velez"],        "Vélez"),
+    "americanino":  ("vtex",   ["americanino"],  "Americanino"),
+    "arturocalle":  ("vtex",   ["arturocalle"],  "Arturo Calle"),
+    "jumbo":        ("vtex",   ["jumbo"],        "Jumbo"),
+    "alkomprar":    ("algolia_co", ["alkomprar"], "Alkomprar"),
+    "haceb":        ("vtex",   ["haceb"],        "Haceb"),
+    "whirlpool":    ("vtex",   ["whirlpool"],    "Whirlpool"),
+    "imusa":        ("vtex",   ["imusa"],        "Imusa"),
+    "oster":        ("vtex",   ["oster"],        "Oster"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
     "colombia": ("co",         None,         "Todo lo colombiano"),
     "todo":     ("*",          None,         "Todas las tiendas"),
@@ -61,22 +72,146 @@ BOTONES_TIENDA: dict[str, tuple[str, str]] = {
     "caruya": ("carulla", "Carulla"),
     "🟠 homecenter": ("homecenter", "Homecenter"),
     "homecenter": ("homecenter", "Homecenter"),
+    "🎒 totto": ("totto", "Totto"),
+    "totto": ("totto", "Totto"),
+    "👗 studio f": ("studiof", "Studio F"),
+    "studio f": ("studiof", "Studio F"),
+    "studiof": ("studiof", "Studio F"),
+    "👞 vélez": ("velez", "Vélez"),
+    "👞 velez": ("velez", "Vélez"),
+    "vélez": ("velez", "Vélez"),
+    "velez": ("velez", "Vélez"),
+    "🦅 americanino": ("americanino", "Americanino"),
+    "americanino": ("americanino", "Americanino"),
+    "👔 arturo calle": ("arturocalle", "Arturo Calle"),
+    "arturo calle": ("arturocalle", "Arturo Calle"),
+    "arturocalle": ("arturocalle", "Arturo Calle"),
+    "🟢 jumbo": ("jumbo", "Jumbo"),
+    "jumbo": ("jumbo", "Jumbo"),
+    "🔵 alkomprar": ("alkomprar", "Alkomprar"),
+    "alkomprar": ("alkomprar", "Alkomprar"),
+    "🔴 haceb": ("haceb", "Haceb"),
+    "haceb": ("haceb", "Haceb"),
+    "🌀 whirlpool": ("whirlpool", "Whirlpool"),
+    "whirlpool": ("whirlpool", "Whirlpool"),
+    "🍳 imusa": ("imusa", "Imusa"),
+    "imusa": ("imusa", "Imusa"),
+    "☕ oster": ("oster", "Oster"),
+    "oster": ("oster", "Oster"),
     "📦 promocajita": ("cajita", "PROMOCAJITA"),
     "promocajita": ("cajita", "PROMOCAJITA"),
     "📦 cajita": ("cajita", "PROMOCAJITA"),
     "cajita": ("cajita", "PROMOCAJITA"),
+    "🇨🇴 comparar tiendas": ("colombia", "Todo Colombia"),
+    "comparar tiendas": ("colombia", "Todo Colombia"),
+    "🇨🇴 comparar en todo colombia": ("colombia", "Todo Colombia"),
+    "comparar en todo colombia": ("colombia", "Todo Colombia"),
     "🇨🇴 todo colombia": ("colombia", "Todo Colombia"),
+    "todo colombia": ("colombia", "Todo Colombia"),
     "🇺🇸 exterior (ee. uu.)": ("exterior", "Exterior (EE. UU.)"),
     "🇺🇸 exterior": ("exterior", "Exterior (EE. UU.)"),
     "🎯 mis objetivos": ("objetivos", "Mis Objetivos"),
 }
 
-# Consultas especificas al tocar cada categoria en tiendas de Colombia
+# Grupos sencillos de productos para navegación intuitiva
+GRUPOS_MENU: dict[str, str] = {
+    "🍳 cocina": "cocina",
+    "cocina": "cocina",
+    "❄️ neveras y lavadoras": "neveras",
+    "neveras y lavadoras": "neveras",
+    "💻 tecnología": "tecnologia",
+    "tecnología": "tecnologia",
+    "tecnologia": "tecnologia",
+    "👟 ropa y tenis": "ropa",
+    "ropa y tenis": "ropa",
+    "🏠 hogar": "hogar",
+    "hogar": "hogar",
+}
+
+# Consultas especificas al tocar cada categoria o cosita especifica
 CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
-    "📺 Smart TV": ["televisor", "smart tv"],
+    # --- Cositas Específicas: Cocina ---
+    "🍟 Airfryers": ["freidora de aire", "air fryer", "freidora"],
+    "airfryers": ["freidora de aire", "air fryer", "freidora"],
+    "airfryer": ["freidora de aire", "air fryer", "freidora"],
+    "🥪 Sandwicheras": ["sandwichera", "sanduchera", "waflera", "tostadora"],
+    "sandwicheras": ["sandwichera", "sanduchera", "waflera", "tostadora"],
+    "sandwichera": ["sandwichera", "sanduchera", "waflera", "tostadora"],
+    "🍹 Licuadoras": ["licuadora", "procesador de alimentos", "batidora"],
+    "licuadoras": ["licuadora", "procesador de alimentos", "batidora"],
+    "licuadora": ["licuadora", "procesador de alimentos", "batidora"],
+    "☕ Cafeteras": ["cafetera", "cafetera espresso"],
+    "cafeteras": ["cafetera", "cafetera espresso"],
+    "cafetera": ["cafetera", "cafetera espresso"],
+    "🍿 Microondas": ["microondas", "horno electrico"],
+    "microondas": ["microondas", "horno electrico"],
+    "🍚 Arroceras y Ollas": ["arrocera", "olla arrocera", "olla a presion"],
+    "arroceras y ollas": ["arrocera", "olla arrocera", "olla a presion"],
+    "🍳 Sartenes y Baterías": ["sarten", "bateria de cocina", "olla"],
+    "sartenes y baterías": ["sarten", "bateria de cocina", "olla"],
+    "sartenes y baterias": ["sarten", "bateria de cocina", "olla"],
+    "🌟 Toda la Cocina": ["freidora de aire", "licuadora", "sandwichera", "cafetera", "microondas"],
+
+    # --- Cositas Específicas: Neveras y Lavadoras ---
+    "❄️ Neveras": ["nevera", "refrigerador", "nevecon"],
+    "neveras": ["nevera", "refrigerador", "nevecon"],
+    "nevera": ["nevera", "refrigerador", "nevecon"],
+    "🧺 Lavadoras": ["lavadora", "secadora", "torre de lavado"],
+    "lavadoras": ["lavadora", "secadora", "torre de lavado"],
+    "lavadora": ["lavadora", "secadora", "torre de lavado"],
+    "🔥 Estufas y Hornos": ["estufa", "cubierta a gas", "horno"],
+    "estufas y hornos": ["estufa", "cubierta a gas", "horno"],
+    "💨 Aires Acondicionados": ["aire acondicionado", "climatizador"],
+    "aires acondicionados": ["aire acondicionado", "climatizador"],
+    "🌟 Toda la Línea Blanca": ["nevera", "lavadora", "estufa", "nevecon"],
+
+    # --- Cositas Específicas: Tecnología ---
+    "📺 Televisores": ["televisor", "smart tv", "tv"],
+    "televisores": ["televisor", "smart tv", "tv"],
     "💻 Portátiles": ["portatil", "laptop", "computador"],
-    "🖥️ Monitores": ["monitor"],
-    "📱 Celulares": ["celular", "smartphone", "iphone"],
+    "portátiles": ["portatil", "laptop", "computador"],
+    "portatiles": ["portatil", "laptop", "computador"],
+    "📱 Celulares": ["celular", "smartphone", "iphone", "samsung galaxy"],
+    "celulares": ["celular", "smartphone", "iphone", "samsung galaxy"],
+    "🖥️ Monitores": ["monitor", "monitor gamer"],
+    "monitores": ["monitor", "monitor gamer"],
+    "🎧 Audífonos y Sonido": ["audifonos", "diadema", "parlante"],
+    "audífonos y sonido": ["audifonos", "diadema", "parlante"],
+    "audifonos y sonido": ["audifonos", "diadema", "parlante"],
+    "🎮 Consolas y Videojuegos": ["consola", "nintendo switch", "playstation", "xbox"],
+    "consolas y videojuegos": ["consola", "nintendo switch", "playstation", "xbox"],
+    "⌚ Smartwatches": ["smartwatch", "reloj inteligente"],
+    "smartwatches": ["smartwatch", "reloj inteligente"],
+    "🌟 Toda la Tecnología": ["televisor", "portatil", "celular", "monitor", "audifonos"],
+
+    # --- Cositas Específicas: Ropa y Tenis ---
+    "👟 Tenis y Zapatos": ["tenis", "zapatillas", "sneakers", "botas", "zapatos"],
+    "tenis y zapatos": ["tenis", "zapatillas", "sneakers", "botas", "zapatos"],
+    "👕 Camisetas y Polos": ["camiseta", "polo", "camisa"],
+    "camisetas y polos": ["camiseta", "polo", "camisa"],
+    "👖 Jeans y Pantalones": ["jean", "pantalon", "sudadera", "bermuda"],
+    "jeans y pantalones": ["jean", "pantalon", "sudadera", "bermuda"],
+    "🧥 Chaquetas y Buzos": ["chaqueta", "buzo", "hoodie"],
+    "chaquetas y buzos": ["chaqueta", "buzo", "hoodie"],
+    "🎒 Bolsos y Morrales": ["morral", "maleta", "billetera", "bolso", "mochila"],
+    "bolsos y morrales": ["morral", "maleta", "billetera", "bolso", "mochila"],
+    "🩳 Ropa Deportiva": ["sudadera", "pantaloneta", "licra deportiva", "deportivo"],
+    "ropa deportiva": ["sudadera", "pantaloneta", "licra deportiva", "deportivo"],
+    "🌟 Toda la Ropa": ["camiseta", "jean", "chaqueta", "tenis", "morral"],
+
+    # --- Cositas Específicas: Hogar ---
+    "🧹 Aspiradoras": ["aspiradora", "robot aspiradora"],
+    "aspiradoras": ["aspiradora", "robot aspiradora"],
+    "aspiradora": ["aspiradora", "robot aspiradora"],
+    "💨 Ventiladores": ["ventilador"],
+    "ventiladores": ["ventilador"],
+    "ventilador": ["ventilador"],
+    "🔨 Herramientas": ["taladro", "herramientas", "destornillador"],
+    "herramientas": ["taladro", "herramientas", "destornillador"],
+    "🌟 Todo el Hogar": ["aspiradora", "ventilador", "taladro"],
+
+    # --- Compatibilidad hacia atrás ---
+    "📺 Smart TV": ["televisor", "smart tv"],
     "👟 Zapatos y Tenis": ["tenis", "zapatillas", "sneakers", "botas", "zapatos"],
     "🎧 Audio y Diademas": ["audifonos", "diadema", "parlante", "audio"],
     "❄️ Electrodomésticos": [
@@ -278,9 +413,22 @@ def leer_comando(mensaje: dict) -> dict | None:
     else:
         texto_norm = texto.lower()
 
+        # Volver a grupos
+        if "volver a grupos" in texto_norm:
+            res = {"comando": "grupo_categoria", "grupo": "volver", "chat_id": chat, "tipo": "grupo_categoria"}
+
         # Volver a la lista de tiendas
-        if "volver a tiendas" in texto_norm or "volver" in texto_norm:
+        elif "volver a tiendas" in texto_norm or "volver" in texto_norm:
             res = {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
+
+        # Boton de grupo tematico (Cocina, Tecnologia, etc.)
+        elif texto_norm in GRUPOS_MENU:
+            res = {
+                "comando": "grupo_categoria",
+                "grupo": GRUPOS_MENU[texto_norm],
+                "chat_id": chat,
+                "tipo": "grupo_categoria",
+            }
 
         # Boton de tienda
         if not res:
@@ -386,6 +534,17 @@ MENU = [
     ("falabella", "Ofertas de Falabella"),
     ("homecenter", "Ofertas de Homecenter"),
     ("mercadolibre", "Ofertas de Mercado Libre"),
+    ("totto", "Ofertas de Totto"),
+    ("studiof", "Ofertas de Studio F"),
+    ("velez", "Ofertas de Vélez"),
+    ("americanino", "Ofertas de Americanino"),
+    ("arturocalle", "Ofertas de Arturo Calle"),
+    ("jumbo", "Ofertas de Jumbo"),
+    ("alkomprar", "Ofertas de Alkomprar"),
+    ("haceb", "Ofertas de Haceb"),
+    ("whirlpool", "Ofertas de Whirlpool"),
+    ("imusa", "Ofertas de Imusa"),
+    ("oster", "Ofertas de Oster"),
     ("colombia", "Lo mejor de las tiendas colombianas"),
     ("drogueria", "Rebajas de droguerias"),
     ("cajita", "Ofertas de PROMOCAJITA"),
@@ -396,18 +555,17 @@ MENU = [
 
 
 def registrar_menu() -> bool:
-    """Publica los comandos exclusivamente en chats privados, nunca en grupos."""
+    """Elimina comandos slash en todos los ámbitos para que Telegram no muestre el botón [/] y la navegación sea 100% por botones."""
     if not config.TELEGRAM_BOT_TOKEN:
         return False
     try:
-        url_set = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyCommands"
         url_del = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/deleteMyCommands"
-        cmds = [{"command": c, "description": d} for c, d in MENU]
 
-        # 1. Limpiar comandos de grupos y globales (para que NUNCA aparezca el boton [/] en grupos)
+        # Limpiar comandos de grupos, chats privados y globales
         http.post_json(url_del, {"scope": {"type": "default"}}, retries=1)
         http.post_json(url_del, {"scope": {"type": "all_group_chats"}}, retries=1)
         http.post_json(url_del, {"scope": {"type": "all_chat_administrators"}}, retries=1)
+        http.post_json(url_del, {"scope": {"type": "all_private_chats"}}, retries=1)
         if config.TELEGRAM_CHAT_ID:
             http.post_json(url_del, {"scope": {"type": "chat", "chat_id": config.TELEGRAM_CHAT_ID}}, retries=1)
             http.post_json(url_del, {"scope": {"type": "chat_administrators", "chat_id": config.TELEGRAM_CHAT_ID}}, retries=1)
@@ -416,10 +574,7 @@ def registrar_menu() -> bool:
                     http.post_json(url_del, {"scope": {"type": "chat_member", "chat_id": config.TELEGRAM_CHAT_ID, "user_id": int(config.TELEGRAM_ADMIN_ID)}}, retries=1)
                 except (ValueError, TypeError):
                     pass
-
-        # 2. Publicar comandos UNICAMENTE en chats privados
-        http.post_json(url_set, {"commands": cmds, "scope": {"type": "all_private_chats"}}, retries=1)
         return True
     except Exception as exc:
-        print(f"  [comandos] no se pudo registrar el menu: {exc}")
+        print(f"  [comandos] no se pudo limpiar el menu de comandos: {exc}")
         return False

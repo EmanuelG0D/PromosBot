@@ -261,11 +261,17 @@ def teclado_tiendas() -> dict:
     return {
         "keyboard": [
             [{"text": "🟡 Éxito"}, {"text": "🔴 Alkosto"}],
+            [{"text": "🟢 Jumbo"}, {"text": "🔵 Alkomprar"}],
             [{"text": "💛 Mercado Libre"}, {"text": "🟢 Falabella"}],
             [{"text": "⚪ K-tronix"}, {"text": "🔵 Olímpica"}],
             [{"text": "🟢 Carulla"}, {"text": "🟠 Homecenter"}],
-            [{"text": "📦 Promocajita"}, {"text": "🇨🇴 Todo Colombia"}],
-            [{"text": "🇺🇸 Exterior (EE. UU.)"}, {"text": "🎯 Mis Objetivos"}],
+            [{"text": "🔴 Haceb"}, {"text": "🌀 Whirlpool"}],
+            [{"text": "🍳 Imusa"}, {"text": "☕ Oster"}],
+            [{"text": "🎒 Totto"}, {"text": "👔 Arturo Calle"}],
+            [{"text": "👞 Vélez"}, {"text": "👗 Studio F"}],
+            [{"text": "🦅 Americanino"}, {"text": "📦 Promocajita"}],
+            [{"text": "🇨🇴 Comparar Tiendas"}, {"text": "🇺🇸 Exterior (EE. UU.)"}],
+            [{"text": "🎯 Mis Objetivos"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -273,14 +279,109 @@ def teclado_tiendas() -> dict:
 
 
 def teclado_categorias(tienda_nombre: str = "") -> dict:
-    """Submenu de categorias para la tienda seleccionada."""
+    """Menu de categorias o grupos para la tienda seleccionada."""
+    t_baja = tienda_nombre.lower()
+
+    # Marcas oficiales de ropa y calzado
+    if any(m in t_baja for m in ("totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle")):
+        return {
+            "keyboard": [
+                [{"text": "🌟 TODO"}, {"text": "👟 Tenis y Zapatos"}],
+                [{"text": "👕 Camisetas y Polos"}, {"text": "👖 Jeans y Pantalones"}],
+                [{"text": "🧥 Chaquetas y Buzos"}, {"text": "🎒 Bolsos y Morrales"}],
+                [{"text": "🩳 Ropa Deportiva"}, {"text": "⬅️ Volver a Tiendas"}],
+            ],
+            "resize_keyboard": True,
+            "is_persistent": False,
+        }
+
+    # Marcas oficiales de cocina y pequeños electrodomésticos
+    if any(m in t_baja for m in ("imusa", "oster")):
+        return teclado_cocina()
+
+    # Marcas oficiales de grandes electrodomésticos y línea blanca
+    if any(m in t_baja for m in ("haceb", "whirlpool")):
+        return teclado_neveras_lavadoras()
+
+    # Tiendas generales y multirubro
     return {
         "keyboard": [
-            [{"text": "🌟 TODO"}, {"text": "📺 Smart TV"}],
-            [{"text": "💻 Portátiles"}, {"text": "🖥️ Monitores"}],
-            [{"text": "📱 Celulares"}, {"text": "👟 Zapatos y Tenis"}],
-            [{"text": "🎧 Audio y Diademas"}, {"text": "❄️ Electrodomésticos"}],
-            [{"text": "👕 Ropa y Moda"}, {"text": "⬅️ Volver a Tiendas"}],
+            [{"text": "🍳 Cocina"}, {"text": "❄️ Neveras y Lavadoras"}],
+            [{"text": "💻 Tecnología"}, {"text": "👟 Ropa y Tenis"}],
+            [{"text": "🏠 Hogar"}, {"text": "🌟 TODO"}],
+            [{"text": "📺 Smart TV"}, {"text": "⬅️ Volver a Tiendas"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_cocina() -> dict:
+    """Submenu de productos especificos de cocina."""
+    return {
+        "keyboard": [
+            [{"text": "🍟 Airfryers"}, {"text": "🥪 Sandwicheras"}],
+            [{"text": "🍹 Licuadoras"}, {"text": "☕ Cafeteras"}],
+            [{"text": "🍿 Microondas"}, {"text": "🍚 Arroceras y Ollas"}],
+            [{"text": "🍳 Sartenes y Baterías"}, {"text": "🌟 Toda la Cocina"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver a Tiendas"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_tecnologia() -> dict:
+    """Submenu de productos especificos de tecnologia."""
+    return {
+        "keyboard": [
+            [{"text": "📺 Televisores"}, {"text": "💻 Portátiles"}],
+            [{"text": "📱 Celulares"}, {"text": "🖥️ Monitores"}],
+            [{"text": "🎧 Audífonos y Sonido"}, {"text": "🎮 Consolas y Videojuegos"}],
+            [{"text": "⌚ Smartwatches"}, {"text": "🌟 Toda la Tecnología"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver a Tiendas"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_neveras_lavadoras() -> dict:
+    """Submenu de linea blanca y grandes electrodomesticos."""
+    return {
+        "keyboard": [
+            [{"text": "❄️ Neveras"}, {"text": "🧺 Lavadoras"}],
+            [{"text": "🔥 Estufas y Hornos"}, {"text": "💨 Aires Acondicionados"}],
+            [{"text": "🌟 Toda la Línea Blanca"}, {"text": "⬅️ Volver a Grupos"}],
+            [{"text": "⬅️ Volver a Tiendas"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_ropa() -> dict:
+    """Submenu de prendas y calzado especifico."""
+    return {
+        "keyboard": [
+            [{"text": "👟 Tenis y Zapatos"}, {"text": "👕 Camisetas y Polos"}],
+            [{"text": "👖 Jeans y Pantalones"}, {"text": "🧥 Chaquetas y Buzos"}],
+            [{"text": "🎒 Bolsos y Morrales"}, {"text": "🩳 Ropa Deportiva"}],
+            [{"text": "🌟 Toda la Ropa"}, {"text": "⬅️ Volver a Grupos"}],
+            [{"text": "⬅️ Volver a Tiendas"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_hogar() -> dict:
+    """Submenu de articulos de hogar y herramientas."""
+    return {
+        "keyboard": [
+            [{"text": "🧹 Aspiradoras"}, {"text": "💨 Ventiladores"}],
+            [{"text": "🔨 Herramientas"}, {"text": "🌟 Todo el Hogar"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver a Tiendas"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,

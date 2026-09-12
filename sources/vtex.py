@@ -30,6 +30,14 @@ TIENDAS = {
     # "/buscapagina/". No es que no nos hayan visto, es que pusieron el letrero.
     "jumbo":        {"nombre": "Jumbo",        "api": "https://www.jumbocolombia.com",   "web": "https://www.jumbocolombia.com"},
     "arturocalle":  {"nombre": "Arturo Calle", "api": "https://www.arturocalle.com",     "web": "https://www.arturocalle.com"},
+    "totto":        {"nombre": "Totto",        "api": "https://co.totto.com",            "web": "https://co.totto.com"},
+    "studiof":      {"nombre": "Studio F",      "api": "https://www.studiof.com.co",     "web": "https://www.studiof.com.co"},
+    "velez":        {"nombre": "Vélez",         "api": "https://www.velez.com.co",        "web": "https://www.velez.com.co"},
+    "americanino":  {"nombre": "Americanino",   "api": "https://www.americanino.com",     "web": "https://www.americanino.com"},
+    "haceb":        {"nombre": "Haceb",         "api": "https://www.haceb.com",           "web": "https://www.haceb.com"},
+    "whirlpool":    {"nombre": "Whirlpool",     "api": "https://www.whirlpool.com.co",     "web": "https://www.whirlpool.com.co"},
+    "imusa":        {"nombre": "Imusa",         "api": "https://www.imusa.com.co",         "web": "https://www.imusa.com.co"},
+    "oster":        {"nombre": "Oster",         "api": "https://www.ostercolombia.com",    "web": "https://www.ostercolombia.com"},
     "larebaja":     {"nombre": "La Rebaja",    "api": "https://www.larebajavirtual.com", "web": "https://www.larebajavirtual.com"},
 }
 
