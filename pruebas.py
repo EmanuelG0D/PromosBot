@@ -2074,6 +2074,32 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             self.assertNotIn("Llanta Michelin 185", titulos)
             self.assertNotIn("Jean Unicolor", titulos)
 
+    def test_enrutamiento_tiendas_por_departamento(self):
+        import radar
+        # Ropa: no consulta Algolia ni electrodomésticos
+        alg_ropa, vtex_ropa, fala_ropa = radar._tiendas_por_departamento(["camiseta", "polo"])
+        self.assertEqual(alg_ropa, [])
+        self.assertIn("totto", vtex_ropa)
+        self.assertIn("arturocalle", vtex_ropa)
+        self.assertNotIn("haceb", vtex_ropa)
+        self.assertNotIn("imusa", vtex_ropa)
+        self.assertEqual(fala_ropa, ["falabella"])
+
+        # Neveras: consulta Haceb y Whirlpool, pero no tiendas de ropa
+        alg_nev, vtex_nev, fala_nev = radar._tiendas_por_departamento(["nevera", "refrigerador"])
+        self.assertIn("alkosto", alg_nev)
+        self.assertIn("haceb", vtex_nev)
+        self.assertIn("whirlpool", vtex_nev)
+        self.assertNotIn("totto", vtex_nev)
+        self.assertNotIn("arturocalle", vtex_nev)
+        self.assertIn("homecenter", fala_nev)
+
+        # Sin categoría (TODO): devuelve todas
+        alg_todas, vtex_todas, fala_todas = radar._tiendas_por_departamento(None)
+        self.assertEqual(len(alg_todas), 3)
+        self.assertEqual(len(vtex_todas), 13)
+        self.assertEqual(len(fala_todas), 2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

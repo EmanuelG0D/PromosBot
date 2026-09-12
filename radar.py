@@ -374,6 +374,106 @@ def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
     return precio_cop <= config.MAX_PRICE_COP
 
 
+DEPTO_ROPA = {
+    "camiseta", "polo", "camisa", "jean", "jeans", "pantalon", "pantalones",
+    "chaqueta", "chaquetas", "buzo", "buzos", "hoodie", "morral", "morrales",
+    "maleta", "maletas", "billetera", "billeteras", "bolso", "bolsos", "mochila",
+    "mochilas", "sudadera", "sudaderas", "ropa", "tenis", "zapatos", "zapatillas",
+    "sneakers", "botas", "sandalias", "calzado", "bermuda", "bermudas",
+    "t-shirt", "tshirt", "playera", "esqueleto", "deportivo", "deportiva"
+}
+
+DEPTO_LINEA_BLANCA = {
+    "nevera", "neveras", "refrigerador", "refrigeradores", "nevecon", "nevecones",
+    "refrigeradora", "freezer", "lavadora", "lavadoras", "secadora", "secadoras",
+    "torre de lavado", "lavaseca", "estufa", "estufas", "cubierta a gas",
+    "horno", "hornos", "aire acondicionado", "aires acondicionados", "climatizador"
+}
+
+DEPTO_COCINA = {
+    "freidora", "freidoras", "air fryer", "airfryer", "freidora de aire",
+    "sandwichera", "sandwicheras", "sanduchera", "sanducheras", "waflera", "wafleras",
+    "tostadora", "tostadoras", "licuadora", "licuadoras", "procesador de alimentos",
+    "batidora", "batidoras", "cafetera", "cafeteras", "microondas", "arrocera",
+    "arroceras", "olla", "ollas", "sarten", "sartenes", "bateria de cocina"
+}
+
+DEPTO_TECNOLOGIA = {
+    "televisor", "televisores", "smart tv", "tv", "portatil", "portatiles",
+    "laptop", "laptops", "computador", "computadores", "macbook", "notebook",
+    "celular", "celulares", "smartphone", "smartphones", "iphone", "galaxy",
+    "telefono", "telefonos", "monitor", "monitores", "gamer", "audifonos",
+    "diadema", "diademas", "parlante", "parlantes", "auriculares", "consola",
+    "consolas", "playstation", "xbox", "nintendo", "smartwatch", "smartwatches",
+    "reloj inteligente"
+}
+
+DEPTO_HOGAR = {
+    "aspiradora", "aspiradoras", "robot aspiradora", "ventilador", "ventiladores",
+    "taladro", "taladros", "herramientas", "destornillador"
+}
+
+
+def _tiendas_por_departamento(consultas_custom: list[str] | None) -> tuple[list[str], list[str], list[str]]:
+    """Selecciona solo los almacenes relevantes según el rubro de la búsqueda para evitar peticiones inútiles."""
+    algolia_todas = ["alkosto", "ktronix", "alkomprar"]
+    vtex_todas = [
+        "exito", "carulla", "olimpica", "jumbo", "haceb", "whirlpool", "imusa", "oster",
+        "arturocalle", "totto", "studiof", "velez", "americanino"
+    ]
+    falabella_todas = ["falabella", "homecenter"]
+
+    if not consultas_custom:
+        return algolia_todas, vtex_todas, falabella_todas
+
+    palabras = set()
+    for c in consultas_custom:
+        for p in filtros._normalizar(c).split():
+            palabras.add(p)
+
+    # 1. Ropa, Calzado y Accesorios
+    if palabras & DEPTO_ROPA:
+        return (
+            [],  # Ninguna de Algolia vende moda
+            ["exito", "jumbo", "totto", "arturocalle", "studiof", "velez", "americanino"],
+            ["falabella"],
+        )
+
+    # 2. Neveras, Lavadoras y Línea Blanca
+    if palabras & DEPTO_LINEA_BLANCA:
+        return (
+            ["alkosto", "ktronix", "alkomprar"],
+            ["exito", "jumbo", "olimpica", "carulla", "haceb", "whirlpool"],
+            ["falabella", "homecenter"],
+        )
+
+    # 3. Cocina y Pequeños Electrodomésticos
+    if palabras & DEPTO_COCINA:
+        return (
+            ["alkosto", "ktronix", "alkomprar"],
+            ["exito", "jumbo", "olimpica", "carulla", "imusa", "oster", "haceb"],
+            ["falabella", "homecenter"],
+        )
+
+    # 4. Tecnología
+    if palabras & DEPTO_TECNOLOGIA:
+        return (
+            ["alkosto", "ktronix", "alkomprar"],
+            ["exito", "jumbo", "olimpica", "carulla"],
+            ["falabella"],
+        )
+
+    # 5. Hogar y Herramientas
+    if palabras & DEPTO_HOGAR:
+        return (
+            ["alkosto", "alkomprar"],
+            ["exito", "jumbo", "carulla", "olimpica"],
+            ["falabella", "homecenter"],
+        )
+
+    return algolia_todas, vtex_todas, falabella_todas
+
+
 def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
                       consultas_custom: list[str] | None = None,
                       trm: float = 4000.0,
@@ -381,19 +481,16 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
     """Las mejores ofertas de tiendas de Todo Colombia, garantizando el Top 3 por tienda en comparaciones."""
     ofertas: list[Deal] = []
 
-    # Tiendas Algolia (Alkosto, K-tronix, Alkomprar)
-    tiendas_algolia = ["alkosto", "ktronix", "alkomprar"]
-    ofertas += _ofertas_de(watchlist, "algolia_co", tiendas_algolia, consultas_custom=consultas_custom)
+    tiendas_algolia, tiendas_vtex, tiendas_falabella = _tiendas_por_departamento(consultas_custom)
 
-    # Tiendas VTEX (Éxito, Carulla, Olímpica, Jumbo, Haceb, Whirlpool, Imusa, Oster, Arturo Calle, Totto, Studio F, Vélez, Americanino)
-    tiendas_vtex = [
-        "exito", "carulla", "olimpica", "jumbo", "haceb", "whirlpool", "imusa", "oster",
-        "arturocalle", "totto", "studiof", "velez", "americanino"
-    ]
-    ofertas += _ofertas_de(watchlist, "vtex", tiendas_vtex, consultas_custom=consultas_custom)
+    if tiendas_algolia:
+        ofertas += _ofertas_de(watchlist, "algolia_co", tiendas_algolia, consultas_custom=consultas_custom)
 
-    # Falabella y Homecenter
-    ofertas += _ofertas_de(watchlist, "falabella", ["falabella", "homecenter"], consultas_custom=consultas_custom)
+    if tiendas_vtex:
+        ofertas += _ofertas_de(watchlist, "vtex", tiendas_vtex, consultas_custom=consultas_custom)
+
+    if tiendas_falabella:
+        ofertas += _ofertas_de(watchlist, "falabella", tiendas_falabella, consultas_custom=consultas_custom)
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
