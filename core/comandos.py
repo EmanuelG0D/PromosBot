@@ -341,6 +341,32 @@ def marcar_mostradas(claves, chat_id: int | str = "") -> None:
     _guardar(datos)
 
 
+def guardar_ultima_busqueda(chat_id: int | str, solicitud: dict) -> None:
+    """Recuerda la ultima busqueda realizada por el chat para permitir paginar con 'siguientes'."""
+    if not chat_id:
+        return
+    datos = _cargar()
+    ultimas = datos.setdefault("ultimas_busquedas", {})
+    ultimas[str(chat_id)] = {
+        "tipo": solicitud.get("tipo"),
+        "comando": solicitud.get("comando"),
+        "categoria_nombre": solicitud.get("categoria_nombre"),
+        "consultas": solicitud.get("consultas"),
+        "tienda": solicitud.get("tienda"),
+        "cantidad": solicitud.get("cantidad"),
+    }
+    _guardar(datos)
+
+
+def obtener_ultima_busqueda(chat_id: int | str) -> dict | None:
+    """Devuelve la configuracion de la ultima busqueda del usuario."""
+    if not chat_id:
+        return None
+    datos = _cargar()
+    ultimas = datos.get("ultimas_busquedas", {})
+    return ultimas.get(str(chat_id))
+
+
 def leer_comando(mensaje: dict) -> dict | None:
     """Un mensaje de Telegram vuelto solicitud, o None si no es para el bot.
 
@@ -407,14 +433,21 @@ def leer_comando(mensaje: dict) -> dict | None:
         cantidad = None
         if len(partes) > 1 and partes[1].isdigit():
             cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
+        tipo_cmd = "siguientes" if crudo in ("siguientes", "mas", "siguiente") else None
         res = {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
+        if tipo_cmd:
+            res["tipo"] = tipo_cmd
 
     # 2. Botones del teclado interactivo (sin "/")
     else:
         texto_norm = texto.lower()
 
+        # Siguientes ofertas
+        if any(frase in texto_norm for frase in ("siguientes ofertas", "ver siguientes", "más ofertas", "mas ofertas", "siguientes")):
+            res = {"comando": "siguientes", "chat_id": chat, "tipo": "siguientes"}
+
         # Volver a grupos
-        if "volver a grupos" in texto_norm:
+        elif "volver a grupos" in texto_norm:
             res = {"comando": "grupo_categoria", "grupo": "volver", "chat_id": chat, "tipo": "grupo_categoria"}
 
         # Volver a la lista de tiendas

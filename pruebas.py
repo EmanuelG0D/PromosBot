@@ -2191,6 +2191,93 @@ class PruebaCacheYTopesCategoria(unittest.TestCase):
         self.assertFalse(radar._precio_admisible(cam_cara))
 
 
+class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
+    def setUp(self):
+        import radar
+        from core import comandos
+        radar.limpiar_cache()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.orig_estado = comandos.ESTADO
+        comandos.ESTADO = Path(self.tmp.name) / "comandos_estado.json"
+
+    def tearDown(self):
+        from core import comandos
+        comandos.ESTADO = self.orig_estado
+        self.tmp.cleanup()
+
+    def test_reconocimiento_comando_siguientes(self):
+        from core import comandos
+        cid = config.TELEGRAM_CHAT_ID or 4444
+        # Texto de boton
+        sol1 = comandos.leer_comando({"text": "🔄 Ver siguientes ofertas", "chat": {"id": cid}})
+        self.assertIsNotNone(sol1)
+        self.assertEqual(sol1.get("tipo"), "siguientes")
+
+        # Texto alternativo
+        sol2 = comandos.leer_comando({"text": "más ofertas", "chat": {"id": cid}})
+        self.assertIsNotNone(sol2)
+        self.assertEqual(sol2.get("tipo"), "siguientes")
+
+        # Slash command
+        sol3 = comandos.leer_comando({"text": "/siguientes", "chat": {"id": cid}})
+        self.assertIsNotNone(sol3)
+        self.assertEqual(sol3.get("tipo"), "siguientes")
+
+    def test_guardar_y_obtener_ultima_busqueda(self):
+        from core import comandos
+        sol = {"tipo": "categoria", "categoria_nombre": "❄️ Neveras", "consultas": ["nevera"], "chat_id": 999}
+        comandos.guardar_ultima_busqueda(999, sol)
+
+        recup = comandos.obtener_ultima_busqueda(999)
+        self.assertIsNotNone(recup)
+        self.assertEqual(recup.get("categoria_nombre"), "❄️ Neveras")
+        self.assertEqual(recup.get("consultas"), ["nevera"])
+
+    def test_boton_siguientes_ofertas_bien_formado(self):
+        from core import telegram
+        teclado = telegram.boton_siguientes_ofertas()
+        self.assertIn("inline_keyboard", teclado)
+        btn = teclado["inline_keyboard"][0][0]
+        self.assertEqual(btn["callback_data"], "siguientes_ofertas")
+        self.assertIn("siguientes", btn["text"].lower())
+
+    def test_flujo_paginacion_siguiente_entrega_nuevas_sin_repetir(self):
+        import radar
+        from core import telegram
+        from core.models import Deal
+        from unittest.mock import patch
+
+        deals_disponibles = [
+            Deal("vtex", "Haceb", "CO", f"k_{i}", f"Nevera Haceb {200 + i*20} Litros", "http://h", 1_400_000 + (i * 20_000), "COP", 2_000_000, in_stock=True)
+            for i in range(6)
+        ]
+
+        ofertas_enviadas = []
+        with patch("core.telegram.enviar_oferta", side_effect=lambda d, *a, **k: ofertas_enviadas.append(d.key)), \
+             patch.object(radar, "_ofertas_de", return_value=deals_disponibles), \
+             patch("time.sleep"):
+
+            cid = config.TELEGRAM_CHAT_ID or 4444
+            # 1. Primera tanda (busqueda normal)
+            sol1 = {"comando": "categoria", "tipo": "categoria", "categoria_nombre": "❄️ Neveras", "consultas": ["nevera"], "chat_id": cid}
+            radar.atender_solicitudes([sol1], por_comando=3)
+
+            self.assertEqual(len(ofertas_enviadas), 3)
+            primera_tanda = list(ofertas_enviadas)
+            self.assertEqual(primera_tanda, ["k_0", "k_1", "k_2"])
+
+            # 2. Segunda tanda (solicitud de 'siguientes')
+            sol2 = {"tipo": "siguientes", "chat_id": cid}
+            radar.atender_solicitudes([sol2], por_comando=3)
+
+            segunda_tanda = ofertas_enviadas[3:]
+            self.assertEqual(len(segunda_tanda), 3)
+            self.assertEqual(segunda_tanda, ["k_3", "k_4", "k_5"])
+
+            # No deben repetirse
+            self.assertEqual(set(primera_tanda) & set(segunda_tanda), set())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

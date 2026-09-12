@@ -568,7 +568,8 @@ def _tiendas_por_departamento(consultas_custom: list[str] | None) -> tuple[list[
 def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
                       consultas_custom: list[str] | None = None,
                       trm: float = 4000.0,
-                      max_por_tienda: int = 3) -> list:
+                      max_por_tienda: int = 3,
+                      solo_nuevas: bool = False) -> list:
     """Las mejores ofertas de tiendas de Todo Colombia, garantizando el Top 3 por tienda en comparaciones."""
     ofertas: list[Deal] = []
 
@@ -609,14 +610,20 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
         for tienda_nombre in todas_tiendas:
             nuevas_t = por_tienda_nuevas.get(tienda_nombre, [])
             repetidas_t = por_tienda_repetidas.get(tienda_nombre, [])
-            balanceadas.extend((nuevas_t + repetidas_t)[:max_por_tienda])
+            if solo_nuevas:
+                balanceadas.extend(nuevas_t[:max_por_tienda])
+            else:
+                balanceadas.extend((nuevas_t + repetidas_t)[:max_por_tienda])
 
         limite = max(cuantas, len(balanceadas))
         seleccion = balanceadas[:limite]
     else:
         nuevas = [par for par in unicas if par[0].key not in vistas]
         repetidas = [par for par in unicas if par[0].key in vistas]
-        seleccion = (nuevas + repetidas)[:cuantas]
+        if solo_nuevas:
+            seleccion = nuevas[:cuantas]
+        else:
+            seleccion = (nuevas + repetidas)[:cuantas]
 
     for deal, verdict in seleccion:
         if deal.key in vistas:
@@ -626,7 +633,8 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
 
 def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
              cuantas: int, consultas_custom: list[str] | None = None,
-             trm: float = 4000.0) -> list:
+             trm: float = 4000.0,
+             solo_nuevas: bool = False) -> list:
     """Las mejores ofertas de esas fuentes, priorizando las que no has visto."""
     ofertas: list[Deal] = []
     for fuente in fuentes:
@@ -654,7 +662,10 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
     # Pedir la misma tienda dos veces seguidas debe traer cosas distintas.
     nuevas = [par for par in unicas if par[0].key not in vistas]
     repetidas = [par for par in unicas if par[0].key in vistas]
-    seleccion = (nuevas + repetidas)[:cuantas]
+    if solo_nuevas:
+        seleccion = nuevas[:cuantas]
+    else:
+        seleccion = (nuevas + repetidas)[:cuantas]
     for deal, verdict in seleccion:
         if deal.key in vistas:
             verdict.etiquetas.append("ya te la habia mostrado")
@@ -697,7 +708,7 @@ def atender_solicitudes(solicitudes: list[dict],
     atendidos = 0
 
     for solicitud in solicitudes:
-        comando = solicitud["comando"]
+        comando = solicitud.get("comando", "")
         tipo = solicitud.get("tipo", "slash")
         chat_id = solicitud.get("chat_id")
         # El numero que pediste manda; si no pediste, el valor por defecto.
@@ -716,6 +727,22 @@ def atender_solicitudes(solicitudes: list[dict],
                         f"👤 <b>{telegram.esc(nombre_u)}</b>{telegram.esc(handle_u)} inició una sesión en PromosBot.",
                         chat_id=config.TELEGRAM_ADMIN_ID,
                     )
+
+        if tipo == "siguientes":
+            ultima = mod_comandos.obtener_ultima_busqueda(chat_id)
+            if not ultima:
+                telegram.send(
+                    "No tienes una búsqueda previa para continuar. Selecciona una opción en el menú inferior:",
+                    reply_markup=telegram.teclado_tiendas(),
+                    chat_id=chat_id,
+                )
+                atendidos += 1
+                continue
+            solicitud = dict(ultima)
+            solicitud["chat_id"] = chat_id
+            solicitud["es_siguiente"] = True
+            comando = solicitud.get("comando")
+            tipo = solicitud.get("tipo")
 
         if tipo == "unirse_canal":
             nombre = solicitud.get("nombre", "Usuario")
@@ -881,6 +908,8 @@ def atender_solicitudes(solicitudes: list[dict],
         # Inicializacion bajo demanda solo cuando realmente se van a buscar ofertas
         if tipo == "categoria":
             token_actual = _token_busqueda_activa
+            if not solicitud.get("es_siguiente"):
+                mod_comandos.guardar_ultima_busqueda(chat_id, solicitud)
             categoria_nombre = solicitud.get("categoria_nombre", "Categoría")
             tienda = mod_comandos.tienda_activa(chat_id=chat_id)
             if tienda not in mod_comandos.CATALOGO and tienda not in ("objetivos", "estado"):
@@ -892,7 +921,9 @@ def atender_solicitudes(solicitudes: list[dict],
             # Notificar de inmediato al usuario que se inicio la revision si no se envio antes
             if not solicitud.get("notificado"):
                 telegram.accion_escribiendo(chat_id=chat_id)
-                if fuente == "co":
+                if solicitud.get("es_siguiente"):
+                    telegram.send(f"🔄 <i>Buscando siguientes ofertas de <b>{telegram.esc(categoria_nombre)}</b>...</i>", chat_id=chat_id)
+                elif fuente == "co":
                     telegram.send(f"🇨🇴 <i>Comparando el <b>Top 3 de {telegram.esc(categoria_nombre)}</b> en todas las tiendas de Colombia...</i>", chat_id=chat_id)
                 else:
                     telegram.send(f"🔍 <i>Revisando ofertas de <b>{telegram.esc(categoria_nombre)}</b> en <b>{telegram.esc(titulo_tienda)}</b>...</i>", chat_id=chat_id)
@@ -915,17 +946,18 @@ def atender_solicitudes(solicitudes: list[dict],
             else:
                 consultas = solicitud.get("consultas", [])
 
+            solo_nuevas = bool(solicitud.get("es_siguiente"))
             if fuente == "co":
                 # Consulta las tiendas autorizadas garantizando Top 3 por tienda
-                seleccion = _mejores_colombia(watchlist, vistas, cuantas, consultas_custom=consultas, trm=trm or 4000.0)
+                seleccion = _mejores_colombia(watchlist, vistas, cuantas, consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
             elif fuente == "*":
                 del_exterior = max(cuantas // 5, 1)
                 seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
-                                      None, vistas, cuantas - del_exterior, consultas_custom=consultas, trm=trm or 4000.0)
-                             + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, consultas_custom=consultas, trm=trm or 4000.0))
+                                      None, vistas, cuantas - del_exterior, consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
+                             + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
             else:
                 seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas,
-                                     consultas_custom=consultas, trm=trm or 4000.0)
+                                     consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
             if token_actual != _token_busqueda_activa:
                 print("  [radar] categoria cancelada por nueva solicitud")
@@ -933,20 +965,28 @@ def atender_solicitudes(solicitudes: list[dict],
                 continue
 
             if not seleccion:
-                telegram.send(
-                    f"Ahora mismo no encontré rebajas destacadas en {telegram.esc(categoria_nombre)} para <b>{telegram.esc(titulo_tienda)}</b>.",
-                    reply_markup=telegram.teclado_categorias(titulo_tienda),
-                    chat_id=chat_id,
-                )
+                if solicitud.get("es_siguiente"):
+                    telegram.send(
+                        f"🏁 <b>¡Ya te mostré todas las ofertas destacadas</b> de {telegram.esc(categoria_nombre)} en este momento!\n\n"
+                        f"Puedes explorar otra categoría o tienda en los botones abajo.",
+                        reply_markup=telegram.teclado_categorias(titulo_tienda),
+                        chat_id=chat_id,
+                    )
+                else:
+                    telegram.send(
+                        f"Ahora mismo no encontré rebajas destacadas en {telegram.esc(categoria_nombre)} para <b>{telegram.esc(titulo_tienda)}</b>.",
+                        reply_markup=telegram.teclado_categorias(titulo_tienda),
+                        chat_id=chat_id,
+                    )
                 atendidos += 1
                 continue
 
             if fuente == "co":
                 encabezado = (f"🇨🇴 <b>Comparador Nacional · {telegram.esc(categoria_nombre)}</b>\n"
-                              f"<i>Top 3 mejores rebajas de cada tienda en Colombia:</i>")
+                              f"<i>{'Siguientes' if solo_nuevas else 'Top 3'} mejores rebajas de cada tienda en Colombia:</i>")
             else:
                 encabezado = (f"🏬 <b>{telegram.esc(titulo_tienda)}</b> · {telegram.esc(categoria_nombre)}\n"
-                              f"<i>Mejores rebajas encontradas ahora mismo:</i>")
+                              f"<i>{'Siguientes' if solo_nuevas else 'Mejores'} rebajas encontradas ahora mismo:</i>")
 
             telegram.send(
                 encabezado,
@@ -974,16 +1014,16 @@ def atender_solicitudes(solicitudes: list[dict],
 
             if fuente == "co":
                 msg_fin = (f"🏁 <b>Comparación finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas "
-                           f"(Top 3 por tienda) de {telegram.esc(categoria_nombre)} en Colombia.\n"
-                           f"<i>Puedes elegir otra opción en los botones:</i>")
+                           f"de {telegram.esc(categoria_nombre)} en Colombia.\n"
+                           f"<i>Presiona abajo para ver siguientes ofertas:</i>")
             else:
                 msg_fin = (f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas "
                            f"de {telegram.esc(categoria_nombre)} en {telegram.esc(titulo_tienda)}.\n"
-                           f"<i>Puedes elegir otra opción en los botones:</i>")
+                           f"<i>Presiona abajo para ver siguientes ofertas:</i>")
 
             telegram.send(
                 msg_fin,
-                reply_markup=telegram.teclado_categorias(titulo_tienda),
+                reply_markup=telegram.boton_siguientes_ofertas(),
                 chat_id=chat_id,
             )
             atendidos += 1
@@ -991,6 +1031,8 @@ def atender_solicitudes(solicitudes: list[dict],
 
         if tipo == "todo_tienda":
             token_actual = _token_busqueda_activa
+            if not solicitud.get("es_siguiente"):
+                mod_comandos.guardar_ultima_busqueda(chat_id, solicitud)
             tienda = mod_comandos.tienda_activa(chat_id=chat_id)
             if tienda not in mod_comandos.CATALOGO:
                 tienda = "colombia"
@@ -999,7 +1041,10 @@ def atender_solicitudes(solicitudes: list[dict],
             # Notificar de inmediato al usuario si no se envio antes
             if not solicitud.get("notificado"):
                 telegram.accion_escribiendo(chat_id=chat_id)
-                telegram.send(f"🔍 <i>Revisando las mejores ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
+                if solicitud.get("es_siguiente"):
+                    telegram.send(f"🔄 <i>Buscando siguientes ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
+                else:
+                    telegram.send(f"🔍 <i>Revisando las mejores ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
 
             if watchlist is None:
                 watchlist = config.load_watchlist()
@@ -1013,16 +1058,17 @@ def atender_solicitudes(solicitudes: list[dict],
                 except Exception as exc:
                     print(f"  [comandos] sin historial del radar: {exc}")
 
+            solo_nuevas = bool(solicitud.get("es_siguiente"))
             if fuente == "co":
                 # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
-                seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0)
+                seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
             elif fuente == "*":
                 del_exterior = max(cuantas // 5, 1)
                 seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
-                                      None, vistas, cuantas - del_exterior, trm=trm or 4000.0)
-                             + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0))
+                                      None, vistas, cuantas - del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
+                             + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
             else:
-                seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0)
+                seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
             if token_actual != _token_busqueda_activa:
                 print("  [radar] todo_tienda cancelado por nueva solicitud")
@@ -1030,13 +1076,21 @@ def atender_solicitudes(solicitudes: list[dict],
                 continue
 
             if not seleccion:
-                telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
-                              reply_markup=telegram.teclado_categorias(titulo),
-                              chat_id=chat_id)
+                if solicitud.get("es_siguiente"):
+                    telegram.send(
+                        f"🏁 <b>¡Ya te mostré todas las ofertas disponibles</b> en {telegram.esc(titulo)} en este momento!\n\n"
+                        f"Puedes explorar otra tienda en el menú inferior.",
+                        reply_markup=telegram.teclado_categorias(titulo),
+                        chat_id=chat_id,
+                    )
+                else:
+                    telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
+                                  reply_markup=telegram.teclado_categorias(titulo),
+                                  chat_id=chat_id)
                 atendidos += 1
                 continue
 
-            telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — lo mejor de ahora mismo",
+            telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — {'siguientes ofertas' if solo_nuevas else 'lo mejor de ahora mismo'}",
                           reply_markup=telegram.teclado_categorias(titulo),
                           chat_id=chat_id)
             enviadas_ahora = []
@@ -1059,8 +1113,8 @@ def atender_solicitudes(solicitudes: list[dict],
             vistas.update(enviadas_ahora)
             telegram.send(
                 f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> mejores ofertas de {telegram.esc(titulo)}.\n"
-                f"<i>Puedes seguir explorando en los botones:</i>",
-                reply_markup=telegram.teclado_categorias(titulo),
+                f"<i>Presiona abajo para ver siguientes ofertas:</i>",
+                reply_markup=telegram.boton_siguientes_ofertas(),
                 chat_id=chat_id,
             )
             atendidos += 1
@@ -1073,13 +1127,18 @@ def atender_solicitudes(solicitudes: list[dict],
             continue
 
         token_actual = _token_busqueda_activa
+        if not solicitud.get("es_siguiente"):
+            mod_comandos.guardar_ultima_busqueda(chat_id, solicitud)
         mod_comandos.fijar_tienda_activa(comando, chat_id=chat_id)
         fuente, tiendas, titulo = mod_comandos.CATALOGO[comando]
 
         # Notificar de inmediato al usuario si no se envio antes
         if not solicitud.get("notificado"):
             telegram.accion_escribiendo(chat_id=chat_id)
-            telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
+            if solicitud.get("es_siguiente"):
+                telegram.send(f"🔄 <i>Buscando siguientes ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
+            else:
+                telegram.send(f"🔍 <i>Revisando ofertas en <b>{telegram.esc(titulo)}</b>...</i>", chat_id=chat_id)
 
         if watchlist is None:
             watchlist = config.load_watchlist()
@@ -1093,19 +1152,20 @@ def atender_solicitudes(solicitudes: list[dict],
             except Exception as exc:
                 print(f"  [comandos] sin historial del radar: {exc}")
 
+        solo_nuevas = bool(solicitud.get("es_siguiente"))
         if fuente == "co":
             # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
-            seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0)
+            seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
         elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
             # asi que se les reserva un cupo.
             del_exterior = max(cuantas // 5, 1)
             seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
-                                  None, vistas, cuantas - del_exterior, trm=trm or 4000.0)
-                         + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0))
+                                  None, vistas, cuantas - del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
+                         + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
         else:
-            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0)
+            seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
         if token_actual != _token_busqueda_activa:
             print("  [radar] comando cancelado por nueva solicitud")
@@ -1115,14 +1175,19 @@ def atender_solicitudes(solicitudes: list[dict],
         teclado_salida = (telegram.teclado_tiendas() if comando == "cajita"
                           else telegram.teclado_categorias(titulo))
         if not seleccion:
-            telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
-                          reply_markup=teclado_salida,
-                          chat_id=chat_id)
+            if solicitud.get("es_siguiente"):
+                telegram.send(f"🏁 <b>¡Ya te mostré todas las ofertas disponibles</b> en {telegram.esc(titulo)} en este momento!",
+                              reply_markup=teclado_salida,
+                              chat_id=chat_id)
+            else:
+                telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
+                              reply_markup=teclado_salida,
+                              chat_id=chat_id)
             atendidos += 1
             continue
 
         telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — "
-                      f"lo mejor de ahora mismo",
+                      f"{'siguientes ofertas' if solo_nuevas else 'lo mejor de ahora mismo'}",
                       reply_markup=teclado_salida,
                       chat_id=chat_id)
         enviadas_ahora = []
@@ -1145,8 +1210,8 @@ def atender_solicitudes(solicitudes: list[dict],
         vistas.update(enviadas_ahora)
         telegram.send(
             f"🏁 <b>Búsqueda finalizada</b> · Se enviaron las <b>{len(enviadas_ahora)}</b> ofertas de {telegram.esc(titulo)}.\n"
-            f"<i>Puedes seguir buscando con los botones:</i>",
-            reply_markup=teclado_salida,
+            f"<i>Presiona abajo para ver siguientes ofertas:</i>",
+            reply_markup=telegram.boton_siguientes_ofertas(),
             chat_id=chat_id,
         )
         atendidos += 1

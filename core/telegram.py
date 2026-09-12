@@ -416,6 +416,15 @@ def teclado_unirse_canal(url_canal: str | None = None) -> dict:
     }
 
 
+def boton_siguientes_ofertas() -> dict:
+    """Boton inline para pedir la siguiente tanda de ofertas de la misma busqueda."""
+    return {
+        "inline_keyboard": [
+            [{"text": "🔄 Ver siguientes ofertas", "callback_data": "siguientes_ofertas"}]
+        ]
+    }
+
+
 def es_miembro_del_canal(user_id: int | str,
                          channel_id: int | str | None = None) -> bool:
     """Verifica si el usuario es miembro activo del canal/grupo configurado."""

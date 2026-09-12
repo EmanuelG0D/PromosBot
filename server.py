@@ -192,6 +192,19 @@ def atender_callback_query(callback_query: dict) -> None:
     chat_id = (msg.get("chat") or {}).get("id")
     msg_id = msg.get("message_id")
 
+    # 0. Petición de siguientes ofertas (paginación)
+    if data == "siguientes_ofertas":
+        telegram.responder_callback(cq_id, "Buscando siguientes ofertas...")
+        solicitud_sig = {
+            "comando": "siguientes",
+            "chat_id": chat_id or remitente_id,
+            "user_id": remitente_id,
+            "tipo": "siguientes",
+            "notificado": True,
+        }
+        threading.Thread(target=radar.atender_solicitudes, args=([solicitud_sig],), daemon=True).start()
+        return
+
     # 1. Verificacion de suscripcion al canal (la presiona el propio usuario)
     if data == "verificar_canal":
         nombre = remitente.get("first_name") or "Usuario"
