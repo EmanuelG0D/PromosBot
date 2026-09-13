@@ -41,7 +41,7 @@ PUERTO = int(os.environ.get("PORT", "10000"))
 # 15.744 peticiones diarias para enterarse de lo mismo.
 RONDA_COMUNIDAD = ("slickdeals", "promocajita")
 RONDA_CATALOGOS = ("vtex", "algolia_co", "falabella", "droguerias",
-                   "mercadolibre", "ebay")
+                   "mercadolibre", "ebay", "koaj")
 INTERVALO_COMUNIDAD_MIN = float(os.environ.get("RONDA_COMUNIDAD_MINUTOS", "15"))
 # RUN_EVERY_MINUTES quedo obsoleta a proposito: heredarla aqui habria dejado
 # los catalogos en 15 minutos, que es justo lo que este cambio evita.

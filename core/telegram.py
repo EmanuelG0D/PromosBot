@@ -282,8 +282,9 @@ def teclado_tiendas() -> dict:
             [{"text": "🍳 Imusa"}, {"text": "☕ Oster"}],
             [{"text": "🎒 Totto"}, {"text": "👔 Arturo Calle"}],
             [{"text": "👞 Vélez"}, {"text": "👗 Studio F"}],
-            [{"text": "🦅 Americanino"}, {"text": "📦 Promocajita"}],
-            [{"text": "🇨🇴 Comparar Tiendas"}, {"text": "🇺🇸 Exterior (EE. UU.)"}],
+            [{"text": "🦅 Americanino"}, {"text": "👖 Koaj"}],
+            [{"text": "📦 Promocajita"}, {"text": "🇨🇴 Comparar Tiendas"}],
+            [{"text": "🇺🇸 Exterior (EE. UU.)"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -295,7 +296,7 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
     t_baja = tienda_nombre.lower()
 
     # Marcas oficiales de ropa y calzado
-    if any(m in t_baja for m in ("totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle")):
+    if any(m in t_baja for m in ("totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle", "koaj")):
         return {
             "keyboard": [
                 [{"text": "🌟 TODO"}, {"text": "👟 Tenis y Zapatos"}],

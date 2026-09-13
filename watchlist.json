@@ -385,5 +385,19 @@
       "bicicleta",
       "taladro"
     ]
+  },
+  "koaj": {
+    "_nota": "Koaj Colombia: moda urbana, jeans, camisetas, buzos y secciones de outlet en PrestaShop.",
+    "queries": [
+      "jean",
+      "camiseta",
+      "camisa",
+      "chaqueta",
+      "buzo",
+      "pantalon",
+      "ropa"
+    ],
+    "incluir_outlet": true,
+    "por_consulta": 24
   }
 }

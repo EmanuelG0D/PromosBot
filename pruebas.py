@@ -2327,6 +2327,79 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
         self.assertIn("flete casillero", msg_adi)
 
 
+class PruebaKoaj(unittest.TestCase):
+    """Verifica el scraper HTML y la integración de Koaj Colombia."""
+
+    HTML_MOCK = """
+    <div class="products row">
+        <article class="product-miniature js-product-miniature" data-id-product="12345">
+            <h3 class="s_title_block"><a href="https://www.koaj.co/jeans/12345-jean-slim.html" title="Jean Slim Fit Azul">Jean Slim Fit Azul</a></h3>
+            <img data-full-size-image-url="https://www.koaj.co/img/jean.jpg" src="https://www.koaj.co/img/thumb.jpg" />
+            <div class="product-price-and-shipping">
+                <span class="price st_discounted_price" aria-label="Precio">$\xa089.900</span>
+                <span class="regular-price" aria-label="Precio base">$\xa0137.900</span>
+                <span class="discount discount-percentage">-35%</span>
+            </div>
+        </article>
+        <article class="product-miniature js-product-miniature" data-id-product="67890">
+            <h3 class="s_title_block"><a href="/camisetas/67890-camiseta.html">Camiseta Gráfica Algodón</a></h3>
+            <img src="/img/camiseta.jpg" />
+            <div class="product-price-and-shipping">
+                <span class="price" aria-label="Precio">$ 34.900</span>
+            </div>
+            <span class="product-unavailable">Agotado</span>
+        </article>
+    </div>
+    """
+
+    def test_parsear_articulos_koaj(self):
+        from sources import koaj
+
+        deals = koaj.parsear_articulos(self.HTML_MOCK, etiqueta="Outlet Hombre")
+        self.assertEqual(len(deals), 2)
+
+        # Producto 1: en oferta con descuento
+        d1 = deals[0]
+        self.assertEqual(d1.key, "koaj:12345")
+        self.assertEqual(d1.title, "Jean Slim Fit Azul")
+        self.assertEqual(d1.url, "https://www.koaj.co/jeans/12345-jean-slim.html")
+        self.assertEqual(d1.price, 89900.0)
+        self.assertEqual(d1.list_price, 137900.0)
+        self.assertEqual(d1.discount_pct, 34.8)
+        self.assertEqual(d1.image, "https://www.koaj.co/img/jean.jpg")
+        self.assertTrue(d1.in_stock)
+        self.assertIn("Outlet Hombre", d1.notes)
+        self.assertIn("-35% descuento", d1.notes)
+
+        # Producto 2: sin descuento, agotado, enlace relativo completado
+        d2 = deals[1]
+        self.assertEqual(d2.key, "koaj:67890")
+        self.assertEqual(d2.title, "Camiseta Gráfica Algodón")
+        self.assertEqual(d2.url, "https://www.koaj.co/camisetas/67890-camiseta.html")
+        self.assertEqual(d2.price, 34900.0)
+        self.assertEqual(d2.list_price, 34900.0)
+        self.assertEqual(d2.discount_pct, 0.0)
+        self.assertEqual(d2.image, "https://www.koaj.co/img/camiseta.jpg")
+        self.assertFalse(d2.in_stock)
+
+    def test_integracion_koaj_radar_y_comandos(self):
+        import radar
+        from core import comandos as mod_comandos, telegram
+
+        # 1. FUENTES en radar
+        self.assertIn("koaj", radar.FUENTES)
+
+        # 2. Catálogo y comandos
+        self.assertIn("koaj", mod_comandos.CATALOGO)
+        self.assertIn("👖 koaj", mod_comandos.BOTONES_TIENDA)
+
+        # 3. Teclado de ropa para Koaj
+        teclado = telegram.teclado_categorias("Koaj")
+        textos_botones = [btn["text"] for fila in teclado["keyboard"] for btn in fila]
+        self.assertIn("👕 Camisetas y Polos", textos_botones)
+        self.assertIn("👖 Jeans y Pantalones", textos_botones)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -25,10 +25,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, ebay, mercadolibre, slickdeals, vtex
+from sources import algolia_co, falabella, promocajita, ebay, mercadolibre, slickdeals, vtex, koaj
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
-           "droguerias", "mercadolibre", "ebay")
+           "droguerias", "mercadolibre", "ebay", "koaj")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -124,6 +124,19 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                 cfg.get("condiciones"),
                 cfg.get("por_consulta", 50),
             )
+
+    if "koaj" in activas:
+        cfg = watchlist.get("koaj", {})
+        consultas = cfg.get("queries", [])
+        print(f"-> Koaj Colombia: {len(consultas)} busquedas + outlets")
+        ofertas += _sin_ruido(
+            koaj.fetch(
+                consultas,
+                incluir_outlet=cfg.get("incluir_outlet", True),
+                por_consulta=cfg.get("por_consulta", 24),
+            ),
+            cfg,
+        )
 
     return ofertas
 
@@ -381,6 +394,9 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
     elif fuente == "slickdeals":
         crudas = slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
                                   cfg.get("excluir"), cfg.get("incluir"))
+    elif fuente == "koaj":
+        crudas = koaj.fetch(consultas, incluir_outlet=cfg.get("incluir_outlet", True),
+                            por_consulta=cfg.get("por_consulta", 24))
     else:
         return []
     resultado = _sin_ruido(crudas, cfg)
@@ -583,6 +599,9 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
 
     if tiendas_falabella:
         ofertas += _ofertas_de(watchlist, "falabella", tiendas_falabella, consultas_custom=consultas_custom)
+
+    if not consultas_custom or any(any(p in DEPTO_ROPA for p in filtros._normalizar(c).split()) for c in (consultas_custom or [])):
+        ofertas += _ofertas_de(watchlist, "koaj", None, consultas_custom=consultas_custom)
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
