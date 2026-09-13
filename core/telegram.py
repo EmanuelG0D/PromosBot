@@ -95,17 +95,25 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
         lineas.append(f"\U0001F39F Cupon: {codigos}  <i>(tocalo para copiarlo)</i>")
 
     if landed is not None:
-        detalle = (
-            f"FOB {money(landed.fob_usd, 'USD')} + flete {money(landed.flete_usd, 'USD')}"
+        es_directo = getattr(deal, "free_shipping_co", False) or (
+            deal.country == "US" and "amazon" in deal.store.lower() and (deal.price or 0) >= 35
         )
-        if landed.exento:
-            detalle += " \u00b7 exento de IVA"
+        if es_directo:
+            total_cop = round((deal.price or 0) * landed.trm)
+            lineas.append(f"✈️🇨🇴 <b>Envío GRATIS directo a Colombia</b> <i>(sin casillero)</i>")
+            lineas.append(f"   <i>Total en tu puerta ≈ <b>{money(total_cop, 'COP')}</b> \u00b7 TRM {money(landed.trm, 'COP')}</i>")
         else:
-            detalle += f" + impuestos {money(landed.iva_usd + landed.arancel_usd, 'USD')}"
-        lineas.append(
-            f"\U0001F1E8\U0001F1F4 Puesto en Colombia \u2248 <b>{money(landed.total_cop, 'COP')}</b>"
-        )
-        lineas.append(f"   <i>{esc(detalle)} \u00b7 TRM {money(landed.trm, 'COP')}</i>")
+            detalle = (
+                f"FOB {money(landed.fob_usd, 'USD')} + flete casillero {money(landed.flete_usd, 'USD')}"
+            )
+            if landed.exento:
+                detalle += " \u00b7 exento de IVA"
+            else:
+                detalle += f" + impuestos {money(landed.iva_usd + landed.arancel_usd, 'USD')}"
+            lineas.append(
+                f"📦 <b>Puesto en Colombia con casillero \u2248 {money(landed.total_cop, 'COP')}</b>"
+            )
+            lineas.append(f"   <i>{esc(detalle)} \u00b7 TRM {money(landed.trm, 'COP')}</i>")
 
     if "sigue vigente tras" in verdict.motivo.lower():
         lineas.append("🔁 <b>¡Sigue disponible!</b> <i>· Oferta aún activa</i>")

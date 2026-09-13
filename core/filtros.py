@@ -127,3 +127,18 @@ def menciona(titulo: str, termino: str) -> bool:
 
     return any(_secuencia_coincide(titulo_palabras[i:i + n])
                for i in range(len(titulo_palabras) - n + 1))
+
+
+PESADOS_CASILLERO = (
+    "tv", "televisor", "television", "smart tv", "oled", "refrigerator", "refrigerador",
+    "nevera", "washing machine", "lavadora", "dryer", "secadora", "air conditioner",
+    "aire acondicionado", "caminadora", "treadmill", "furniture", "mueble", "generator",
+    "generador", "estufa", "stove", "range",
+)
+
+
+def es_pesado_para_casillero(titulo: str) -> bool:
+    """True si el producto es excesivamente pesado o voluminoso para flete de casillero aereo."""
+    limpio = _normalizar(titulo).split()
+    return any(p in limpio for p in PESADOS_CASILLERO)
+

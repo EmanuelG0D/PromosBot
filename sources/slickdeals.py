@@ -29,6 +29,12 @@ _TIENDAS = [
     "Nike", "Adidas", "Reebok", "Puma", "Under Armour", "Woot", "Home Depot",
     "Macy's", "Kohl's", "Dell", "Lenovo", "B&H", "StockX", "Sam's Club",
 ]
+MARCAS_PERMITIDAS = ("Amazon", "eBay", "Nike", "Adidas", "Puma")
+
+
+def es_tienda_permitida(nombre_tienda: str) -> bool:
+    """True si la tienda identificada es una de las 5 marcas autorizadas para Colombia."""
+    return any(p.lower() in (nombre_tienda or "").lower() for p in MARCAS_PERMITIDAS)
 
 
 def _texto_plano(html: str | None) -> str:
@@ -95,30 +101,46 @@ def _una_consulta(consulta: str, por_consulta: int, vetadas=None,
         if not filtros.pertinente(titulo, incluir):
             continue
 
+        tienda_detectada = _tienda(titulo)
+        marca_en_titulo = any(re.search(r"\b" + m.lower() + r"\b", titulo.lower()) for m in MARCAS_PERMITIDAS)
+        # Filtrar comercios no autorizados (Target, Macy's, etc.)
+        if not es_tienda_permitida(tienda_detectada) and not marca_en_titulo:
+            continue
+
         # La foto del producto viene en content:encoded, no en description.
         enriquecido = item.findtext("content:encoded", namespaces=_NS) or ""
         hallada = _IMAGEN.search(enriquecido)
         foto = hallada.group(1) if hallada else None
 
         descripcion = _texto_plano(item.findtext("description"))
-        texto = titulo + " " + descripcion
         cupones = extract_coupons(titulo, descripcion)
         notas = []
         if needs_clipping(titulo, descripcion):
             notas.append("Requiere activar el cupon (clip) en la pagina del producto")
 
+        precio_val = _precio(titulo) or _precio(descripcion)
+        texto_envio = (titulo + " " + descripcion).lower()
+        es_amazon = "amazon" in tienda_detectada.lower()
+        envio_gratis_co = (
+            (es_amazon and precio_val is not None and precio_val >= 35.0)
+            or "free shipping to colombia" in texto_envio
+            or "envio gratis a colombia" in texto_envio
+            or "ships to colombia" in texto_envio
+        )
+
         ofertas.append(Deal(
             source="slickdeals",
-            store=_tienda(titulo),
+            store=tienda_detectada,
             country="US",
             key="slickdeals:" + (item.findtext("guid") or enlace).strip(),
             title=titulo,
             url=enlace,
-            price=_precio(titulo) or _precio(descripcion),
+            price=precio_val,
             currency="USD",
             coupons=cupones,
             notes=notas,
             image=foto,
+            free_shipping_co=envio_gratis_co,
         ))
     return ofertas
 

@@ -1278,6 +1278,9 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             objetivo = mod_objetivos.alcanzado(deal, objetivos_cfg)
             if not objetivo and not _precio_admisible(deal, trm):
                 continue
+            if deal.country == "US" and not getattr(deal, "free_shipping_co", False):
+                if filtros.es_pesado_para_casillero(deal.title):
+                    continue
             verdict = evaluar(deal, stats, objetivo, veracidad)
 
             if top:

@@ -30,6 +30,8 @@ class Deal:
     expires_at: str | None = None
     # Foto del producto: convierte la alerta en una tarjeta con imagen.
     image: str | None = None
+    # True si el envio internacional es directo y gratis a Colombia (sin casillero).
+    free_shipping_co: bool = False
 
     @property
     def discount_pct(self) -> float:

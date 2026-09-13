@@ -2290,6 +2290,42 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
         self.assertEqual(config.MAX_ALERTS_PER_RUN, 4)
         self.assertFalse(config.SEED_ON_EMPTY_DB)
 
+    def test_marcas_usa_y_envio_directo_vs_casillero(self):
+        from sources import slickdeals
+        from core import filtros, telegram
+        from core.models import Deal
+        from core.landed import calcular
+        from core.scoring import Verdict
+
+        # 1. Filtro estricto de marcas permitidas en Slickdeals
+        self.assertTrue(slickdeals.es_tienda_permitida(slickdeals._tienda("Adidas Men's Ultraboost Shoes at eBay")))
+        self.assertTrue(slickdeals.es_tienda_permitida(slickdeals._tienda("Apple AirPods Pro at Amazon")))
+        self.assertTrue(slickdeals.es_tienda_permitida(slickdeals._tienda("Nike Air Force 1 at Nike")))
+        self.assertFalse(slickdeals.es_tienda_permitida(slickdeals._tienda("Macy's Women's Handbag at Macy's")))
+        self.assertFalse(slickdeals.es_tienda_permitida(slickdeals._tienda("Target 50-Inch TV at Target")))
+        self.assertFalse(slickdeals.es_tienda_permitida(slickdeals._tienda("Kohl's Fleece Jacket at Kohl's")))
+
+        # 2. Deteccion de pesados para casillero
+        self.assertTrue(filtros.es_pesado_para_casillero("LG 55-Inch 4K Smart TV"))
+        self.assertTrue(filtros.es_pesado_para_casillero("Samsung Refrigerator 28 cu ft"))
+        self.assertFalse(filtros.es_pesado_para_casillero("Adidas Men's Running Shoes"))
+        self.assertFalse(filtros.es_pesado_para_casillero("Dell 27-Inch Gaming Monitor"))
+
+        # 3. Renderizado de Amazon directo sin casillero
+        d_amazon = Deal("slickdeals", "Amazon (via Slickdeals)", "US", "amz_1", "Acer 24 Gaming Monitor", "http://amz", 110.0, "USD", 180.0, free_shipping_co=True)
+        landed_amz = calcular(110.0, trm=4000.0)
+        v = Verdict(alertar=True, motivo="oferta", confianza="alta")
+        msg_amz = telegram.render(d_amazon, v, landed=landed_amz)
+        self.assertIn("Envío GRATIS directo a Colombia", msg_amz)
+        self.assertIn("sin casillero", msg_amz)
+
+        # 4. Renderizado de casillero (Adidas)
+        d_adidas = Deal("slickdeals", "Adidas (via Slickdeals)", "US", "adi_1", "Adidas Run 70s Shoes", "http://adi", 25.0, "USD", 70.0, free_shipping_co=False)
+        landed_adi = calcular(25.0, trm=4000.0)
+        msg_adi = telegram.render(d_adidas, v, landed=landed_adi)
+        self.assertIn("Puesto en Colombia con casillero", msg_adi)
+        self.assertIn("flete casillero", msg_adi)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
