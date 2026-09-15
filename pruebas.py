@@ -447,7 +447,7 @@ class PruebaAlcanceSlickdeals(unittest.TestCase):
                        "Adidas Women's Adizero SL2 Running Shoes $38",
                        "PUMA Men's Softride Sneakers $29.99",
                        "Nike Men's Revolution 7 Running Shoes $37.97",
-                       '$697.99 | 75" Hisense E7 Series 4K TV at Amazon'):
+                       "Levi's Men's 511 Slim Fit Jeans $29.99"):
             self.assertTrue(self.pasa(titulo), f"deberia pasar: {titulo}")
 
     def test_las_mochilas_ya_no_se_vetan(self):
@@ -455,11 +455,13 @@ class PruebaAlcanceSlickdeals(unittest.TestCase):
         self.assertTrue(self.pasa('17" PUMA Pitch Ball Backpack $16.04'))
 
     def test_lo_que_quedo_fuera_del_alcance(self):
-        """Tecnologia y consolas ya no se buscan aqui; las traen las tiendas
-        colombianas, que si publican precio de lista y se pueden verificar."""
+        """Tecnología, televisores, consolas y juegos ya no se buscan aquí;
+        Slickdeals queda exclusivo para ropa y calzado de marca."""
         for titulo in ("Nintendo Switch 2 System Black at Woot! $449.99",
                        "Xbox Elite Wireless Controller Series 2 $119",
-                       '27" LG Ultragear 1440p 300Hz Monitor $210'):
+                       '27" LG Ultragear 1440p 300Hz Monitor $210',
+                       '$697.99 | 75" Hisense E7 Series 4K TV at Amazon',
+                       "Biomutant (Nintendo Switch) at Amazon $13.99"):
             self.assertFalse(self.pasa(titulo), f"no deberia entrar: {titulo}")
 
     def test_el_veto_de_siempre_sigue_en_pie(self):
@@ -468,17 +470,6 @@ class PruebaAlcanceSlickdeals(unittest.TestCase):
                        "Elden Ring Digital Code (Xbox) $29.99",
                        "Borderlands 4 Super Deluxe Edition $49.99"):
             self.assertFalse(self.pasa(titulo), f"deberia vetarse: {titulo}")
-
-    def test_un_juego_de_amazon_todavia_se_cuela(self):
-        """Limitacion conocida, no un descuido.
-
-        "amazon" en incluir deja pasar cualquier cosa de Amazon, juegos
-        incluidos, cuando el titulo no usa el vocabulario vetado. Se acepta
-        porque es lo que trae tambien el televisor de 75 pulgadas, y porque
-        sin precio de lista un juego de $14 nunca gana un cupo de alerta
-        frente a una rebaja verificada. Si molesta, es una linea en "excluir".
-        """
-        self.assertTrue(self.pasa("Biomutant (Nintendo Switch) at Amazon $13.99"))
 
 
 class PruebaEnlacesVtex(unittest.TestCase):
@@ -2317,14 +2308,14 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
         v = Verdict(alertar=True, motivo="oferta", confianza="alta")
         msg_amz = telegram.render(d_amazon, v, landed=landed_amz)
         self.assertIn("Envío GRATIS directo a Colombia", msg_amz)
-        self.assertIn("sin casillero", msg_amz)
+        self.assertNotIn("casillero", msg_amz)
 
-        # 4. Renderizado de casillero (Adidas)
+        # 4. Renderizado internacional (Adidas) sin palabra casillero
         d_adidas = Deal("slickdeals", "Adidas (via Slickdeals)", "US", "adi_1", "Adidas Run 70s Shoes", "http://adi", 25.0, "USD", 70.0, free_shipping_co=False)
         landed_adi = calcular(25.0, trm=4000.0)
         msg_adi = telegram.render(d_adidas, v, landed=landed_adi)
-        self.assertIn("Puesto en Colombia con casillero", msg_adi)
-        self.assertIn("flete casillero", msg_adi)
+        self.assertIn("Puesto en Colombia", msg_adi)
+        self.assertNotIn("casillero", msg_adi)
 
 
 class PruebaKoaj(unittest.TestCase):
@@ -2400,8 +2391,77 @@ class PruebaKoaj(unittest.TestCase):
         self.assertIn("👖 Jeans y Pantalones", textos_botones)
 
 
+class PruebaPromoHunter(unittest.TestCase):
+    """Verifica el extractor estructurado y filtros de El Promo Hunter."""
+
+    MOCK_HTML = r"""
+    <html>
+    <script>
+    self.__next_f.push([1,"1:[\"$\",\"$L16\",null,{\"initialDeals\":[{\"id\":99901,\"titulo\":\"Audífonos Inalámbricos Bluetooth\",\"precio_oferta\":50000,\"precio_original\":100000,\"enlace\":\"https://www.amazon.com/dp/B0ABC123?m=XYZ&tag=ajeno-20\",\"cupones\":\"CUPON50\",\"casillero\":0,\"rating\":\"4.8\",\"num_resenas\":120,\"asin\":\"B0ABC123\"},{\"id\":99902,\"titulo\":\"Producto con Casillero\",\"precio_oferta\":30000,\"precio_original\":60000,\"enlace\":\"https://www.amazon.com/dp/B0XYZ789\",\"cupones\":\"¡No necesita!\",\"casillero\":1,\"rating\":\"4.0\",\"num_resenas\":10,\"asin\":\"B0XYZ789\"}]}]"]);
+    </script>
+    </html>
+    """
+
+    def test_extraer_deals_html(self):
+        from sources import promohunter
+        deals_raw = promohunter.extraer_deals_html(self.MOCK_HTML)
+        self.assertEqual(len(deals_raw), 2)
+        self.assertEqual(deals_raw[0]["id"], 99901)
+        self.assertEqual(deals_raw[1]["id"], 99902)
+
+    def test_filtro_casillero_estricto(self):
+        from sources import promohunter
+        deals_raw = promohunter.extraer_deals_html(self.MOCK_HTML)
+        # El deal 99902 tiene casillero == 1 -> DEBE ser descartado
+        d_casillero = promohunter.parse_deal(deals_raw[1])
+        self.assertIsNone(d_casillero)
+
+        # El deal 99901 tiene casillero == 0 -> DEBE ser admitido con envio directo
+        d_directo = promohunter.parse_deal(deals_raw[0])
+        self.assertIsNotNone(d_directo)
+        self.assertEqual(d_directo.key, "promohunter:99901")
+        self.assertEqual(d_directo.price, 50000.0)
+        self.assertEqual(d_directo.list_price, 100000.0)
+        self.assertEqual(d_directo.discount_pct, 50.0)
+        self.assertEqual(d_directo.currency, "COP")
+        self.assertTrue(d_directo.free_shipping_co)
+        self.assertIn("CUPON50", d_directo.coupons)
+        self.assertIn("4.8", d_directo.notes[0])
+        # Verifica que se limpió el tag ajeno de la URL
+        self.assertNotIn("tag=ajeno-20", d_directo.url)
+        self.assertIn("https://www.amazon.com/dp/B0ABC123", d_directo.url)
+
+    def test_limpiar_enlace_amazon(self):
+        from sources import promohunter
+        url = "https://www.amazon.com/dp/B012345678?tag=creador-20&ref=deal_link&m=SELLER1"
+        limpia = promohunter.limpiar_enlace_amazon(url)
+        self.assertNotIn("tag=", limpia)
+        self.assertIn("ref=deal_link", limpia)
+        self.assertIn("m=SELLER1", limpia)
+
+    def test_slickdeals_filtro_exclusivo_moda(self):
+        from sources import slickdeals
+        # Zapatos y ropa de marca -> Pasan
+        self.assertTrue(slickdeals.es_calzado_o_ropa_de_marca("Adidas Men's Ultraboost 1.0 Running Shoes", "Adidas via Slickdeals"))
+        self.assertTrue(slickdeals.es_calzado_o_ropa_de_marca("Nike Air Force 1 '07 Sneakers at Nike", "Nike via Slickdeals"))
+        self.assertTrue(slickdeals.es_calzado_o_ropa_de_marca("Puma Essentials Fleece Hoodie at Amazon", "Amazon via Slickdeals"))
+        self.assertTrue(slickdeals.es_calzado_o_ropa_de_marca("Levi's Men's 511 Slim Fit Jeans at eBay", "eBay via Slickdeals"))
+
+        # Tecnología o no-moda -> Descartados
+        self.assertFalse(slickdeals.es_calzado_o_ropa_de_marca("Apple AirPods Pro 2 at Amazon", "Amazon via Slickdeals"))
+        self.assertFalse(slickdeals.es_calzado_o_ropa_de_marca("Dell 27-Inch 4K Gaming Monitor at Dell", "Dell via Slickdeals"))
+        self.assertFalse(slickdeals.es_calzado_o_ropa_de_marca("Samsung Galaxy S24 Ultra 5G at Best Buy", "Best Buy via Slickdeals"))
+        # Calzado sin marca reconocida -> Descartado
+        self.assertFalse(slickdeals.es_calzado_o_ropa_de_marca("Generic Breathable Walking Shoes at Amazon", "Amazon via Slickdeals"))
+
+    def test_promohunter_en_radar_fuentes(self):
+        import radar
+        self.assertIn("promohunter", radar.FUENTES)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
 
 

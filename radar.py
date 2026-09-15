@@ -25,10 +25,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, ebay, mercadolibre, slickdeals, vtex, koaj
+from sources import algolia_co, falabella, promocajita, ebay, mercadolibre, slickdeals, vtex, koaj, promohunter
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
-           "droguerias", "mercadolibre", "ebay", "koaj")
+           "droguerias", "mercadolibre", "ebay", "koaj", "promohunter")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -134,6 +134,19 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                 consultas,
                 incluir_outlet=cfg.get("incluir_outlet", True),
                 por_consulta=cfg.get("por_consulta", 24),
+            ),
+            cfg,
+        )
+
+    if "promohunter" in activas:
+        cfg = watchlist.get("promohunter", {})
+        paginas = cfg.get("paginas", 2)
+        print(f"-> El Promo Hunter: {paginas} páginas web")
+        ofertas += _sin_ruido(
+            promohunter.fetch(
+                paginas=paginas,
+                incluir=cfg.get("incluir"),
+                excluir=cfg.get("excluir"),
             ),
             cfg,
         )

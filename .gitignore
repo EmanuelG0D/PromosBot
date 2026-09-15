@@ -1,5 +1,6 @@
 .env
 radar.db
+*.db
 __pycache__/
 *.pyc
 .venv/

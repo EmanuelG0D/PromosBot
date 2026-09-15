@@ -100,18 +100,18 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
         )
         if es_directo:
             total_cop = round((deal.price or 0) * landed.trm)
-            lineas.append(f"✈️🇨🇴 <b>Envío GRATIS directo a Colombia</b> <i>(sin casillero)</i>")
+            lineas.append(f"✈️🇨🇴 <b>Envío GRATIS directo a Colombia</b>")
             lineas.append(f"   <i>Total en tu puerta ≈ <b>{money(total_cop, 'COP')}</b> \u00b7 TRM {money(landed.trm, 'COP')}</i>")
         else:
             detalle = (
-                f"FOB {money(landed.fob_usd, 'USD')} + flete casillero {money(landed.flete_usd, 'USD')}"
+                f"FOB {money(landed.fob_usd, 'USD')} + flete {money(landed.flete_usd, 'USD')}"
             )
             if landed.exento:
                 detalle += " \u00b7 exento de IVA"
             else:
                 detalle += f" + impuestos {money(landed.iva_usd + landed.arancel_usd, 'USD')}"
             lineas.append(
-                f"📦 <b>Puesto en Colombia con casillero \u2248 {money(landed.total_cop, 'COP')}</b>"
+                f"📦 <b>Puesto en Colombia \u2248 {money(landed.total_cop, 'COP')}</b>"
             )
             lineas.append(f"   <i>{esc(detalle)} \u00b7 TRM {money(landed.trm, 'COP')}</i>")
 

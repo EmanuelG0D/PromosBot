@@ -178,32 +178,39 @@
     "_nota": "PUMA no se busca aqui: estas tiendas no la venden y su buscador devuelve colchones 'espumados' y adaptadores 'Compumax'. Vive en Falabella."
   },
   "slickdeals": {
-    "_nota": "Solo Amazon y las marcas de ropa y calzado que interesan. Antes eran 22 busquedas de tecnologia y consolas -1.584 peticiones al dia, seis veces mas que cualquier tienda- para un feed que no cambia tan rapido. 'portada' lee la primera pagina, que trae de todo; 'incluir' es lo que la deja en lo que si importa.",
+    "_nota": "Exclusivo calzado y ropa de marca autorizada. Se eliminan consultas de tecnología.",
     "queries": [
       "portada",
-      "amazon",
       "adidas",
       "puma",
       "nike",
+      "under armour",
+      "new balance",
+      "reebok",
       "sneakers",
-      "clothing",
+      "running shoes",
       "hoodie",
       "jacket",
       "jeans",
-      "monitor",
-      "laptop",
-      "ssd",
-      "headphones"
+      "clothing"
     ],
     "incluir": [
-      "amazon",
       "adidas",
       "puma",
       "nike",
       "reebok",
       "new balance",
+      "under armour",
+      "levi's",
+      "levis",
+      "columbia",
       "shoe",
+      "shoes",
       "sneaker",
+      "sneakers",
+      "boot",
+      "boots",
+      "slide",
       "clothing",
       "apparel",
       "hoodie",
@@ -399,5 +406,11 @@
     ],
     "incluir_outlet": true,
     "por_consulta": 24
+  },
+  "promohunter": {
+    "_nota": "Ofertas verificadas de Amazon con envío directo gratis a Colombia de El Promo Hunter.",
+    "paginas": 2,
+    "incluir": [],
+    "excluir": []
   }
 }
