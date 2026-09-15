@@ -494,6 +494,12 @@ def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
     """Verifica que el precio este dentro del tope especifico de su categoria o tope general."""
     if deal.price is None:
         return True
+
+    # Cazadores de comunidad (PromoHunter, Milo Derrocha, Promocajita) ya vienen curados
+    # y quedan exentos de topes para no bloquear gangas reales de alto valor.
+    if deal.source in {"promohunter", "miloderrocha", "promocajita"}:
+        return True
+
     precio_cop = deal.price if deal.currency == "COP" else (deal.price * trm)
 
     # 1. Buscar si coincide con alguna categoria especifica
@@ -1320,8 +1326,9 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             # Contraste contra el minimo real de la ventana: es lo unico que
             # desenmascara la maniobra de subir el precio para luego "rebajarlo".
             veracidad = mod_veracidad.analizar(deal.price, historial)
-            objetivo = mod_objetivos.alcanzado(deal, objetivos_cfg)
-            if not objetivo and not _precio_admisible(deal, trm):
+            es_cazador = deal.source in {"promohunter", "miloderrocha", "promocajita"}
+            objetivo = None if es_cazador else mod_objetivos.alcanzado(deal, objetivos_cfg)
+            if not es_cazador and not objetivo and not _precio_admisible(deal, trm):
                 continue
             if deal.country == "US" and not getattr(deal, "free_shipping_co", False):
                 if filtros.es_pesado_para_casillero(deal.title):

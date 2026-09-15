@@ -2506,6 +2506,39 @@ class PruebaMiloDerrocha(unittest.TestCase):
         import radar
         self.assertIn("miloderrocha", radar.FUENTES)
 
+    def test_cazadores_exentos_de_topes_y_sin_objetivo_cumplido(self):
+        import radar
+        from core.models import Deal
+
+        # 1. Gráfica o portátil caro de $2.5M COP (supera el MAX_PRICE_COP de $2.0M)
+        deal_gpu = Deal(
+            source="promohunter",
+            store="Amazon (vía PromoHunter)",
+            country="CO",
+            key="ph_gpu_1",
+            title="Tarjeta Gráfica RTX 4070 12GB",
+            url="http://amz",
+            price=2500000.0,
+            currency="COP",
+            list_price=5000000.0,
+        )
+        # Debe ser admisible porque viene de un cazador comunitario
+        self.assertTrue(radar._precio_admisible(deal_gpu))
+
+        # 2. Una tienda masiva normal al mismo precio sí se bloquea
+        deal_tienda = Deal(
+            source="falabella",
+            store="Falabella",
+            country="CO",
+            key="fal_gpu_1",
+            title="Tarjeta Gráfica RTX 4070 12GB",
+            url="http://fal",
+            price=2500000.0,
+            currency="COP",
+            list_price=5000000.0,
+        )
+        self.assertFalse(radar._precio_admisible(deal_tienda))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
