@@ -84,11 +84,11 @@ _estado: dict = {
 
 
 def _ahora() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(ZONA_CO)
 
 
 def log(mensaje: str) -> None:
-    print(f"[{_ahora().strftime('%Y-%m-%d %H:%M:%S')}Z] {mensaje}", flush=True)
+    print(f"[{_ahora().strftime('%Y-%m-%d %H:%M:%S')} COT] {mensaje}", flush=True)
 
 
 def en_horario(ahora: dt.datetime | None = None) -> bool:

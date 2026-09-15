@@ -29,7 +29,8 @@ _CACHE_TRM: tuple[str, float, str] | None = None
 def get_trm(store=None) -> tuple[float, str]:
     """Devuelve (valor, origen). Cachea un valor por dia en memoria y SQLite."""
     global _CACHE_TRM
-    hoy = dt.date.today().isoformat()
+    zona_co = dt.timezone(dt.timedelta(hours=-5))
+    hoy = dt.datetime.now(zona_co).date().isoformat()
     if _CACHE_TRM is not None and _CACHE_TRM[0] == hoy:
         return _CACHE_TRM[1], _CACHE_TRM[2]
 
