@@ -173,11 +173,13 @@ class Store:
 
     # -- freno diario ----------------------------------------------------
     def enviadas_hoy(self) -> int:
-        hoy = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        hoy = dt.datetime.now(zona_co).date().isoformat()
         return int(self.get_meta(f"enviadas:{hoy}") or 0)
 
     def sumar_enviada(self) -> int:
-        hoy = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        hoy = dt.datetime.now(zona_co).date().isoformat()
         total = self.enviadas_hoy() + 1
         self.set_meta(f"enviadas:{hoy}", str(total))
         return total
