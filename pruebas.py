@@ -2459,8 +2459,57 @@ class PruebaPromoHunter(unittest.TestCase):
         self.assertIn("promohunter", radar.FUENTES)
 
 
+class PruebaMiloDerrocha(unittest.TestCase):
+    """Verifica el extractor estructurado y filtros de Milo Derrocha."""
+
+    MOCK_HTML = r"""
+    <div data-post="miloderrocha/100">
+        <div class="tgme_widget_message_text js-message_text">
+            Sudadera Deportiva Hanes con Capucha<br>
+            💰 Precio: $35.000<br>
+            ❌ Antes: $70.000<br>
+            🚚 Envío GRATIS<br>
+            <a href="https://www.amazon.com/dp/B0C1T9M4PQ?tag=milo-20">Ver Oferta</a>
+        </div>
+        <div style="background-image: url('https://cdn1.telesco.pe/file/sample123.jpg')"></div>
+    </div>
+    <div data-post="miloderrocha/101">
+        <div class="tgme_widget_message_text js-message_text">
+            Buenos días a todos! Hoy se vienen descuentazos 🔥
+        </div>
+    </div>
+    """
+
+    def test_extraer_deals_html_milo(self):
+        from sources import miloderrocha
+        deals = miloderrocha.extraer_deals_html(self.MOCK_HTML)
+        # El post 101 no tiene precio -> debe ignorarse
+        self.assertEqual(len(deals), 1)
+        d = deals[0]
+        self.assertEqual(d.key, "miloderrocha:miloderrocha/100")
+        self.assertEqual(d.title, "Sudadera Deportiva Hanes con Capucha")
+        self.assertEqual(d.price, 35000.0)
+        self.assertEqual(d.list_price, 70000.0)
+        self.assertEqual(d.discount_pct, 50.0)
+        self.assertEqual(d.currency, "COP")
+        self.assertTrue(d.free_shipping_co)
+        self.assertEqual(d.image, "https://cdn1.telesco.pe/file/sample123.jpg")
+        self.assertNotIn("tag=milo-20", d.url)
+
+    def test_parse_monto_cop(self):
+        from sources import miloderrocha
+        self.assertEqual(miloderrocha.parse_monto_cop("117.164"), 117164.0)
+        self.assertEqual(miloderrocha.parse_monto_cop("$ 38.530 COP"), 38530.0)
+        self.assertIsNone(miloderrocha.parse_monto_cop(""))
+
+    def test_miloderrocha_en_radar_fuentes(self):
+        import radar
+        self.assertIn("miloderrocha", radar.FUENTES)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
 
 
