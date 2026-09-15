@@ -158,11 +158,14 @@ def _una_consulta(consulta: str, por_consulta: int, vetadas=None,
             or "ships to colombia" in texto_envio
         )
 
+        m_asin = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", enlace, re.IGNORECASE)
+        key = f"amazon:{m_asin.group(1).upper()}" if m_asin else "slickdeals:" + (item.findtext("guid") or enlace).strip()
+
         ofertas.append(Deal(
             source="slickdeals",
             store=tienda_detectada,
             country="US",
-            key="slickdeals:" + (item.findtext("guid") or enlace).strip(),
+            key=key,
             title=titulo,
             url=enlace,
             price=precio_val,

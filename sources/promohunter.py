@@ -85,8 +85,12 @@ def parse_deal(item: dict) -> Deal | None:
     if not enlace:
         return None
 
-    asin = item.get("asin") or ""
-    key = f"promohunter:{deal_id}"
+    asin = (item.get("asin") or "").strip().upper()
+    if not asin:
+        m = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", enlace, re.IGNORECASE)
+        if m:
+            asin = m.group(1).upper()
+    key = f"amazon:{asin}" if asin else f"promohunter:{deal_id}"
 
     # Cupones y notas de calificación
     cupon_raw = (item.get("cupones") or "").strip()
@@ -114,7 +118,7 @@ def parse_deal(item: dict) -> Deal | None:
 
     return Deal(
         source="promohunter",
-        store="Amazon (vía PromoHunter)",
+        store="Amazon",
         country="CO",
         key=key,
         title=titulo,

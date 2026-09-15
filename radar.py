@@ -17,7 +17,7 @@ import time
 import unicodedata
 
 import config
-from core import filtros, fx, telegram, whitelist
+from core import filtros, fx, respaldo, telegram, whitelist
 from core import comandos as mod_comandos
 from core import objetivos as mod_objetivos
 from core import veracidad as mod_veracidad
@@ -394,6 +394,16 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
             por_canal = cfg.get("por_canal", 20)
         resultado = promocajita.fetch(cfg["canales"], por_canal,
                                       incluir, cfg.get("excluir"))
+        _guardar_en_cache(clave, resultado)
+        return resultado
+
+    if fuente == "promohunter":
+        resultado = promohunter.fetch(paginas=cfg.get("paginas", 2), incluir=cfg.get("incluir"), excluir=cfg.get("excluir"))
+        _guardar_en_cache(clave, resultado)
+        return resultado
+
+    if fuente == "miloderrocha":
+        resultado = miloderrocha.fetch(por_canal=cfg.get("por_canal", 20), incluir=cfg.get("incluir"), excluir=cfg.get("excluir"))
         _guardar_en_cache(clave, resultado)
         return resultado
 
@@ -1207,6 +1217,8 @@ def atender_solicitudes(solicitudes: list[dict],
         if fuente == "co":
             # Consulta las 6 tiendas autorizadas: algolia_co, vtex, falabella
             seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
+        elif fuente == "amazon_gangas":
+            seleccion = _mejores(watchlist, ["promohunter", "miloderrocha"], None, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
         elif fuente == "*":
             # Mezcla deliberada: las de Colombia se ordenan por descuento, pero
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
@@ -1214,7 +1226,7 @@ def atender_solicitudes(solicitudes: list[dict],
             del_exterior = max(cuantas // 5, 1)
             seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
                                   None, vistas, cuantas - del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
-                         + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
+                          + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
         else:
             seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
@@ -1223,7 +1235,7 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
-        teclado_salida = (telegram.teclado_tiendas() if comando == "cajita"
+        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon")
                           else telegram.teclado_categorias(titulo))
         if not seleccion:
             if solicitud.get("es_siguiente"):
@@ -1368,8 +1380,24 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
         else:
             # Sin resumen: todo lo que vale la pena va como tarjeta propia.
             inmediatas, para_resumen = candidatas, []
-        tope = top or limite or config.MAX_ALERTS_PER_RUN
-        seleccion = inmediatas[:tope]
+
+        es_ronda_comunidad = set(activas).issubset({"slickdeals", "promocajita", "promohunter", "miloderrocha"})
+        tope = top or limite or (config.MAX_ALERTS_COMUNIDAD if es_ronda_comunidad else config.MAX_ALERTS_PER_RUN)
+
+        if not es_ronda_comunidad and not top:
+            comunitarias = 0
+            filtradas_inmediatas = []
+            for par in inmediatas:
+                es_com = par[0].source in {"slickdeals", "promocajita", "promohunter", "miloderrocha"}
+                if es_com:
+                    if comunitarias < config.MAX_ALERTS_COMUNIDAD:
+                        filtradas_inmediatas.append(par)
+                        comunitarias += 1
+                else:
+                    filtradas_inmediatas.append(par)
+            seleccion = filtradas_inmediatas[:tope]
+        else:
+            seleccion = inmediatas[:tope]
 
         print(f"{len(candidatas)} candidatas ({colapsadas} variantes colapsadas): "
               f"{len(inmediatas)} inmediatas (envio {len(seleccion)}), "
@@ -1438,6 +1466,10 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
         borradas = store.prune()
         if borradas:
             print(f"Historial podado: {borradas} observaciones antiguas.")
+
+        if (enviados > 0 or en_resumen > 0) and not dry_run:
+            if respaldo.guardar():
+                print("  [radar] historial respaldado inmediatamente en GitHub")
 
     return _resultado(
         ofertas=len(ofertas),

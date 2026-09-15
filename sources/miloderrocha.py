@@ -120,11 +120,13 @@ def extraer_deals_html(html_str: str, por_canal: int = 20) -> list[Deal]:
 
     deals: list[Deal] = []
     for c, url_limpia in zip(candidatos, urls_resueltas):
+        m = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url_limpia, re.IGNORECASE)
+        key = f"amazon:{m.group(1).upper()}" if m else f"miloderrocha:{c['post_id']}"
         deal = Deal(
             source="miloderrocha",
-            store="Amazon (vía Milo Derrocha)",
+            store="Amazon",
             country="CO",
-            key=f"miloderrocha:{c['post_id']}",
+            key=key,
             title=c["titulo"],
             url=url_limpia,
             price=c["precio"],

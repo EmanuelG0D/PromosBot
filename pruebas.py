@@ -538,8 +538,8 @@ class PruebaComandos(unittest.TestCase):
         from core.comandos import CATALOGO
         from radar import FUENTES
         for comando, (fuente, _tiendas, titulo) in CATALOGO.items():
-            # "co" y "*" son comodines: /colombia y /todo agrupan fuentes.
-            self.assertIn(fuente, set(FUENTES) | {"*", "co"},
+            # "co", "amazon_gangas" y "*" son comodines: agrupan fuentes.
+            self.assertIn(fuente, set(FUENTES) | {"*", "co", "amazon_gangas"},
                           f"/{comando} apunta a una fuente inexistente")
             self.assertTrue(titulo)
 
@@ -2277,7 +2277,7 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
         v = Verdict(alertar=True, motivo="sigue vigente tras 3 dias", confianza="alta")
         renderizado = telegram.render(d, v)
         self.assertIn("Sigue disponible", renderizado)
-        self.assertEqual(config.REALERT_DAYS, 3)
+        self.assertEqual(config.REALERT_DAYS, 14)
         self.assertEqual(config.MAX_ALERTS_PER_RUN, 4)
         self.assertFalse(config.SEED_ON_EMPTY_DB)
 
@@ -2419,7 +2419,8 @@ class PruebaPromoHunter(unittest.TestCase):
         # El deal 99901 tiene casillero == 0 -> DEBE ser admitido con envio directo
         d_directo = promohunter.parse_deal(deals_raw[0])
         self.assertIsNotNone(d_directo)
-        self.assertEqual(d_directo.key, "promohunter:99901")
+        self.assertEqual(d_directo.key, "amazon:B0ABC123")
+        self.assertEqual(d_directo.store, "Amazon")
         self.assertEqual(d_directo.price, 50000.0)
         self.assertEqual(d_directo.list_price, 100000.0)
         self.assertEqual(d_directo.discount_pct, 50.0)
@@ -2486,7 +2487,8 @@ class PruebaMiloDerrocha(unittest.TestCase):
         # El post 101 no tiene precio -> debe ignorarse
         self.assertEqual(len(deals), 1)
         d = deals[0]
-        self.assertEqual(d.key, "miloderrocha:miloderrocha/100")
+        self.assertEqual(d.key, "amazon:B0C1T9M4PQ")
+        self.assertEqual(d.store, "Amazon")
         self.assertEqual(d.title, "Sudadera Deportiva Hanes con Capucha")
         self.assertEqual(d.price, 35000.0)
         self.assertEqual(d.list_price, 70000.0)
@@ -2538,6 +2540,83 @@ class PruebaMiloDerrocha(unittest.TestCase):
             list_price=5000000.0,
         )
         self.assertFalse(radar._precio_admisible(deal_tienda))
+
+
+class PruebaDeduplicacionYDosificacionGangas(unittest.TestCase):
+    """Verifica tiendas limpias (sin vía), deduplicación por ASIN y dosificación."""
+
+    def test_tiendas_limpias_sin_intermediarios(self):
+        from sources import promohunter, miloderrocha
+        deal_ph = promohunter.parse_deal({
+            "id": 123,
+            "titulo": "Sudadera Hanes",
+            "precio_oferta": 45000.0,
+            "casillero": 0,
+            "enlace": "https://www.amazon.com/dp/B012345678",
+            "asin": "B012345678",
+        })
+        self.assertIsNotNone(deal_ph)
+        self.assertEqual(deal_ph.store, "Amazon")
+        self.assertNotIn("vía", deal_ph.store.lower())
+
+        deals_milo = miloderrocha.extraer_deals_html(r"""
+        <div data-post="milo/500">
+            <div class="tgme_widget_message_text js-message_text">
+                Audífonos Bluetooth<br>
+                💰 Precio: $50.000<br>
+                <a href="https://www.amazon.com/dp/B08XYZ9999">Ver Oferta</a>
+            </div>
+        </div>
+        """)
+        self.assertEqual(len(deals_milo), 1)
+        self.assertEqual(deals_milo[0].store, "Amazon")
+        self.assertNotIn("vía", deals_milo[0].store.lower())
+
+    def test_deduplicacion_cruzada_por_asin(self):
+        from sources import promohunter, miloderrocha
+        deal_ph = promohunter.parse_deal({
+            "id": 888,
+            "titulo": "Reloj Inteligente",
+            "precio_oferta": 120000.0,
+            "casillero": 0,
+            "enlace": "https://www.amazon.com/dp/B0SAMEASIN",
+            "asin": "B0SAMEASIN",
+        })
+        deal_milo = miloderrocha.extraer_deals_html(r"""
+        <div data-post="milo/777">
+            <div class="tgme_widget_message_text js-message_text">
+                Reloj Inteligente Smartwatch<br>
+                💰 Precio: $120.000<br>
+                <a href="https://www.amazon.com/dp/B0SAMEASIN">Ver Oferta</a>
+            </div>
+        </div>
+        """)[0]
+        # Ambas fuentes deben producir la MISMA clave canónica
+        self.assertEqual(deal_ph.key, "amazon:B0SAMEASIN")
+        self.assertEqual(deal_milo.key, "amazon:B0SAMEASIN")
+
+    def test_boton_y_comando_amazon(self):
+        from unittest.mock import patch
+        from core import comandos
+        with patch("core.whitelist.es_admin", return_value=True):
+            # Toque de botón en menú interactivo
+            msg_boton = {"text": "⚡ Gangas Amazon", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}
+            req_boton = comandos.leer_comando(msg_boton)
+            self.assertIsNotNone(req_boton)
+            self.assertEqual(req_boton["tipo"], "elegir_tienda")
+            self.assertEqual(req_boton["tienda"], "amazon")
+
+            # Comando tradicional con slash
+            msg_slash = {"text": "/amazon", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}
+            req_slash = comandos.leer_comando(msg_slash)
+            self.assertIsNotNone(req_slash)
+            self.assertEqual(req_slash["comando"], "amazon")
+
+    def test_configuracion_dosificacion_y_topes(self):
+        import config
+        self.assertEqual(config.MAX_ALERTS_COMUNIDAD, 2)
+        self.assertEqual(config.MAX_ALERTS_PER_DAY, 60)
+        self.assertEqual(config.REALERT_DAYS, 14)
 
 
 if __name__ == "__main__":

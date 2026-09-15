@@ -97,9 +97,10 @@ GLITCH_DISCOUNT_PCT = _float("GLITCH_DISCOUNT_PCT", 75.0)
 # Dosificacion elastica: maximo 4 por ronda para repartir el cupo diario a lo largo
 # del dia (manana, tarde, noche) sin saturar el grupo y priorizando siempre calidad.
 MAX_ALERTS_PER_RUN = _int("MAX_ALERTS_PER_RUN", 4)
-# Freno de mano: con rondas cada 15 minutos, un dia malo podria significar
-# cientos de mensajes. Este tope es lo que separa un bot util de uno molesto.
-MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 40)
+# Cazadores comunitarios (PromoHunter, Milo, PromoCajita): salen de a poco (1-2 por ronda)
+MAX_ALERTS_COMUNIDAD = _int("MAX_ALERTS_COMUNIDAD", 2)
+# Freno de mano diario para el grupo: 60 gangas al dia para cubrir manana, tarde y noche sin apagarse temprano.
+MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 60)
 # Cuantas ofertas responde un comando. El tope diario no aplica aqui: si lo
 # pediste tu, no es interrupcion. El maximo evita chocar con el limite de
 # mensajes por minuto de Telegram.
@@ -110,7 +111,7 @@ COMANDO_MAX_RESULTADOS = _int("COMANDO_MAX_RESULTADOS", 30)
 # configurar una variable mas.
 TELEGRAM_WEBHOOK_SECRET = _str("TELEGRAM_WEBHOOK_SECRET")
 REALERT_DROP_PCT = _float("REALERT_DROP_PCT", 10.0)
-REALERT_DAYS = _int("REALERT_DAYS", 3)
+REALERT_DAYS = _int("REALERT_DAYS", 14)
 
 # Hasta que porcentaje se le cree el precio de lista a un vendedor externo.
 # Medido: el mismo televisor Kalley aparece con identico precio de lista
