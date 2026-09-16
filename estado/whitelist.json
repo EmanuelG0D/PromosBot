@@ -10,5 +10,10 @@
     "1565545229",
     "8548661045"
   ],
-  "solicitudes_pendientes": {}
+  "solicitudes_pendientes": {
+    "1006922878": {
+      "nombre": "Sebastián",
+      "username": "Wolfsebas"
+    }
+  }
 }
