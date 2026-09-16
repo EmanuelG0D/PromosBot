@@ -894,12 +894,119 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
+        if tipo == "iniciar_reporte":
+            deal_hash = solicitud.get("deal_hash")
+            deal_info = None
+            if deal_hash:
+                with Store() as store:
+                    deal_rec = store.obtener_deal_reciente(deal_hash)
+                    if deal_rec:
+                        deal_info = {
+                            "hash": deal_hash,
+                            "title": deal_rec.title,
+                            "store": deal_rec.store,
+                            "url": deal_rec.url,
+                            "price": deal_rec.price,
+                            "currency": deal_rec.currency,
+                        }
+
+            mod_comandos.fijar_estado_feedback(chat_id, {
+                "ts": time.time(),
+                "deal": deal_info,
+            })
+
+            if deal_info:
+                texto_prompt = (
+                    f"✍️ <b>Reportar problema con una oferta</b>\n\n"
+                    f"📦 <b>Producto:</b> {telegram.esc(deal_info['title'])}\n"
+                    f"🏪 <b>Tienda:</b> {telegram.esc(deal_info['store'])}\n\n"
+                    f"A continuación escribe el problema que encontraste "
+                    f"(ej: <i>precio incorrecto, enlace roto, producto agotado</i>, etc.):"
+                )
+            else:
+                texto_prompt = (
+                    f"✍️ <b>Buzón de Sugerencias y Reportes</b>\n\n"
+                    f"Nos ayuda mucho saber cómo mejorar PromosBot durante esta fase de pruebas.\n\n"
+                    f"A continuación escribe tu mensaje, sugerencia o problema que hayas encontrado:"
+                )
+
+            telegram.send(
+                texto_prompt,
+                reply_markup=telegram.boton_cancelar_feedback(),
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "cancelar_feedback":
+            mod_comandos.limpiar_estado_feedback(chat_id)
+            telegram.send(
+                "❌ <i>Operación cancelada. Puedes seguir explorando ofertas en el menú:</i>",
+                reply_markup=telegram.teclado_tiendas(),
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "enviar_feedback":
+            texto_fb = solicitud.get("texto_feedback", "").strip()
+            estado_fb = solicitud.get("estado_feedback") or {}
+            deal_info = estado_fb.get("deal")
+
+            mod_comandos.limpiar_estado_feedback(chat_id)
+
+            nombre_u = solicitud.get("nombre") or "Usuario"
+            user_u = solicitud.get("username")
+            handle_u = f" (@{user_u})" if user_u else ""
+            uid_u = solicitud.get("user_id") or chat_id
+
+            telegram.send(
+                "✅ <b>¡Muchas gracias! Tu reporte ha sido enviado.</b>\n\n"
+                "El equipo lo revisará pronto para seguir mejorando el bot. "
+                "Puedes continuar explorando ofertas:",
+                reply_markup=telegram.teclado_tiendas(),
+                chat_id=chat_id,
+            )
+
+            admin_id = getattr(config, "TELEGRAM_ADMIN_ID", None) or getattr(whitelist, "ADMIN_ID_POR_DEFECTO", 5583002220)
+            if admin_id:
+                if deal_info:
+                    lineas_admin = [
+                        "🚨 <b>Nuevo Reporte de Oferta</b>",
+                        "",
+                        f"👤 <b>Usuario:</b> {telegram.esc(nombre_u)}{telegram.esc(handle_u)} (<code>{uid_u}</code>)",
+                        f"🏪 <b>Tienda:</b> {telegram.esc(deal_info.get('store', 'N/A'))}",
+                        f"📦 <b>Producto:</b> {telegram.esc(deal_info.get('title', 'N/A'))}",
+                        f"🔗 <b>Enlace:</b> <a href=\"{telegram.esc(deal_info.get('url', ''))}\">Ver oferta</a>",
+                        "",
+                        f"📝 <b>Mensaje del usuario:</b>",
+                        f"<i>{telegram.esc(texto_fb)}</i>",
+                    ]
+                else:
+                    lineas_admin = [
+                        "📬 <b>Nueva Sugerencia / Reporte General</b>",
+                        "",
+                        f"👤 <b>Usuario:</b> {telegram.esc(nombre_u)}{telegram.esc(handle_u)} (<code>{uid_u}</code>)",
+                        "",
+                        f"📝 <b>Mensaje:</b>",
+                        f"<i>{telegram.esc(texto_fb)}</i>",
+                    ]
+                telegram.send(
+                    telegram.NL.join(lineas_admin),
+                    chat_id=admin_id,
+                )
+
+            atendidos += 1
+            continue
+
         if comando in ("ayuda", "help"):
+            mod_comandos.limpiar_estado_feedback(chat_id)
             telegram.send(mod_comandos.AYUDA, reply_markup=telegram.teclado_tiendas(), chat_id=chat_id)
             atendidos += 1
             continue
 
         if comando in ("start", "menu") or tipo == "menu":
+            mod_comandos.limpiar_estado_feedback(chat_id)
             telegram.send(
                 "🤖 <b>PromosBot — Menú Principal</b>\n\n"
                 "Toca una tienda o el <b>🇨🇴 Comparador</b> en los botones inferiores para explorar ofertas:",
@@ -946,6 +1053,7 @@ def atender_solicitudes(solicitudes: list[dict],
             tienda = solicitud.get("tienda", "colombia")
             tienda_nombre = solicitud.get("tienda_nombre", tienda.capitalize())
             mod_comandos.fijar_tienda_activa(tienda, chat_id=chat_id)
+            mod_comandos.limpiar_estado_feedback(chat_id)
             if tienda == "colombia":
                 telegram.send(
                     "🇨🇴 <b>Comparador Nacional de Tiendas</b>\n\n"

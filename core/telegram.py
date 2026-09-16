@@ -129,9 +129,10 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     deal_hash = hashlib.md5(deal.key.encode()).hexdigest()[:10]
     bot_user = getattr(config, "TELEGRAM_BOT_USERNAME", "PromosOn_bot")
     link_privado = f"https://t.me/{bot_user}?start=deal_{deal_hash}"
+    link_reporte = f"https://t.me/{bot_user}?start=report_{deal_hash}"
 
     if es_privado:
-        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Ver oferta</a>')
+        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Ver oferta</a>  \u00b7  \u270d\ufe0f <a href="{link_reporte}">Reportar</a>')
     else:
         lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Ver oferta</a>  \u00b7  \U0001F4E9 <a href="{link_privado}">Envi\u00e1rmela</a>')
     return lineas
@@ -302,6 +303,7 @@ def teclado_tiendas() -> dict:
             [{"text": "🦅 Americanino"}, {"text": "👖 Koaj"}],
             [{"text": "⚡ Gangas Amazon"}, {"text": "📦 Promocajita"}],
             [{"text": "🇨🇴 Comparar Tiendas"}, {"text": "🇺🇸 Exterior (EE. UU.)"}],
+            [{"text": "✍️ Sugerencias y Reportes"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -452,6 +454,15 @@ def boton_siguientes_ofertas() -> dict:
     return {
         "inline_keyboard": [
             [{"text": "🔄 Ver siguientes ofertas", "callback_data": "siguientes_ofertas"}]
+        ]
+    }
+
+
+def boton_cancelar_feedback() -> dict:
+    """Boton inline para cancelar el envio de una sugerencia o reporte."""
+    return {
+        "inline_keyboard": [
+            [{"text": "❌ Cancelar", "callback_data": "cancelar_feedback"}]
         ]
     }
 

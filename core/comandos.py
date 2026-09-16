@@ -375,6 +375,36 @@ def obtener_ultima_busqueda(chat_id: int | str) -> dict | None:
     return ultimas.get(str(chat_id))
 
 
+def obtener_estado_feedback(chat_id: int | str) -> dict | None:
+    """Retorna el estado de reporte/sugerencia activo para el chat, o None si no hay."""
+    if not chat_id:
+        return None
+    datos = _cargar()
+    feedback = datos.get("feedback_activo", {})
+    return feedback.get(str(chat_id))
+
+
+def fijar_estado_feedback(chat_id: int | str, estado: dict) -> None:
+    """Registra que el chat está en proceso de escribir un reporte o sugerencia."""
+    if not chat_id:
+        return
+    datos = _cargar()
+    feedback = datos.setdefault("feedback_activo", {})
+    feedback[str(chat_id)] = estado
+    _guardar(datos)
+
+
+def limpiar_estado_feedback(chat_id: int | str) -> None:
+    """Elimina el estado de feedback activo cuando se completa o cancela."""
+    if not chat_id:
+        return
+    datos = _cargar()
+    feedback = datos.get("feedback_activo", {})
+    if str(chat_id) in feedback:
+        del feedback[str(chat_id)]
+        _guardar(datos)
+
+
 def leer_comando(mensaje: dict) -> dict | None:
     """Un mensaje de Telegram vuelto solicitud, o None si no es para el bot.
 
@@ -425,9 +455,9 @@ def leer_comando(mensaje: dict) -> dict | None:
                     "tipo": "unirse_canal",
                 }
 
-            # Si viene desde el grupo a guardar una oferta con Enviármela, auto-aprobamos
+            # Si viene desde el grupo a guardar una oferta con Enviármela o a Reportar, auto-aprobamos
             if not whitelist.es_permitido(user_id):
-                if texto.startswith("/start") and "deal_" in texto:
+                if texto.startswith("/start") and any(k in texto for k in ("deal_", "report_")):
                     whitelist.aprobar(user_id)
                 else:
                     es_nueva = whitelist.registrar_solicitud(user_id, nombre=nombre, username=username)
@@ -464,6 +494,42 @@ def leer_comando(mensaje: dict) -> dict | None:
                 "tipo": "start_deal",
             }
 
+        # Si es un deep link de reporte: /start report_a1b2c3d4e5
+        if crudo == "start" and len(partes) > 1 and partes[1].startswith("report_"):
+            deal_hash = partes[1][7:]
+            return {
+                "comando": "iniciar_reporte",
+                "deal_hash": deal_hash,
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "iniciar_reporte",
+            }
+
+        if crudo in ("reportar", "sugerencia", "feedback", "reporte"):
+            return {
+                "comando": "iniciar_reporte",
+                "deal_hash": None,
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "iniciar_reporte",
+            }
+
+        if crudo == "cancelar":
+            if obtener_estado_feedback(chat):
+                limpiar_estado_feedback(chat)
+                return {
+                    "comando": "cancelar_feedback",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "cancelar_feedback",
+                }
+
         cantidad = None
         if len(partes) > 1 and partes[1].isdigit():
             cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
@@ -476,8 +542,27 @@ def leer_comando(mensaje: dict) -> dict | None:
     else:
         texto_norm = texto.lower()
 
+        # Boton '✍️ Sugerencias y Reportes'
+        if any(frase in texto_norm for frase in ("sugerencias y reportes", "sugerencia", "reportar problema", "buzón", "buzon")):
+            res = {
+                "comando": "iniciar_reporte",
+                "deal_hash": None,
+                "chat_id": chat,
+                "tipo": "iniciar_reporte",
+            }
+
+        # Cancelar con botón de texto
+        elif any(frase == texto_norm for frase in ("cancelar", "❌ cancelar")):
+            if obtener_estado_feedback(chat):
+                limpiar_estado_feedback(chat)
+                res = {
+                    "comando": "cancelar_feedback",
+                    "chat_id": chat,
+                    "tipo": "cancelar_feedback",
+                }
+
         # Siguientes ofertas
-        if any(frase in texto_norm for frase in ("siguientes ofertas", "ver siguientes", "más ofertas", "mas ofertas", "siguientes")):
+        elif any(frase in texto_norm for frase in ("siguientes ofertas", "ver siguientes", "más ofertas", "mas ofertas", "siguientes")):
             res = {"comando": "siguientes", "chat_id": chat, "tipo": "siguientes"}
 
         # Volver a grupos
@@ -555,6 +640,20 @@ def leer_comando(mensaje: dict) -> dict | None:
             res["nombre"] = nombre
             res["username"] = username
         return res
+
+    # 3. Si el usuario está en proceso de escribir un reporte o sugerencia
+    estado_fb = obtener_estado_feedback(chat)
+    if estado_fb:
+        return {
+            "comando": "enviar_feedback",
+            "chat_id": chat,
+            "user_id": user_id,
+            "nombre": nombre,
+            "username": username,
+            "tipo": "enviar_feedback",
+            "texto_feedback": texto.strip(),
+            "estado_feedback": estado_fb,
+        }
 
     # Si escribieron texto suelto con el teclado en privado y no es admin, se borra el mensaje
     if not es_admin:

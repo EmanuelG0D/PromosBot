@@ -2739,6 +2739,136 @@ class PruebaBotonEnviarmelaAlChat(unittest.TestCase):
             self.assertEqual(req["nombre"], "Carlos")
 
 
+class PruebaBuzonFeedbackYReportes(unittest.TestCase):
+    def tearDown(self):
+        from core import comandos
+        for cid in (12345, 88888, 7777, 9999):
+            comandos.limpiar_estado_feedback(cid)
+
+    def test_teclado_tiendas_tiene_boton_reportes(self):
+        from core import telegram
+        teclado = telegram.teclado_tiendas()
+        botones_flat = [b["text"] for fila in teclado["keyboard"] for b in fila]
+        self.assertIn("✍️ Sugerencias y Reportes", botones_flat)
+
+    def test_boton_cancelar_feedback(self):
+        from core import telegram
+        btn = telegram.boton_cancelar_feedback()
+        self.assertIn("inline_keyboard", btn)
+        self.assertEqual(btn["inline_keyboard"][0][0]["callback_data"], "cancelar_feedback")
+        self.assertIn("cancelar", btn["inline_keyboard"][0][0]["text"].lower())
+
+    def test_leer_comando_deep_link_reporte(self):
+        from unittest.mock import patch
+        from core import comandos
+        with patch("core.whitelist.es_admin", return_value=True):
+            msg = {
+                "text": "/start report_9876543210",
+                "chat": {"id": 12345, "type": "private"},
+                "from": {"id": 12345, "first_name": "Laura", "username": "laura_dev"}
+            }
+            req = comandos.leer_comando(msg)
+            self.assertIsNotNone(req)
+            self.assertEqual(req["tipo"], "iniciar_reporte")
+            self.assertEqual(req["deal_hash"], "9876543210")
+            self.assertEqual(req["nombre"], "Laura")
+
+    def test_leer_comando_boton_sugerencias(self):
+        from unittest.mock import patch
+        from core import comandos
+        with patch("core.whitelist.es_admin", return_value=True):
+            msg = {
+                "text": "✍️ Sugerencias y Reportes",
+                "chat": {"id": 12345, "type": "private"},
+                "from": {"id": 12345, "first_name": "Laura"}
+            }
+            req = comandos.leer_comando(msg)
+            self.assertIsNotNone(req)
+            self.assertEqual(req["tipo"], "iniciar_reporte")
+            self.assertIsNone(req["deal_hash"])
+
+    def test_estado_feedback_y_captura_texto(self):
+        from unittest.mock import patch
+        from core import comandos
+        chat_id = 88888
+        comandos.fijar_estado_feedback(chat_id, {"deal": {"title": "TV Samsung"}})
+        self.assertIsNotNone(comandos.obtener_estado_feedback(chat_id))
+
+        with patch("core.whitelist.es_admin", return_value=False), \
+             patch("core.telegram.es_miembro_del_canal", return_value=True), \
+             patch("core.whitelist.es_permitido", return_value=True):
+            # 1. El usuario envía texto libre con feedback activo
+            msg = {
+                "text": "El enlace no carga la página de la tienda",
+                "chat": {"id": chat_id, "type": "private"},
+                "from": {"id": chat_id, "first_name": "Mateo", "username": "mateo"}
+            }
+            req = comandos.leer_comando(msg)
+            self.assertIsNotNone(req)
+            self.assertEqual(req["tipo"], "enviar_feedback")
+            self.assertEqual(req["texto_feedback"], "El enlace no carga la página de la tienda")
+            self.assertEqual(req["estado_feedback"]["deal"]["title"], "TV Samsung")
+
+            # 2. Cancelar mediante texto
+            comandos.fijar_estado_feedback(chat_id, {"deal": None})
+            msg_cancelar = {
+                "text": "❌ Cancelar",
+                "chat": {"id": chat_id, "type": "private"},
+                "from": {"id": chat_id, "first_name": "Mateo"}
+            }
+            req_canc = comandos.leer_comando(msg_cancelar)
+            self.assertIsNotNone(req_canc)
+            self.assertEqual(req_canc["tipo"], "cancelar_feedback")
+            self.assertIsNone(comandos.obtener_estado_feedback(chat_id))
+
+    def test_atender_solicitudes_flujo_completo_reporte(self):
+        import radar
+        from unittest.mock import patch
+        from core import comandos
+        mensajes_enviados = []
+        with patch("core.telegram.send", side_effect=lambda txt, **k: mensajes_enviados.append((txt, k))):
+            # 1. Iniciar reporte general
+            sol_ini = {"tipo": "iniciar_reporte", "chat_id": 7777, "deal_hash": None}
+            radar.atender_solicitudes([sol_ini])
+            self.assertTrue(any("Buzón de Sugerencias" in m[0] for m in mensajes_enviados))
+            self.assertIsNotNone(comandos.obtener_estado_feedback(7777))
+
+            # 2. Enviar feedback
+            sol_env = {
+                "tipo": "enviar_feedback",
+                "chat_id": 7777,
+                "user_id": 7777,
+                "nombre": "Ana",
+                "username": "ana_col",
+                "texto_feedback": "Excelente bot, pero podrían agregar más tiendas de calzado",
+                "estado_feedback": comandos.obtener_estado_feedback(7777)
+            }
+            mensajes_enviados.clear()
+            radar.atender_solicitudes([sol_env])
+            self.assertIsNone(comandos.obtener_estado_feedback(7777))
+            # Se envió confirmación al usuario y alerta al admin
+            self.assertTrue(any("¡Muchas gracias!" in m[0] for m in mensajes_enviados))
+            self.assertTrue(any("Nueva Sugerencia / Reporte General" in m[0] for m in mensajes_enviados))
+
+    def test_callback_query_cancelar_feedback(self):
+        import server
+        from core import comandos
+        from unittest.mock import patch
+        comandos.fijar_estado_feedback(9999, {"deal": None})
+        cb = {
+            "id": "cq_123",
+            "from": {"id": 9999, "first_name": "Pedro"},
+            "message": {"message_id": 55, "chat": {"id": 9999}},
+            "data": "cancelar_feedback",
+        }
+        with patch("core.telegram.responder_callback") as mock_resp, \
+             patch("core.telegram.editar_mensaje") as mock_edit:
+            server.atender_callback_query(cb)
+            mock_resp.assert_called_once_with("cq_123", "Reporte cancelado.")
+            mock_edit.assert_called_once()
+            self.assertIsNone(comandos.obtener_estado_feedback(9999))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

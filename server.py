@@ -205,6 +205,20 @@ def atender_callback_query(callback_query: dict) -> None:
         threading.Thread(target=radar.atender_solicitudes, args=([solicitud_sig],), daemon=True).start()
         return
 
+    # Cancelación de reporte o sugerencia
+    if data == "cancelar_feedback":
+        comandos.limpiar_estado_feedback(remitente_id)
+        if chat_id:
+            comandos.limpiar_estado_feedback(chat_id)
+        telegram.responder_callback(cq_id, "Reporte cancelado.")
+        if chat_id and msg_id:
+            telegram.editar_mensaje(
+                chat_id=chat_id,
+                message_id=msg_id,
+                texto="❌ <i>Operación cancelada. Puedes seguir explorando ofertas en el menú inferior.</i>",
+            )
+        return
+
     # 1. Verificacion de suscripcion al canal (la presiona el propio usuario)
     if data == "verificar_canal":
         nombre = remitente.get("first_name") or "Usuario"
@@ -329,7 +343,7 @@ def atender_comando(actualizacion: dict) -> None:
 
     tipo = solicitud.get("tipo")
     cmd = solicitud.get("comando")
-    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
+    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado"):
         radar.atender_solicitudes([solicitud])
         _estado["comandos_atendidos"] += 1
         return
@@ -393,7 +407,7 @@ def sondeo_local() -> None:
                 # se responden de inmediato en el mismo hilo de sondeo sin bloquear la cola.
                 inmediatas = [
                     s for s in resto
-                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria")
+                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal")
                     or s.get("comando") in ("menu", "start", "ayuda", "help", "objetivos", "estado")
                 ]
                 busquedas = [s for s in resto if s not in inmediatas]
