@@ -1,6 +1,7 @@
 {
   "admin": "5583002220",
   "usuarios_permitidos": [
+    "5096901149",
     "8548661045",
     "1565545229",
     "5583002220",
@@ -12,10 +13,5 @@
     "8888",
     "8540319832"
   ],
-  "solicitudes_pendientes": {
-    "5096901149": {
-      "nombre": "Wilson",
-      "username": "wilblan15"
-    }
-  }
+  "solicitudes_pendientes": {}
 }
