@@ -101,6 +101,13 @@ MAX_ALERTS_PER_RUN = _int("MAX_ALERTS_PER_RUN", 4)
 MAX_ALERTS_COMUNIDAD = _int("MAX_ALERTS_COMUNIDAD", 2)
 # Freno de mano diario para el grupo: 60 gangas al dia para cubrir manana, tarde y noche sin apagarse temprano.
 MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 60)
+# Limites diarios por fuente y tienda para balancear variedad y evitar acaparamientos
+MAX_ALERTS_PER_SOURCE_DAY = _int("MAX_ALERTS_PER_SOURCE_DAY", 15)
+MAX_ALERTS_PER_STORE_DAY = _int("MAX_ALERTS_PER_STORE_DAY", 15)
+# Umbral para considerar una oferta como super ganga intocable (bypass de topes ordinarios)
+SUPER_DEAL_DISCOUNT_PCT = _float("SUPER_DEAL_DISCOUNT_PCT", 60.0)
+# Filtro anti-chucherias para Mercado Libre (precio minimo en COP para no alertar baratijas)
+ML_MIN_PRICE_COP = _float("ML_MIN_PRICE_COP", 35000.0)
 # Cuantas ofertas responde un comando. El tope diario no aplica aqui: si lo
 # pediste tu, no es interrupcion. El maximo evita chocar con el limite de
 # mensajes por minuto de Telegram.

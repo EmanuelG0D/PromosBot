@@ -477,6 +477,17 @@ def leer_comando(mensaje: dict) -> dict | None:
                 if texto_norm == btn_key:
                     if tienda_key == "objetivos":
                         res = {"comando": "objetivos", "chat_id": chat, "cantidad": None}
+                    elif tienda_key == "amazon":
+                        # Entrega directa de gangas de Amazon en 1 solo clic
+                        fijar_tienda_activa("amazon", chat_id=chat)
+                        res = {
+                            "comando": "todo_tienda",
+                            "tienda": "amazon",
+                            "tienda_nombre": "Gangas Amazon",
+                            "chat_id": chat,
+                            "cantidad": None,
+                            "tipo": "todo_tienda",
+                        }
                     else:
                         res = {
                             "comando": "elegir_tienda",

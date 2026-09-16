@@ -290,7 +290,7 @@
     "por_consulta": 50
   },
   "mercadolibre": {
-    "_nota": "DESACTIVADA: Mercado Libre bloquea /sites/MCO/search con 403 PolicyAgent para aplicaciones no certificadas, incluso teniendo credenciales validas. Verificado el 2026-09-08. Si algun dia certifican la app, vuelve a poner terminos en 'queries'.",
+    "_nota": "Activa: obtiene ofertas destacadas y ofertas relampago oficiales de mercadolibre.com.co/ofertas con filtro anti-chucherias y descarte de accesorios.",
     "queries": [],
     "solo_tienda_oficial": false,
     "por_consulta": 50

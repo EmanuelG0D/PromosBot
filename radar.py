@@ -407,6 +407,25 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
         _guardar_en_cache(clave, resultado)
         return resultado
 
+    if fuente in ("amazon", "amazon_gangas"):
+        cfg_ph = watchlist.get("promohunter", {})
+        cfg_milo = watchlist.get("miloderrocha", {})
+        deals_ph = promohunter.fetch(paginas=cfg_ph.get("paginas", 2), incluir=cfg_ph.get("incluir"), excluir=cfg_ph.get("excluir"))
+        deals_milo = miloderrocha.fetch(por_canal=cfg_milo.get("por_canal", 20), incluir=cfg_milo.get("incluir"), excluir=cfg_milo.get("excluir"))
+        amazon_deals = [
+            d for d in (deals_ph + deals_milo)
+            if (d.store and "amazon" in d.store.lower()) or ("amazon" in d.url.lower())
+        ]
+        if consultas_custom:
+            palabras = [c.strip().lower() for c in consultas_custom if len(c.strip()) >= 2]
+            amazon_deals = [
+                d for d in amazon_deals
+                if any(p in d.title.lower() for p in palabras)
+            ]
+        resultado = _sin_ruido(amazon_deals, cfg)
+        _guardar_en_cache(clave, resultado)
+        return resultado
+
     if fuente == "mercadolibre":
         consultas = consultas_custom if consultas_custom is not None else cfg.get("queries")
         crudas = mercadolibre.fetch(consultas, por_consulta=cfg.get("por_consulta", 48))
@@ -1136,23 +1155,25 @@ def atender_solicitudes(solicitudes: list[dict],
                 atendidos += 1
                 continue
 
+            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon")
+                              else telegram.teclado_categorias(titulo))
             if not seleccion:
                 if solicitud.get("es_siguiente"):
                     telegram.send(
                         f"🏁 <b>¡Ya te mostré todas las ofertas disponibles</b> en {telegram.esc(titulo)} en este momento!\n\n"
                         f"Puedes explorar otra tienda en el menú inferior.",
-                        reply_markup=telegram.teclado_categorias(titulo),
+                        reply_markup=teclado_salida,
                         chat_id=chat_id,
                     )
                 else:
                     telegram.send(f"Ahora mismo no encuentro rebajas en {telegram.esc(titulo)}.",
-                                  reply_markup=telegram.teclado_categorias(titulo),
+                                  reply_markup=teclado_salida,
                                   chat_id=chat_id)
                 atendidos += 1
                 continue
 
             telegram.send(f"🏬 <b>{telegram.esc(titulo)}</b> — {'siguientes ofertas' if solo_nuevas else 'lo mejor de ahora mismo'}",
-                          reply_markup=telegram.teclado_categorias(titulo),
+                          reply_markup=teclado_salida,
                           chat_id=chat_id)
             enviadas_ahora = []
             for deal, verdict in seleccion:
@@ -1309,8 +1330,8 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
 
     if not top and not dry_run:
         with Store() as store:
-            if store.enviadas_hoy() >= config.MAX_ALERTS_PER_DAY:
-                print(f"Tope diario alcanzado ({config.MAX_ALERTS_PER_DAY}); ronda de fondo omitida.")
+            if store.enviadas_hoy() >= int(config.MAX_ALERTS_PER_DAY * 1.5) and not objetivos_cfg:
+                print(f"Tope diario alcanzado con amplio margen ({store.enviadas_hoy()}/{config.MAX_ALERTS_PER_DAY}); ronda omitida.")
                 return _resultado(duracion=0.0)
 
     inicio = time.time()
@@ -1407,21 +1428,42 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
 
         enviados = 0
         formatos: dict = {}
-        cupo_diario = (top if top else
-                       config.MAX_ALERTS_PER_DAY - store.enviadas_hoy())
-        if cupo_diario <= 0 and not dry_run:
-            print(f"Tope diario alcanzado ({config.MAX_ALERTS_PER_DAY}); "
-                  "no se envia nada mas hoy.")
-            seleccion = []
 
         for deal, verdict in seleccion:
-            if not dry_run and enviados >= cupo_diario:
-                print(f"Tope diario alcanzado ({config.MAX_ALERTS_PER_DAY}).")
-                break
+            veracidad = veracidades.get(deal.key)
+
+            # Oferta 'intocable' (error de precio / super ganga / objetivo de precio cumplido):
+            # Se salta los limites ordinarios para nunca perder un oferton real
+            es_objetivo = bool(any("objetivo" in str(et).lower() for et in verdict.etiquetas))
+            es_glitch = bool(verdict.glitch)
+            es_super_ganga = (
+                (deal.discount_verificable >= getattr(config, "SUPER_DEAL_DISCOUNT_PCT", 60.0) and verdict.confianza != "baja")
+                or (veracidad is not None and getattr(veracidad, "es_real", False) and getattr(veracidad, "descuento_real", 0.0) >= 25.0)
+                or (deal.vence_pronto and deal.discount_verificable >= 50.0)
+            )
+            es_intocable = es_glitch or es_objetivo or es_super_ganga
+
+            if not dry_run and not top and not es_intocable:
+                # 1. Tope diario global
+                if store.enviadas_hoy() >= config.MAX_ALERTS_PER_DAY:
+                    print(f"  [radar] '{deal.title[:35]}...' omitida: tope diario global alcanzado ({config.MAX_ALERTS_PER_DAY}).")
+                    continue
+
+                # 2. Tope diario por fuente
+                lim_fuente = getattr(config, "MAX_ALERTS_PER_SOURCE_DAY", 15)
+                if store.enviadas_hoy_fuente(deal.source) >= lim_fuente:
+                    print(f"  [radar] '{deal.title[:35]}...' omitida: tope diario de fuente {deal.source} alcanzado ({lim_fuente}).")
+                    continue
+
+                # 3. Tope diario por tienda de destino
+                lim_tienda = getattr(config, "MAX_ALERTS_PER_STORE_DAY", 15)
+                if store.enviadas_hoy_tienda(deal.store) >= lim_tienda:
+                    print(f"  [radar] '{deal.title[:35]}...' omitida: tope diario de tienda {deal.store} alcanzado ({lim_tienda}).")
+                    continue
+
             landed = None
             if deal.country == "US" and deal.price:
                 landed = calcular(deal.price, trm, deal.weight_lb)
-            veracidad = veracidades.get(deal.key)
 
             if dry_run or not telegram.enabled():
                 print(telegram.render(deal, verdict, landed, veracidad))
@@ -1433,7 +1475,7 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             via = telegram.enviar_oferta(deal, verdict, landed, veracidad)
             if via:
                 _marcar_avisada(store, deal, hermanas)
-                store.sumar_enviada()
+                store.sumar_enviada(deal)
                 enviados += 1
                 formatos[via] = formatos.get(via, 0) + 1
                 # Telegram admite ~20 mensajes por minuto en un grupo. Con 20

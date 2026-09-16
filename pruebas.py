@@ -2599,11 +2599,11 @@ class PruebaDeduplicacionYDosificacionGangas(unittest.TestCase):
         from unittest.mock import patch
         from core import comandos
         with patch("core.whitelist.es_admin", return_value=True):
-            # Toque de botón en menú interactivo
+            # Toque de botón en menú interactivo: entrega directa en 1 clic
             msg_boton = {"text": "⚡ Gangas Amazon", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}
             req_boton = comandos.leer_comando(msg_boton)
             self.assertIsNotNone(req_boton)
-            self.assertEqual(req_boton["tipo"], "elegir_tienda")
+            self.assertEqual(req_boton["tipo"], "todo_tienda")
             self.assertEqual(req_boton["tienda"], "amazon")
 
             # Comando tradicional con slash
@@ -2616,7 +2616,96 @@ class PruebaDeduplicacionYDosificacionGangas(unittest.TestCase):
         import config
         self.assertEqual(config.MAX_ALERTS_COMUNIDAD, 2)
         self.assertEqual(config.MAX_ALERTS_PER_DAY, 60)
-        self.assertEqual(config.REALERT_DAYS, 14)
+        self.assertEqual(config.MAX_ALERTS_PER_SOURCE_DAY, 15)
+        self.assertEqual(config.MAX_ALERTS_PER_STORE_DAY, 15)
+        self.assertEqual(config.SUPER_DEAL_DISCOUNT_PCT, 60.0)
+        self.assertEqual(config.ML_MIN_PRICE_COP, 35000.0)
+
+
+class PruebaLimitesPorFuenteYTienda(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.store = Store(self.tmp.name)
+
+    def tearDown(self):
+        self.store.close()
+        try:
+            Path(self.tmp.name).unlink()
+        except OSError:
+            pass
+
+    def test_contadores_por_fuente_y_tienda(self):
+        d1 = Deal(source="promohunter", store="amazon", country="US", key="k1", title="TV", url="u", price=100.0, currency="USD")
+        d2 = Deal(source="miloderrocha", store="amazon", country="US", key="k2", title="Audio", url="u", price=50.0, currency="USD")
+        d3 = Deal(source="mercadolibre", store="mercadolibre", country="CO", key="k3", title="Zapatos", url="u", price=120000.0, currency="COP")
+
+        self.store.sumar_enviada(d1)
+        self.store.sumar_enviada(d2)
+        self.store.sumar_enviada(d3)
+
+        self.assertEqual(self.store.enviadas_hoy(), 3)
+        self.assertEqual(self.store.enviadas_hoy_fuente("promohunter"), 1)
+        self.assertEqual(self.store.enviadas_hoy_fuente("miloderrocha"), 1)
+        self.assertEqual(self.store.enviadas_hoy_fuente("mercadolibre"), 1)
+        # Amazon suma lo de promohunter + miloderrocha
+        self.assertEqual(self.store.enviadas_hoy_tienda("amazon"), 2)
+        self.assertEqual(self.store.enviadas_hoy_tienda("mercadolibre"), 1)
+
+
+class PruebaMercadoLibreRelampagosYCalidad(unittest.TestCase):
+    def test_filtro_precio_minimo_y_accesorios(self):
+        from sources import mercadolibre
+        from unittest.mock import patch
+
+        # Simular respuesta JSON con chuchería de $5.000, accesorio y producto válido
+        mock_data = {
+            "appProps": {
+                "pageProps": {
+                    "data": {
+                        "items": [
+                            {
+                                "card": {
+                                    "metadata": {"id": "1", "url": "http://ejemplo.co/1"},
+                                    "components": [
+                                        {"type": "title", "title": {"text": "Funda Protector Cable USB"}},
+                                        {"type": "price", "price": {"current_price": {"value": 8000}}}
+                                    ]
+                                }
+                            },
+                            {
+                                "card": {
+                                    "metadata": {"id": "2", "url": "http://ejemplo.co/2"},
+                                    "components": [
+                                        {"type": "title", "title": {"text": "Baratija de plastico llavero"}},
+                                        {"type": "price", "price": {"current_price": {"value": 12000}}}
+                                    ]
+                                }
+                            },
+                            {
+                                "card": {
+                                    "metadata": {"id": "3", "url": "http://ejemplo.co/3"},
+                                    "components": [
+                                        {"type": "title", "title": {"text": "Tenis adidas Running Duramo Rc2"}},
+                                        {"type": "price", "price": {
+                                            "current_price": {"value": 180000},
+                                            "price_labels": [{"values": [{"key": "previous_price", "price": {"value": 300000}}]}]
+                                        }}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+
+        with patch("core.http.get_text", return_value=f'_n.ctx.r = {json.dumps(mock_data)};'):
+            deals = mercadolibre._extraer_ofertas(es_relampago=True)
+            self.assertEqual(len(deals), 1)
+            self.assertEqual(deals[0].title, "Tenis adidas Running Duramo Rc2")
+            self.assertTrue(deals[0].vence_pronto)
+            self.assertIn("⚡ Oferta Relámpago", deals[0].notes)
 
 
 if __name__ == "__main__":

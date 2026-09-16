@@ -177,11 +177,36 @@ class Store:
         hoy = dt.datetime.now(zona_co).date().isoformat()
         return int(self.get_meta(f"enviadas:{hoy}") or 0)
 
-    def sumar_enviada(self) -> int:
+    def enviadas_hoy_fuente(self, fuente: str) -> int:
+        if not fuente:
+            return 0
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        hoy = dt.datetime.now(zona_co).date().isoformat()
+        f_norm = fuente.lower().strip()
+        return int(self.get_meta(f"enviadas:{hoy}:fuente:{f_norm}") or 0)
+
+    def enviadas_hoy_tienda(self, tienda: str) -> int:
+        if not tienda:
+            return 0
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        hoy = dt.datetime.now(zona_co).date().isoformat()
+        t_norm = tienda.lower().strip()
+        return int(self.get_meta(f"enviadas:{hoy}:tienda:{t_norm}") or 0)
+
+    def sumar_enviada(self, deal: Deal | None = None) -> int:
         zona_co = dt.timezone(dt.timedelta(hours=-5))
         hoy = dt.datetime.now(zona_co).date().isoformat()
         total = self.enviadas_hoy() + 1
         self.set_meta(f"enviadas:{hoy}", str(total))
+        if deal is not None:
+            if deal.source:
+                f_norm = deal.source.lower().strip()
+                prev_fuente = self.enviadas_hoy_fuente(f_norm)
+                self.set_meta(f"enviadas:{hoy}:fuente:{f_norm}", str(prev_fuente + 1))
+            if deal.store:
+                t_norm = deal.store.lower().strip()
+                prev_tienda = self.enviadas_hoy_tienda(t_norm)
+                self.set_meta(f"enviadas:{hoy}:tienda:{t_norm}", str(prev_tienda + 1))
         return total
 
     def prune(self, dias: int = 120, dias_alertas: int = 30) -> int:

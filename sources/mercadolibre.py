@@ -6,11 +6,13 @@ estructurado.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 from typing import Any
 
-from core import http
+import config
+from core import filtros, http
 from core.models import Deal
 
 OFERTAS_URL = "https://www.mercadolibre.com.co/ofertas"
@@ -64,10 +66,18 @@ def _categoria_para_consultas(consultas: list[str]) -> str | None:
     return None
 
 
-def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
-    url = OFERTAS_URL
+def _extraer_ofertas(categoria_id: str | None = None,
+                     promotion_type: str | None = None,
+                     es_relampago: bool = False) -> list[Deal]:
+    params = []
     if categoria_id:
-        url += f"?category={categoria_id}"
+        params.append(f"category={categoria_id}")
+    if promotion_type:
+        params.append(f"promotion_type={promotion_type}")
+
+    url = OFERTAS_URL
+    if params:
+        url += "?" + "&".join(params)
 
     try:
         txt = http.get_text(url, timeout=10, retries=1)
@@ -92,7 +102,13 @@ def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
                  .get("data", {})
                  .get("items", []))
 
+    min_precio = getattr(config, "ML_MIN_PRICE_COP", 35000.0)
     deals: list[Deal] = []
+
+    # Para ofertas relampago sin fecha explicita en HTML, fijar ventana urgente de 12 horas
+    ahora_utc = dt.datetime.now(dt.timezone.utc)
+    vencimiento_relampago = (ahora_utc + dt.timedelta(hours=12)).isoformat() if es_relampago else None
+
     for it in items:
         card = it.get("card") or {}
         mid = card.get("metadata", {}).get("id")
@@ -108,6 +124,10 @@ def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
         if not title:
             continue
 
+        # Filtro de calidad anti-basura: descartar accesorios y ruido generico
+        if filtros.es_accesorio(title) or filtros.descartado(title, filtros.VETADAS_CO):
+            continue
+
         price_data = comps.get("price", {}).get("price", {})
         curr_price_val = price_data.get("current_price", {}).get("value")
         if curr_price_val is None:
@@ -115,6 +135,10 @@ def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
         try:
             curr_price = float(curr_price_val)
         except (ValueError, TypeError):
+            continue
+
+        # Filtro de piso: no alertar baratijas o chucherias desechables
+        if curr_price < min_precio:
             continue
 
         prev_prices = []
@@ -139,6 +163,9 @@ def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
 
         # Notas, cupones y vendedor
         notes: list[str] = []
+        if es_relampago:
+            notes.append("⚡ Oferta Relámpago")
+
         if "promotions" in comps:
             for promo in comps["promotions"].get("promotions", []):
                 t = promo.get("text")
@@ -171,6 +198,7 @@ def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
             image=image,
             notes=notes,
             in_stock=True,
+            expires_at=vencimiento_relampago,
         ))
 
     return deals
@@ -178,17 +206,30 @@ def _extraer_ofertas(categoria_id: str | None = None) -> list[Deal]:
 
 def fetch(consultas: list[str] | None = None,
           por_consulta: int = 48,
-          categoria_id: str | None = None) -> list[Deal]:
+          categoria_id: str | None = None,
+          incluir_relampagos: bool = True) -> list[Deal]:
     """Obtiene las mejores ofertas de Mercado Libre.
 
     Si se pasan consultas, busca la categoria mas afine y filtra por termino.
-    Si no, devuelve las mejores ofertas generales ordenadas por mayor descuento.
+    Si no, devuelve las mejores ofertas generales y relampago ordenadas por descuento.
     """
     cat_id = categoria_id
     if not cat_id and consultas:
         cat_id = _categoria_para_consultas(consultas)
 
     todas = _extraer_ofertas(cat_id)
+
+    # Si se solicitan relampagos y no hay categoria estricta (o es ronda general),
+    # capturar las liquidaciones relampago oficiales
+    if incluir_relampagos and not cat_id:
+        try:
+            relampagos = _extraer_ofertas(promotion_type="lightning", es_relampago=True)
+            vistas = {d.key for d in todas}
+            for r in relampagos:
+                if r.key not in vistas:
+                    todas.append(r)
+        except Exception as exc:
+            print(f"  [mercadolibre] error recolectando relampagos: {exc}")
 
     # Si hay consultas de categoria, filtrar los productos relevantes
     if consultas:
@@ -197,15 +238,13 @@ def fetch(consultas: list[str] | None = None,
             d for d in todas
             if any(p in d.title.lower() for p in palabras)
         ]
-        # Si el filtro estricto devolvio pocas y hay categoria, conservar las de la categoria
         if len(filtradas) >= 3:
             todas = filtradas
         elif cat_id and todas:
-            # Mantener las de la categoria
             pass
         elif filtradas:
             todas = filtradas
 
-    # Ordenar por mejor descuento verificable
-    todas.sort(key=lambda d: -d.discount_verificable)
+    # Ordenar priorizando relampagos con buen descuento y mejores descuentos verificables
+    todas.sort(key=lambda d: (not d.vence_pronto, -d.discount_verificable))
     return todas[:por_consulta]
