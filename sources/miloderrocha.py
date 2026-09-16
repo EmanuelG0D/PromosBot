@@ -109,6 +109,7 @@ def extraer_deals_html(html_str: str, por_canal: int = 20) -> list[Deal]:
             "precio_antes": precio_antes,
             "enlace_crudo": enlaces_oferta[0],
             "foto": foto,
+            "raw_texto": raw_texto,
         })
 
     # Tomar las ofertas mas recientes hasta por_canal
@@ -122,6 +123,8 @@ def extraer_deals_html(html_str: str, por_canal: int = 20) -> list[Deal]:
     for c, url_limpia in zip(candidatos, urls_resueltas):
         m = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url_limpia, re.IGNORECASE)
         key = f"amazon:{m.group(1).upper()}" if m else f"miloderrocha:{c['post_id']}"
+        es_prime = "prime" in c.get("raw_texto", "").lower()
+        notas = ["🅿️ Envío gratis con Amazon Prime"] if es_prime else ["✈️🇨🇴 Envío gratis directo a Colombia"]
         deal = Deal(
             source="miloderrocha",
             store="Amazon",
@@ -132,6 +135,7 @@ def extraer_deals_html(html_str: str, por_canal: int = 20) -> list[Deal]:
             price=c["precio"],
             currency="COP",
             list_price=c["precio_antes"],
+            notes=notas,
             image=c["foto"],
             free_shipping_co=True,
         )

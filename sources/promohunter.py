@@ -114,6 +114,14 @@ def parse_deal(item: dict) -> Deal | None:
         else:
             notas.append(f"⭐️ {rating}")
 
+    prime_mode = (item.get("prime_mode") or "").strip().lower()
+    if prime_mode == "shipping":
+        notas.append("🅿️ Envío gratis con Amazon Prime")
+    elif prime_mode == "exclusive":
+        notas.append("🅿️ Oferta exclusiva para miembros Prime")
+    else:
+        notas.append("✈️🇨🇴 Envío gratis directo a Colombia")
+
     foto = f"https://elpromohunter.com/api/product-image/{deal_id}"
 
     return Deal(
