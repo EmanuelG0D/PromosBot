@@ -2869,8 +2869,72 @@ class PruebaBuzonFeedbackYReportes(unittest.TestCase):
             self.assertIsNone(comandos.obtener_estado_feedback(9999))
 
 
+class PruebaBalanceoYDiversificacion(unittest.TestCase):
+    def test_clasificar_departamento(self):
+        from radar import _clasificar_departamento
+        self.assertEqual(_clasificar_departamento("Freidora De Aire Imusa 3.2L Digital"), "cocina_electro")
+        self.assertEqual(_clasificar_departamento("Horno Microondas Haceb 20L"), "cocina_electro")
+        self.assertEqual(_clasificar_departamento("Smart TV Samsung 55 Pulgadas 4K"), "tecnologia")
+        self.assertEqual(_clasificar_departamento("Tenis Running Adidas Galaxy"), "moda_calzado")
+        self.assertEqual(_clasificar_departamento("Camiseta Polo Hombre"), "moda_calzado")
+        self.assertEqual(_clasificar_departamento("Colchon Doble Resortado Ortopedico"), "hogar")
+        self.assertEqual(_clasificar_departamento("Juguete Carro a Control Remoto"), "otros")
+
+    def test_tope_categoria_freidora_admite_hasta_320k(self):
+        from radar import _precio_admisible
+        # Freidora a $250.000 COP con lista $500.000 COP (50% desc) entra sin problemas
+        d = oferta(title="Freidora de Aire Oster 4 Litros", price=250_000.0, list_price=500_000.0, currency="COP")
+        self.assertTrue(_precio_admisible(d, trm=4000.0))
+
+        # Freidora a $450.000 COP (supera el nuevo tope de 320.000 COP para gangas)
+        d_cara = oferta(title="Freidora de Aire Ninja Doble Cesta", price=450_000.0, list_price=900_000.0, currency="COP")
+        self.assertFalse(_precio_admisible(d_cara, trm=4000.0))
+
+    def test_seleccionar_diversificadas_evita_monopolio_tienda_y_depto(self):
+        from radar import _seleccionar_diversificadas
+        from core.scoring import Verdict
+
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", motivo="ok")
+
+        # Supongamos que Éxito tiene 3 ofertas de audífonos con 90% de descuento
+        # y Alkosto tiene una freidora con 50%
+        # y Falabella tiene unos tenis con 45%
+        candidatas = [
+            (oferta(key="e1", store="Exito", title="Audifonos Bluetooth In-ear", price=20_000, list_price=200_000), v),
+            (oferta(key="e2", store="Exito", title="Audifonos Cableados", price=15_000, list_price=150_000), v),
+            (oferta(key="e3", store="Exito", title="Audifonos Diadema", price=30_000, list_price=300_000), v),
+            (oferta(key="a1", store="Alkosto", title="Freidora de Aire Oster 4L", price=220_000, list_price=450_000), v),
+            (oferta(key="f1", store="Falabella", title="Tenis Running Nike Air", price=180_000, list_price=350_000), v),
+        ]
+
+        # Con tope=3 y max_por_tienda=1:
+        # Deben entrar 3 ofertas de 3 tiendas distintas y diferentes departamentos
+        seleccionadas = _seleccionar_diversificadas(candidatas, tope=3, max_por_tienda=1)
+        self.assertEqual(len(seleccionadas), 3)
+
+        tiendas = [par[0].store for par in seleccionadas]
+        self.assertEqual(len(set(tiendas)), 3)
+        self.assertIn("Alkosto", tiendas)
+        self.assertIn("Falabella", tiendas)
+        self.assertIn("Exito", tiendas)
+
+    def test_seleccionar_diversificadas_flexibiliza_si_no_hay_mas_tiendas(self):
+        from radar import _seleccionar_diversificadas
+        from core.scoring import Verdict
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", motivo="ok")
+
+        # Si solo una tienda tiene ofertas, en el pase 3 debe llenar los cupos sin quedar vacía
+        candidatas = [
+            (oferta(key="e1", store="Exito", title="Audifonos Bluetooth In-ear", price=20_000, list_price=200_000), v),
+            (oferta(key="e2", store="Exito", title="Cargador Rapido Tipo C", price=15_000, list_price=150_000), v),
+        ]
+        seleccionadas = _seleccionar_diversificadas(candidatas, tope=2, max_por_tienda=1)
+        self.assertEqual(len(seleccionadas), 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
 
 

@@ -509,9 +509,11 @@ TOPES_CATEGORIA_COP: list[tuple[tuple[str, ...], float]] = [
     # 16. Camisetas y polos
     (("camiseta", "camisetas", "polo", "polos", "camisa", "camisas", "t-shirt", "tshirt", "playera", "esqueleto"), 60000.0),
 
-    # 17. Pequeños electrodomésticos y cocina
-    (("freidora", "freidoras", "air fryer", "airfryer", "freidora de aire", "microondas",
-      "licuadora", "licuadoras", "cafetera", "cafeteras", "sanduchera", "sandwichera",
+    # 17. Freidoras de aire y microondas (calibrado para incluir freidoras de 3L a 5L en descuento)
+    (("freidora", "freidoras", "air fryer", "airfryer", "freidora de aire", "microondas"), 320000.0),
+
+    # 18. Pequeños electrodomésticos y cocina
+    (("licuadora", "licuadoras", "cafetera", "cafeteras", "sanduchera", "sandwichera",
       "waflera", "batidora", "procesador de alimentos", "arrocera", "arroceras",
       "olla", "ollas", "sarten", "sartenes", "bateria de cocina",
       "aspiradora", "aspiradoras", "robot aspiradora", "ventilador", "ventiladores",
@@ -578,8 +580,91 @@ DEPTO_TECNOLOGIA = {
 
 DEPTO_HOGAR = {
     "aspiradora", "aspiradoras", "robot aspiradora", "ventilador", "ventiladores",
-    "taladro", "taladros", "herramientas", "destornillador"
+    "taladro", "taladros", "herramientas", "destornillador",
+    "colchon", "colchones", "cama", "camas", "almohada", "almohadas",
+    "sabana", "sabanas", "edredon", "mueble", "muebles", "sofa", "sofas",
+    "silla", "sillas", "mesa", "mesas", "comedor"
 }
+
+
+def _clasificar_departamento(title: str) -> str:
+    """Clasifica un producto en un rubro principal para equilibrar la variedad de ofertas."""
+    t_norm = filtros._normalizar(title)
+    if any(filtros.menciona(t_norm, kw) for kw in DEPTO_COCINA | DEPTO_LINEA_BLANCA):
+        return "cocina_electro"
+    if any(filtros.menciona(t_norm, kw) for kw in DEPTO_ROPA):
+        return "moda_calzado"
+    if any(filtros.menciona(t_norm, kw) for kw in DEPTO_TECNOLOGIA):
+        return "tecnologia"
+    if any(filtros.menciona(t_norm, kw) for kw in DEPTO_HOGAR):
+        return "hogar"
+    return "otros"
+
+
+def _seleccionar_diversificadas(candidatas: list[tuple[Deal, Verdict]],
+                               tope: int,
+                               max_por_tienda: int = 1) -> list[tuple[Deal, Verdict]]:
+    """Selecciona ofertas garantizando variedad de departamento y de tienda.
+
+    Evita que un solo departamento (ej. audífonos o accesorios) o una sola tienda
+    acaparen todos los cupos de la ronda nacional.
+    """
+    if not candidatas or tope <= 0:
+        return []
+
+    deptos_orden = ["cocina_electro", "tecnologia", "moda_calzado", "hogar", "otros"]
+    por_depto: dict[str, list[tuple[Deal, Verdict]]] = {d: [] for d in deptos_orden}
+
+    for par in candidatas:
+        d = _clasificar_departamento(par[0].title)
+        por_depto.setdefault(d, []).append(par)
+
+    seleccionadas: list[tuple[Deal, Verdict]] = []
+    conteo_tiendas: dict[str, int] = {}
+    vistos_keys: set[str] = set()
+
+    def _puede_agregar(deal: Deal, estricto_tienda: bool = True) -> bool:
+        if deal.key in vistos_keys:
+            return False
+        t_nombre = (deal.store or deal.source).lower().strip()
+        if estricto_tienda and max_por_tienda > 0:
+            if conteo_tiendas.get(t_nombre, 0) >= max_por_tienda:
+                return False
+        return True
+
+    def _agregar(par: tuple[Deal, Verdict]) -> None:
+        deal = par[0]
+        t_nombre = (deal.store or deal.source).lower().strip()
+        seleccionadas.append(par)
+        vistos_keys.add(deal.key)
+        conteo_tiendas[t_nombre] = conteo_tiendas.get(t_nombre, 0) + 1
+
+    # Pase 1: 1 de cada departamento principal respetando max_por_tienda
+    for depto in deptos_orden:
+        if len(seleccionadas) >= tope:
+            break
+        for par in por_depto[depto]:
+            if _puede_agregar(par[0], estricto_tienda=True):
+                _agregar(par)
+                break
+
+    # Pase 2: si faltan cupos, tomar las siguientes mejores respetando max_por_tienda
+    if len(seleccionadas) < tope:
+        for par in candidatas:
+            if len(seleccionadas) >= tope:
+                break
+            if _puede_agregar(par[0], estricto_tienda=True):
+                _agregar(par)
+
+    # Pase 3: si aún faltan cupos (ej. solo 1 tienda tenía ofertas), flexibilizar tienda
+    if len(seleccionadas) < tope:
+        for par in candidatas:
+            if len(seleccionadas) >= tope:
+                break
+            if _puede_agregar(par[0], estricto_tienda=False):
+                _agregar(par)
+
+    return seleccionadas
 
 
 def _tiendas_por_departamento(consultas_custom: list[str] | None) -> tuple[list[str], list[str], list[str]]:
@@ -1534,22 +1619,29 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             inmediatas, para_resumen = candidatas, []
 
         es_ronda_comunidad = set(activas).issubset({"slickdeals", "promocajita", "promohunter", "miloderrocha"})
-        tope = top or limite or (config.MAX_ALERTS_COMUNIDAD if es_ronda_comunidad else config.MAX_ALERTS_PER_RUN)
+        es_ronda_catalogos = set(activas).isdisjoint({"slickdeals", "promocajita", "promohunter", "miloderrocha"})
 
-        if not es_ronda_comunidad and not top:
-            comunitarias = 0
-            filtradas_inmediatas = []
-            for par in inmediatas:
-                es_com = par[0].source in {"slickdeals", "promocajita", "promohunter", "miloderrocha"}
-                if es_com:
-                    if comunitarias < config.MAX_ALERTS_COMUNIDAD:
-                        filtradas_inmediatas.append(par)
-                        comunitarias += 1
-                else:
-                    filtradas_inmediatas.append(par)
-            seleccion = filtradas_inmediatas[:tope]
-        else:
+        if top:
+            seleccion = inmediatas[:top]
+        elif es_ronda_comunidad:
+            tope = limite or getattr(config, "MAX_ALERTS_COMUNIDAD", 2)
             seleccion = inmediatas[:tope]
+        elif es_ronda_catalogos:
+            tope = limite or getattr(config, "MAX_ALERTS_CATALOGOS", 3)
+            max_pt = getattr(config, "MAX_ALERTS_PER_STORE_RUN", 1)
+            seleccion = _seleccionar_diversificadas(inmediatas, tope, max_por_tienda=max_pt)
+        else:
+            # Ronda mixta: separar comunitarias y catálogos para que no se canibalicen
+            inmediatas_com = [p for p in inmediatas if p[0].source in {"slickdeals", "promocajita", "promohunter", "miloderrocha"}]
+            inmediatas_cat = [p for p in inmediatas if p[0].source not in {"slickdeals", "promocajita", "promohunter", "miloderrocha"}]
+            tope_com = getattr(config, "MAX_ALERTS_COMUNIDAD", 2)
+            tope_cat = getattr(config, "MAX_ALERTS_CATALOGOS", 3)
+            max_pt = getattr(config, "MAX_ALERTS_PER_STORE_RUN", 1)
+            sel_com = inmediatas_com[:tope_com]
+            sel_cat = _seleccionar_diversificadas(inmediatas_cat, tope_cat, max_por_tienda=max_pt)
+            seleccion = sel_com + sel_cat
+            if limite:
+                seleccion = seleccion[:limite]
 
         print(f"{len(candidatas)} candidatas ({colapsadas} variantes colapsadas): "
               f"{len(inmediatas)} inmediatas (envio {len(seleccion)}), "
@@ -1571,6 +1663,8 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 (deal.discount_verificable >= getattr(config, "SUPER_DEAL_DISCOUNT_PCT", 60.0) and verdict.confianza != "baja")
                 or (veracidad is not None and getattr(veracidad, "es_real", False) and getattr(veracidad, "descuento_real", 0.0) >= 25.0)
                 or (deal.vence_pronto and deal.discount_verificable >= 50.0)
+                or (bool(deal.coupons) and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals"})
+                or (deal.discount_verificable >= 50.0 and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals"})
             )
             es_intocable = es_glitch or es_objetivo or es_super_ganga
 
