@@ -392,12 +392,14 @@ def leer_comando(mensaje: dict) -> dict | None:
     nombre = user.get("first_name") or "Usuario"
     username = user.get("username")
 
-    es_grupo_configurado = str(chat) == str(config.TELEGRAM_CHAT_ID)
     es_privado = chat_type == "private"
 
-    # Si no es el grupo configurado ni un chat privado, se ignora
-    if not (es_grupo_configurado or es_privado):
-        print(f"  [comandos] ignorado: viene del chat {chat}")
+    # En grupos, supergrupos y canales NO se atiende NINGÚN comando a NADIE
+    # (ni usuarios ni administradores). El canal es 100% de difusión.
+    if chat_type in ("group", "supergroup", "channel") or not es_privado:
+        msg_id = (mensaje or {}).get("message_id")
+        if msg_id:
+            telegram.borrar_mensaje(chat, msg_id)
         return None
 
     # En chat privado: verificar suscripcion al canal y lista blanca
@@ -546,6 +548,11 @@ def leer_comando(mensaje: dict) -> dict | None:
             res["nombre"] = nombre
             res["username"] = username
         return res
+
+    # Si escribieron texto suelto con el teclado en privado, se borra el mensaje
+    msg_id = (mensaje or {}).get("message_id")
+    if msg_id:
+        telegram.borrar_mensaje(chat, msg_id)
 
     return None
 

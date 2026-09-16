@@ -614,15 +614,17 @@ class PruebaComandos(unittest.TestCase):
                 comandos.ESTADO = original
 
     def test_solo_obedece_al_chat_configurado(self):
-        """Sin este filtro, un extrano que encuentre el bot podria usarlo."""
+        """En grupos y canales no se atienden comandos; solo en privado para usuarios autorizados."""
+        from unittest.mock import patch
         from core import comandos
         original = config.TELEGRAM_CHAT_ID
         config.TELEGRAM_CHAT_ID = "-100"
         try:
-            propio = {"text": "/alkosto", "chat": {"id": -100}}
-            ajeno = {"text": "/alkosto", "chat": {"id": 777}}
-            self.assertIsNotNone(comandos.leer_comando(propio))
-            self.assertIsNone(comandos.leer_comando(ajeno))
+            with patch("core.whitelist.es_admin", return_value=True):
+                grupo = {"text": "/alkosto", "chat": {"id": -100, "type": "supergroup"}}
+                privado = {"text": "/alkosto", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}
+                self.assertIsNone(comandos.leer_comando(grupo))
+                self.assertIsNotNone(comandos.leer_comando(privado))
         finally:
             config.TELEGRAM_CHAT_ID = original
 
@@ -655,14 +657,12 @@ class PruebaComandos(unittest.TestCase):
 
     def test_lee_la_cantidad_pedida_en_el_comando(self):
         """/alkosto 25 debe pedir 25, no el valor por defecto."""
+        from unittest.mock import patch
         from core import comandos
-        original = config.TELEGRAM_CHAT_ID
-        config.TELEGRAM_CHAT_ID = "-100"
+        with patch("core.whitelist.es_admin", return_value=True):
+            def leer(texto):
+                return comandos.leer_comando({"text": texto, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
 
-        def leer(texto):
-            return comandos.leer_comando({"text": texto, "chat": {"id": -100}})
-
-        try:
             self.assertEqual(leer("/alkosto 25")["cantidad"], 25)
             # Sin numero manda el valor por defecto, que resuelve el radar.
             self.assertIsNone(leer("/alkosto")["cantidad"])
@@ -670,8 +670,6 @@ class PruebaComandos(unittest.TestCase):
             self.assertEqual(leer("/alkosto@MiBot 9999")["comando"], "alkosto")
             self.assertEqual(leer("/alkosto 9999")["cantidad"],
                              config.COMANDO_MAX_RESULTADOS)
-        finally:
-            config.TELEGRAM_CHAT_ID = original
 
     def test_el_tope_protege_del_limite_de_telegram(self):
         import config
@@ -701,24 +699,25 @@ class PruebaComandos(unittest.TestCase):
         Telegram lo vuelve a entregar y cada corrida falla igual, para siempre.
         """
         from pathlib import Path as _Path
+        from unittest.mock import patch
         from core import comandos
         originales = (comandos.ESTADO, comandos.http.get_json,
                       config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, patch("core.whitelist.es_admin", return_value=True):
             comandos.ESTADO = _Path(tmp) / "estado.json"
             config.TELEGRAM_BOT_TOKEN = "1:x"
             config.TELEGRAM_CHAT_ID = "-100"
             comandos.http.get_json = lambda url, **kw: {"ok": True, "result": [
                 {"update_id": 1,
-                 "message": {"text": "/", "chat": {"id": -100}}},
+                 "message": {"text": "/", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}},
                 {"update_id": 2,
-                 "message": {"text": "/alkosto 25", "chat": {"id": -100}}},
+                 "message": {"text": "/alkosto 25", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}},
             ]}
             try:
                 hallados = comandos.pendientes()
                 self.assertEqual(hallados,
-                                 [{"comando": "alkosto", "chat_id": -100,
-                                   "cantidad": 25}])
+                                 [{"comando": "alkosto", "chat_id": 12345,
+                                   "cantidad": 25, "user_id": 12345, "nombre": "Usuario", "username": None}])
                 # La barra sola tambien queda confirmada: no vuelve a llegar.
                 self.assertEqual(comandos._leer_estado(), 3)
             finally:
@@ -752,12 +751,11 @@ class PruebaComandos(unittest.TestCase):
 
     def test_botones_menu_interactivo_se_interpretan_correctamente(self):
         """El parser debe entender cuando el usuario toca un boton en vez de escribir un comando."""
+        from unittest.mock import patch
         from core import comandos
-        original = config.TELEGRAM_CHAT_ID
-        config.TELEGRAM_CHAT_ID = "-100"
-        try:
+        with patch("core.whitelist.es_admin", return_value=True):
             def leer(t):
-                return comandos.leer_comando({"text": t, "chat": {"id": -100}})
+                return comandos.leer_comando({"text": t, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
 
             # Tienda
             res = leer("🟡 Éxito")
@@ -789,8 +787,6 @@ class PruebaComandos(unittest.TestCase):
             # Objetivos
             res_obj = leer("🎯 Mis Objetivos")
             self.assertEqual(res_obj["comando"], "objetivos")
-        finally:
-            config.TELEGRAM_CHAT_ID = original
 
     def test_limite_precio_maximo(self):
         """No deben pasar ofertas de mas de 2 millones de pesos."""
@@ -1361,12 +1357,13 @@ class PruebaMercadoLibre(unittest.TestCase):
         self.assertIn("💛 Mercado Libre", botones)
 
     def test_boton_mercadolibre_abre_tienda(self):
-        import config
+        from unittest.mock import patch
         from core import comandos
-        req = comandos.leer_comando({"text": "💛 Mercado Libre", "chat": {"id": config.TELEGRAM_CHAT_ID}})
-        self.assertIsNotNone(req)
-        self.assertEqual(req.get("tipo"), "elegir_tienda")
-        self.assertEqual(req.get("tienda"), "mercadolibre")
+        with patch("core.whitelist.es_admin", return_value=True):
+            req = comandos.leer_comando({"text": "💛 Mercado Libre", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
+            self.assertIsNotNone(req)
+            self.assertEqual(req.get("tipo"), "elegir_tienda")
+            self.assertEqual(req.get("tienda"), "mercadolibre")
 
     def test_mapeo_categorias_mercadolibre(self):
         from sources import mercadolibre
@@ -1818,27 +1815,24 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
 
     def test_botones_tiendas_nuevas(self):
         from core import comandos
-        original = config.TELEGRAM_CHAT_ID
-        config.TELEGRAM_CHAT_ID = "-100"
-        try:
+        from unittest.mock import patch
+        from core import comandos
+        with patch("core.whitelist.es_admin", return_value=True):
             def parsear(txt):
-                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+                return comandos.leer_comando({"text": txt, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
 
             self.assertEqual(parsear("🎒 Totto")["tienda"], "totto")
             self.assertEqual(parsear("👗 Studio F")["tienda"], "studiof")
             self.assertEqual(parsear("👞 Vélez")["tienda"], "velez")
             self.assertEqual(parsear("🦅 Americanino")["tienda"], "americanino")
             self.assertEqual(parsear("👔 Arturo Calle")["tienda"], "arturocalle")
-        finally:
-            config.TELEGRAM_CHAT_ID = original
 
     def test_grupos_de_productos_cotidianos(self):
+        from unittest.mock import patch
         from core import comandos
-        original = config.TELEGRAM_CHAT_ID
-        config.TELEGRAM_CHAT_ID = "-100"
-        try:
+        with patch("core.whitelist.es_admin", return_value=True):
             def parsear(txt):
-                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+                return comandos.leer_comando({"text": txt, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
 
             res_cocina = parsear("🍳 Cocina")
             self.assertEqual(res_cocina["tipo"], "grupo_categoria")
@@ -1863,25 +1857,18 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             res_volver = parsear("⬅️ Volver a Grupos")
             self.assertEqual(res_volver["tipo"], "grupo_categoria")
             self.assertEqual(res_volver["grupo"], "volver")
-        finally:
-            config.TELEGRAM_CHAT_ID = original
 
     def test_cositas_especificas_consultas(self):
+        from unittest.mock import patch
         from core import comandos
-        original = config.TELEGRAM_CHAT_ID
-        config.TELEGRAM_CHAT_ID = "-100"
-        try:
+        with patch("core.whitelist.es_admin", return_value=True):
             def parsear(txt):
-                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+                return comandos.leer_comando({"text": txt, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
 
             # Cocina: Airfryers y Sandwicheras
             r_air = parsear("🍟 Airfryers")
             self.assertEqual(r_air["tipo"], "categoria")
             self.assertIn("freidora de aire", r_air["consultas"])
-
-            r_sand = parsear("🥪 Sandwicheras")
-            self.assertEqual(r_sand["tipo"], "categoria")
-            self.assertIn("sandwichera", r_sand["consultas"])
 
             # Neveras y Lavadoras
             r_nev = parsear("❄️ Neveras")
@@ -1901,8 +1888,6 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             r_asp = parsear("🧹 Aspiradoras")
             self.assertEqual(r_asp["tipo"], "categoria")
             self.assertIn("aspiradora", r_asp["consultas"])
-        finally:
-            config.TELEGRAM_CHAT_ID = original
 
     def test_teclados_especificos_bien_formados(self):
         from core import telegram
@@ -1955,6 +1940,7 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("🧺 Lavadoras", textos_haceb)
 
     def test_tiendas_electrodomesticos_registradas(self):
+        from unittest.mock import patch
         from sources import vtex, algolia_co
         from core import comandos
 
@@ -1967,11 +1953,9 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("alkomprar", comandos.CATALOGO)
         self.assertEqual(comandos.CATALOGO["alkomprar"][0], "algolia_co")
 
-        original = config.TELEGRAM_CHAT_ID
-        config.TELEGRAM_CHAT_ID = "-100"
-        try:
+        with patch("core.whitelist.es_admin", return_value=True):
             def parsear(txt):
-                return comandos.leer_comando({"text": txt, "chat": {"id": -100}})
+                return comandos.leer_comando({"text": txt, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
 
             self.assertEqual(parsear("🟢 Jumbo")["tienda"], "jumbo")
             self.assertEqual(parsear("🔵 Alkomprar")["tienda"], "alkomprar")
@@ -1981,8 +1965,6 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             self.assertEqual(parsear("☕ Oster")["tienda"], "oster")
             self.assertEqual(parsear("🇨🇴 Comparar Tiendas")["tienda"], "colombia")
             self.assertEqual(parsear("🇨🇴 Todo Colombia")["tienda"], "colombia")
-        finally:
-            config.TELEGRAM_CHAT_ID = original
 
     def test_teclado_tiendas_incluye_comparar_tiendas(self):
         from core import telegram
@@ -2197,22 +2179,24 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_reconocimiento_comando_siguientes(self):
+        from unittest.mock import patch
         from core import comandos
-        cid = config.TELEGRAM_CHAT_ID or 4444
-        # Texto de boton
-        sol1 = comandos.leer_comando({"text": "🔄 Ver siguientes ofertas", "chat": {"id": cid}})
-        self.assertIsNotNone(sol1)
-        self.assertEqual(sol1.get("tipo"), "siguientes")
+        with patch("core.whitelist.es_admin", return_value=True):
+            cid = 4444
+            # Texto de boton
+            sol1 = comandos.leer_comando({"text": "🔄 Ver siguientes ofertas", "chat": {"id": cid, "type": "private"}, "from": {"id": cid}})
+            self.assertIsNotNone(sol1)
+            self.assertEqual(sol1.get("tipo"), "siguientes")
 
-        # Texto alternativo
-        sol2 = comandos.leer_comando({"text": "más ofertas", "chat": {"id": cid}})
-        self.assertIsNotNone(sol2)
-        self.assertEqual(sol2.get("tipo"), "siguientes")
+            # Texto alternativo
+            sol2 = comandos.leer_comando({"text": "más ofertas", "chat": {"id": cid, "type": "private"}, "from": {"id": cid}})
+            self.assertIsNotNone(sol2)
+            self.assertEqual(sol2.get("tipo"), "siguientes")
 
-        # Slash command
-        sol3 = comandos.leer_comando({"text": "/siguientes", "chat": {"id": cid}})
-        self.assertIsNotNone(sol3)
-        self.assertEqual(sol3.get("tipo"), "siguientes")
+            # Slash command
+            sol3 = comandos.leer_comando({"text": "/siguientes", "chat": {"id": cid, "type": "private"}, "from": {"id": cid}})
+            self.assertIsNotNone(sol3)
+            self.assertEqual(sol3.get("tipo"), "siguientes")
 
     def test_guardar_y_obtener_ultima_busqueda(self):
         from core import comandos

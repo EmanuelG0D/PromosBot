@@ -689,3 +689,52 @@ def webhook_activo() -> str:
         return (datos.get("result") or {}).get("url") or ""
     except Exception:
         return ""
+
+
+def borrar_mensaje(chat_id: int | str, message_id: int | str) -> bool:
+    """Borra un mensaje específico de un chat si el bot tiene permisos."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id or not message_id:
+        return False
+    url_api = API.format(token=config.TELEGRAM_BOT_TOKEN, method="deleteMessage")
+    try:
+        res = http.post_json(url_api, {"chat_id": chat_id, "message_id": int(message_id)}, retries=1)
+        return bool(res.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] no se pudo borrar mensaje {message_id}: {exc}")
+        return False
+
+
+def apagar_campo_escritura_grupo(chat_id: int | str | None = None) -> bool:
+    """Elimina la barra de escribir mensajes en el grupo a todos los miembros."""
+    if not config.TELEGRAM_BOT_TOKEN:
+        return False
+    destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
+    if not destino:
+        return False
+    url_api = API.format(token=config.TELEGRAM_BOT_TOKEN, method="setChatPermissions")
+    payload = {
+        "chat_id": destino,
+        "permissions": {
+            "can_send_messages": False,
+            "can_send_audios": False,
+            "can_send_documents": False,
+            "can_send_photos": False,
+            "can_send_videos": False,
+            "can_send_video_notes": False,
+            "can_send_voice_notes": False,
+            "can_send_polls": False,
+            "can_send_other_messages": False,
+            "can_add_web_page_previews": False,
+            "can_change_info": False,
+            "can_invite_users": True,
+            "can_pin_messages": False,
+            "can_manage_topics": False,
+        },
+    }
+    try:
+        res = http.post_json(url_api, payload, retries=1)
+        return bool(res.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] no se pudieron apagar permisos de escritura en {destino}: {exc}")
+        return False
+
