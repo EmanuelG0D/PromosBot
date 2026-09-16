@@ -392,21 +392,29 @@ def leer_comando(mensaje: dict) -> dict | None:
     nombre = user.get("first_name") or "Usuario"
     username = user.get("username")
 
-    es_privado = chat_type == "private"
+    es_admin = whitelist.es_admin(user_id)
+    chat_type = chat_obj.get("type", "")
+    es_grupo = chat_type in ("group", "supergroup", "channel") or str(chat) == str(config.TELEGRAM_CHAT_ID)
+    try:
+        if int(chat) < 0:
+            es_grupo = True
+    except (ValueError, TypeError):
+        pass
 
-    # En grupos, supergrupos y canales NO se atiende NINGÚN comando a NADIE
-    # (ni usuarios ni administradores). El canal es 100% de difusión.
-    if chat_type in ("group", "supergroup", "channel") or not es_privado:
-        msg_id = (mensaje or {}).get("message_id")
-        if msg_id:
-            telegram.borrar_mensaje(chat, msg_id)
-        return None
+    # 1. En grupos y canales:
+    # El administrador tiene permiso total para escribir y ejecutar lo que quiera.
+    # Los demás no pueden hacer nada: se les borra cualquier mensaje o comando.
+    if es_grupo:
+        if not es_admin:
+            msg_id = (mensaje or {}).get("message_id")
+            if msg_id:
+                telegram.borrar_mensaje(chat, msg_id)
+            return None
 
-    # En chat privado: verificar suscripcion al canal y lista blanca
-    if es_privado:
-        # El Administrador siempre tiene acceso libre
-        if not whitelist.es_admin(user_id):
-            # 1. Filtro obligatorio: debe estar en el canal oficial
+    # 2. En chat privado:
+    else:
+        # Los usuarios que no sean admin SOLO pueden usar el bot si están inscritos en el grupo
+        if not es_admin:
             if not telegram.es_miembro_del_canal(user_id):
                 return {
                     "comando": "unirse_canal",
@@ -417,9 +425,8 @@ def leer_comando(mensaje: dict) -> dict | None:
                     "tipo": "unirse_canal",
                 }
 
-            # 2. Filtro de aprobacion: debe estar en la whitelist
+            # Si viene desde el grupo a guardar una oferta con Enviármela, auto-aprobamos
             if not whitelist.es_permitido(user_id):
-                # Si viene desde el grupo a guardar una oferta especifica, lo auto-aprobamos
                 if texto.startswith("/start") and "deal_" in texto:
                     whitelist.aprobar(user_id)
                 else:
@@ -549,10 +556,11 @@ def leer_comando(mensaje: dict) -> dict | None:
             res["username"] = username
         return res
 
-    # Si escribieron texto suelto con el teclado en privado, se borra el mensaje
-    msg_id = (mensaje or {}).get("message_id")
-    if msg_id:
-        telegram.borrar_mensaje(chat, msg_id)
+    # Si escribieron texto suelto con el teclado en privado y no es admin, se borra el mensaje
+    if not es_admin:
+        msg_id = (mensaje or {}).get("message_id")
+        if msg_id:
+            telegram.borrar_mensaje(chat, msg_id)
 
     return None
 

@@ -620,10 +620,16 @@ class PruebaComandos(unittest.TestCase):
         original = config.TELEGRAM_CHAT_ID
         config.TELEGRAM_CHAT_ID = "-100"
         try:
-            with patch("core.whitelist.es_admin", return_value=True):
-                grupo = {"text": "/alkosto", "chat": {"id": -100, "type": "supergroup"}}
-                privado = {"text": "/alkosto", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}
+            # Miembro común en grupo -> ignorado
+            with patch("core.whitelist.es_admin", return_value=False):
+                grupo = {"text": "/alkosto", "chat": {"id": -100, "type": "supergroup"}, "from": {"id": 999}}
                 self.assertIsNone(comandos.leer_comando(grupo))
+
+            # Admin en grupo y privado -> permitido
+            with patch("core.whitelist.es_admin", return_value=True):
+                grupo_admin = {"text": "/alkosto", "chat": {"id": -100, "type": "supergroup"}, "from": {"id": 12345}}
+                privado = {"text": "/alkosto", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}}
+                self.assertIsNotNone(comandos.leer_comando(grupo_admin))
                 self.assertIsNotNone(comandos.leer_comando(privado))
         finally:
             config.TELEGRAM_CHAT_ID = original
