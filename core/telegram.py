@@ -152,7 +152,8 @@ def _dominio(url: str) -> str:
     return url.split("/")[2] if url.count("/") > 2 else url[:40]
 
 
-def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
+def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None,
+                   reply_markup: dict | None = None) -> bool:
     """Le pasa la URL a Telegram para que la baje el. Es lo barato."""
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
     destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
@@ -162,11 +163,14 @@ def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None) -> bool
         "caption": pie,
         "parse_mode": "HTML",
     }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
     respuesta = http.post_json(url, payload, retries=1)
     return bool(respuesta.get("ok"))
 
 
-def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
+def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None,
+                 reply_markup: dict | None = None) -> bool:
     """Baja la imagen y la sube como archivo.
 
     Hay CDN de tienda que no responden a los servidores de Telegram aunque
@@ -195,6 +199,8 @@ def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
             pass
 
     campos = {"chat_id": destino, "caption": pie, "parse_mode": "HTML"}
+    if reply_markup is not None:
+        campos["reply_markup"] = json.dumps(reply_markup)
 
     respuesta = http.post_multipart(
         url,
@@ -214,20 +220,21 @@ _CDNS_SUBIDA_DIRECTA = (
 )
 
 
-def _enviar_foto(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
+def _enviar_foto(foto: str, pie: str, chat_id: int | str | None = None,
+                 reply_markup: dict | None = None) -> bool:
     """Primero por URL; si Telegram no puede bajarla, se le suben los bytes."""
     # Las CDN que sabemos que bloquean peticiones directas de Telegram van directo a subida
     # para no perder varios segundos de espera por producto.
     if not any(cdn in foto for cdn in _CDNS_SUBIDA_DIRECTA):
         try:
-            if _foto_por_url(foto, pie, chat_id=chat_id):
+            if _foto_por_url(foto, pie, chat_id=chat_id, reply_markup=reply_markup):
                 return True
             print(f"  [telegram] {_dominio(foto)} no le sirve por URL; se sube")
         except Exception as exc:
             print(f"  [telegram] {_dominio(foto)} rechazada por URL ({exc}); se sube")
 
     try:
-        return _foto_subida(foto, pie, chat_id=chat_id)
+        return _foto_subida(foto, pie, chat_id=chat_id, reply_markup=reply_markup)
     except Exception as exc:
         # Imagen caida de verdad. Se avisa con el dominio para poder ubicar
         # que tienda publica imagenes problematicas.
@@ -237,20 +244,33 @@ def _enviar_foto(foto: str, pie: str, chat_id: int | str | None = None) -> bool:
 
 def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
                   veracidad: Veracidad | None = None,
-                  chat_id: int | str | None = None) -> str:
-    """Manda la oferta como tarjeta con foto; si la foto falla, como texto.
+                  chat_id: int | str | None = None,
+                  reply_markup: dict | None = None) -> str:
+    """Manda la oferta como tarjeta con foto y botones interactivos.
 
-    Devuelve "foto", "texto" o "" si no se pudo enviar. Saber por cual de los
-    dos caminos salio es la unica forma de detectar que una tienda publica
-    imagenes que Telegram rechaza.
+    Devuelve "foto", "texto" o "" si no se pudo enviar.
     """
     if not enabled():
         return ""
-    if deal.image and _enviar_foto(deal.image, _pie_de_foto(deal, verdict, landed, veracidad), chat_id=chat_id):
+
+    if reply_markup is None:
+        deal_hash = hashlib.md5(deal.key.encode()).hexdigest()[:10]
+        bot_user = getattr(config, "TELEGRAM_BOT_USERNAME", "PromosOn_bot")
+        es_privado = chat_id is not None and str(chat_id) != str(config.TELEGRAM_CHAT_ID)
+        fila_botones = [{"text": "🛒 Ver Oferta", "url": deal.url}]
+        if not es_privado:
+            fila_botones.append({
+                "text": "📩 Enviármela a mi chat",
+                "url": f"https://t.me/{bot_user}?start=deal_{deal_hash}",
+            })
+        reply_markup = {"inline_keyboard": [fila_botones]}
+
+    pie = _pie_de_foto(deal, verdict, landed, veracidad)
+    if deal.image and _enviar_foto(deal.image, pie, chat_id=chat_id, reply_markup=reply_markup):
         return "foto"
-    # Sin foto, o si Telegram la rechazo, se manda como texto dejando que
-    # Telegram arme su propia vista previa del enlace.
-    return "texto" if send(render(deal, verdict, landed, veracidad), preview=True, chat_id=chat_id) else ""
+
+    return "texto" if send(render(deal, verdict, landed, veracidad), preview=True,
+                           reply_markup=reply_markup, chat_id=chat_id) else ""
 
 
 def _avisar_migracion(error: Exception) -> None:

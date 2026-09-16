@@ -54,6 +54,7 @@ TELEGRAM_CHAT_ID = _str("TELEGRAM_CHAT_ID")
 TELEGRAM_ADMIN_ID = _str("TELEGRAM_ADMIN_ID", "5583002220")
 TELEGRAM_CHANNEL_ID = _str("TELEGRAM_CHANNEL_ID", TELEGRAM_CHAT_ID)
 TELEGRAM_CHANNEL_URL = _str("TELEGRAM_CHANNEL_URL", "https://t.me/+GE1nQO-f0HYwNGQx")
+TELEGRAM_BOT_USERNAME = _str("TELEGRAM_BOT_USERNAME", "PromosOn_bot")
 
 # --- eBay (opcional: sin credenciales la fuente se omite sola) ----------
 EBAY_CLIENT_ID = _str("EBAY_CLIENT_ID")

@@ -871,6 +871,41 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
+        if tipo == "start_deal":
+            deal_hash = solicitud.get("deal_hash", "")
+            nombre_u = solicitud.get("nombre") or "allí"
+            telegram.accion_escribiendo(chat_id=chat_id)
+            with Store() as store:
+                deal_guardado = store.obtener_deal_reciente(deal_hash)
+
+            if deal_guardado:
+                telegram.send(
+                    f"👋 <b>¡Hola, {telegram.esc(nombre_u)}!</b>\n"
+                    "Aquí tienes la oferta que guardaste desde el canal oficial 🎁:",
+                    chat_id=chat_id,
+                )
+                landed = None
+                if deal_guardado.country == "US" and deal_guardado.price:
+                    trm_val, _ = fx.get_trm(None)
+                    landed = calcular(deal_guardado.price, trm_val, deal_guardado.weight_lb)
+                verdict = Verdict(True, "guardada desde el canal", inmediata=True)
+                telegram.enviar_oferta(deal_guardado, verdict, landed, chat_id=chat_id)
+                telegram.send(
+                    "<i>Puedes seguir explorando más ofertas en el menú de abajo 👇</i>",
+                    reply_markup=telegram.teclado_tiendas(),
+                    chat_id=chat_id,
+                )
+            else:
+                telegram.send(
+                    f"👋 <b>¡Hola, {telegram.esc(nombre_u)}!</b>\n\n"
+                    "Esa oferta ya expiró o ya no está disponible en la memoria reciente.\n"
+                    "Puedes explorar todas las ofertas activas ahora mismo en el menú de abajo 👇",
+                    reply_markup=telegram.teclado_tiendas(),
+                    chat_id=chat_id,
+                )
+            atendidos += 1
+            continue
+
         if comando in ("ayuda", "help"):
             telegram.send(mod_comandos.AYUDA, reply_markup=telegram.teclado_tiendas(), chat_id=chat_id)
             atendidos += 1
@@ -1475,6 +1510,7 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             via = telegram.enviar_oferta(deal, verdict, landed, veracidad)
             if via:
                 _marcar_avisada(store, deal, hermanas)
+                store.guardar_deal_reciente(deal)
                 store.sumar_enviada(deal)
                 enviados += 1
                 formatos[via] = formatos.get(via, 0) + 1

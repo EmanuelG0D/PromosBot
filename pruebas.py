@@ -2708,6 +2708,47 @@ class PruebaMercadoLibreRelampagosYCalidad(unittest.TestCase):
             self.assertIn("⚡ Oferta Relámpago", deals[0].notes)
 
 
+class PruebaBotonEnviarmelaAlChat(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.store = Store(self.tmp.name)
+
+    def tearDown(self):
+        self.store.close()
+        try:
+            Path(self.tmp.name).unlink()
+        except OSError:
+            pass
+
+    def test_guardar_y_obtener_deal_reciente(self):
+        d = Deal(source="vtex", store="Exito", country="CO", key="exito:123", title="Nevera Haceb", url="http://exito.com/nevera", price=1500000.0, currency="COP")
+        h = self.store.guardar_deal_reciente(d)
+        self.assertIsNotNone(h)
+        self.assertEqual(len(h), 10)
+
+        recuperado = self.store.obtener_deal_reciente(h)
+        self.assertIsNotNone(recuperado)
+        self.assertEqual(recuperado.key, "exito:123")
+        self.assertEqual(recuperado.title, "Nevera Haceb")
+        self.assertEqual(recuperado.price, 1500000.0)
+
+    def test_deep_link_comando_start_deal(self):
+        from unittest.mock import patch
+        from core import comandos
+        with patch("core.whitelist.es_admin", return_value=True):
+            msg = {
+                "text": "/start deal_a1b2c3d4e5",
+                "chat": {"id": 12345, "type": "private"},
+                "from": {"id": 12345, "first_name": "Carlos"}
+            }
+            req = comandos.leer_comando(msg)
+            self.assertIsNotNone(req)
+            self.assertEqual(req["tipo"], "start_deal")
+            self.assertEqual(req["deal_hash"], "a1b2c3d4e5")
+            self.assertEqual(req["nombre"], "Carlos")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

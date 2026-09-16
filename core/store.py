@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 import sqlite3
 import statistics
 from pathlib import Path
@@ -31,6 +33,12 @@ CREATE TABLE IF NOT EXISTS meta (
     k TEXT PRIMARY KEY,
     v TEXT
 );
+CREATE TABLE IF NOT EXISTS deals_recientes (
+    hash_id TEXT PRIMARY KEY,
+    deal_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deals_recientes_created ON deals_recientes(created_at);
 """
 
 
@@ -209,13 +217,62 @@ class Store:
                 self.set_meta(f"enviadas:{hoy}:tienda:{t_norm}", str(prev_tienda + 1))
         return total
 
+    # -- guardado de deals para entrega directa a chat personal (Deep Link) --
+    def guardar_deal_reciente(self, deal: Deal) -> str:
+        h = hashlib.md5(deal.key.encode()).hexdigest()[:10]
+        datos = {
+            "source": deal.source,
+            "store": deal.store,
+            "country": deal.country,
+            "key": deal.key,
+            "title": deal.title,
+            "url": deal.url,
+            "price": deal.price,
+            "currency": deal.currency,
+            "list_price": deal.list_price,
+            "coupons": deal.coupons,
+            "notes": deal.notes,
+            "seller": deal.seller,
+            "marketplace": deal.marketplace,
+            "in_stock": deal.in_stock,
+            "weight_lb": deal.weight_lb,
+            "list_price_trusted": deal.list_price_trusted,
+            "expires_at": deal.expires_at,
+            "image": deal.image,
+            "free_shipping_co": deal.free_shipping_co,
+        }
+        self.conn.execute(
+            """
+            INSERT INTO deals_recientes(hash_id, deal_json, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(hash_id) DO UPDATE SET deal_json = excluded.deal_json, created_at = excluded.created_at
+            """,
+            (h, json.dumps(datos), dt.datetime.now(dt.timezone.utc).isoformat())
+        )
+        self.conn.commit()
+        return h
+
+    def obtener_deal_reciente(self, hash_id: str) -> Deal | None:
+        row = self.conn.execute(
+            "SELECT deal_json FROM deals_recientes WHERE hash_id = ?", (hash_id,)
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            datos = json.loads(row["deal_json"])
+            return Deal(**datos)
+        except Exception:
+            return None
+
     def prune(self, dias: int = 120, dias_alertas: int = 30) -> int:
         corte_obs = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias)).isoformat()
         cur_obs = self.conn.execute("DELETE FROM observations WHERE ts < ?", (corte_obs,))
         corte_alertas = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias_alertas)).isoformat()
         cur_alerts = self.conn.execute("DELETE FROM alerts WHERE last_alert_ts < ?", (corte_alertas,))
+        corte_recientes = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=7)).isoformat()
+        cur_recientes = self.conn.execute("DELETE FROM deals_recientes WHERE created_at < ?", (corte_recientes,))
         self.conn.commit()
-        total_borradas = cur_obs.rowcount + cur_alerts.rowcount
+        total_borradas = cur_obs.rowcount + cur_alerts.rowcount + cur_recientes.rowcount
         if total_borradas:
             self.conn.execute("VACUUM")   # el archivo viaja al respaldo: hay que encogerlo
         return total_borradas
