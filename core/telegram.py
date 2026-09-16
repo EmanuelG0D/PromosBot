@@ -43,7 +43,7 @@ def _emoji(verdict: Verdict) -> str:
 
 
 def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
-            veracidad: Veracidad | None = None) -> list[str]:
+            veracidad: Veracidad | None = None, es_privado: bool = False) -> list[str]:
     lineas: list[str] = []
 
     encabezado = f"{_emoji(verdict)} <b>{esc(deal.store)}</b>"
@@ -126,23 +126,31 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     if verdict.glitch:
         lineas.append("<i>Verifica antes de pagar: los errores de precio suelen cancelarse.</i>")
 
-    lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Abrir oferta</a>')
+    deal_hash = hashlib.md5(deal.key.encode()).hexdigest()[:10]
+    bot_user = getattr(config, "TELEGRAM_BOT_USERNAME", "PromosOn_bot")
+    link_privado = f"https://t.me/{bot_user}?start=deal_{deal_hash}"
+
+    if es_privado:
+        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Abrir oferta</a>')
+    else:
+        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Abrir oferta</a>  \u00b7  \U0001F4E9 <a href="{link_privado}">Enviar a mi chat</a>')
     return lineas
 
 
 def render(deal: Deal, verdict: Verdict, landed: Landed | None = None,
-           veracidad: Veracidad | None = None) -> str:
-    return NL.join(_lineas(deal, verdict, landed, veracidad))
+           veracidad: Veracidad | None = None, es_privado: bool = False) -> str:
+    return NL.join(_lineas(deal, verdict, landed, veracidad, es_privado=es_privado))
 
 
 def _pie_de_foto(deal: Deal, verdict: Verdict, landed: Landed | None = None,
-                 veracidad: Veracidad | None = None, limite: int = 1024) -> str:
+                 veracidad: Veracidad | None = None, limite: int = 1024,
+                 es_privado: bool = False) -> str:
     """Telegram corta los pies de foto en 1024 caracteres.
 
     Si no cabe, se van sacrificando lineas de detalle desde el final, pero
     nunca la ultima: el enlace a la oferta es lo que no se puede perder.
     """
-    lineas = _lineas(deal, verdict, landed, veracidad)
+    lineas = _lineas(deal, verdict, landed, veracidad, es_privado=es_privado)
     while len(NL.join(lineas)) > limite and len(lineas) > 3:
         del lineas[-2]
     return NL.join(lineas)[:limite]
@@ -246,30 +254,19 @@ def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
                   veracidad: Veracidad | None = None,
                   chat_id: int | str | None = None,
                   reply_markup: dict | None = None) -> str:
-    """Manda la oferta como tarjeta con foto y botones interactivos.
+    """Manda la oferta como tarjeta con foto; si la foto falla, como texto.
 
     Devuelve "foto", "texto" o "" si no se pudo enviar.
     """
     if not enabled():
         return ""
 
-    if reply_markup is None:
-        deal_hash = hashlib.md5(deal.key.encode()).hexdigest()[:10]
-        bot_user = getattr(config, "TELEGRAM_BOT_USERNAME", "PromosOn_bot")
-        es_privado = chat_id is not None and str(chat_id) != str(config.TELEGRAM_CHAT_ID)
-        fila_botones = [{"text": "🛒 Ver Oferta", "url": deal.url}]
-        if not es_privado:
-            fila_botones.append({
-                "text": "📩 Enviármela a mi chat",
-                "url": f"https://t.me/{bot_user}?start=deal_{deal_hash}",
-            })
-        reply_markup = {"inline_keyboard": [fila_botones]}
-
-    pie = _pie_de_foto(deal, verdict, landed, veracidad)
+    es_privado = chat_id is not None and str(chat_id) != str(config.TELEGRAM_CHAT_ID)
+    pie = _pie_de_foto(deal, verdict, landed, veracidad, es_privado=es_privado)
     if deal.image and _enviar_foto(deal.image, pie, chat_id=chat_id, reply_markup=reply_markup):
         return "foto"
 
-    return "texto" if send(render(deal, verdict, landed, veracidad), preview=True,
+    return "texto" if send(render(deal, verdict, landed, veracidad, es_privado=es_privado), preview=True,
                            reply_markup=reply_markup, chat_id=chat_id) else ""
 
 
