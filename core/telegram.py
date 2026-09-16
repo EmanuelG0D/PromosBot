@@ -131,9 +131,9 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     link_privado = f"https://t.me/{bot_user}?start=deal_{deal_hash}"
 
     if es_privado:
-        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Abrir oferta</a>')
+        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Ver oferta</a>')
     else:
-        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Abrir oferta</a>  \u00b7  \U0001F4E9 <a href="{link_privado}">Enviar a mi chat</a>')
+        lineas.append(f'\U0001F517 <a href="{esc(deal.url)}">Ver oferta</a>  \u00b7  \U0001F4E9 <a href="{link_privado}">Envi\u00e1rmela</a>')
     return lineas
 
 
