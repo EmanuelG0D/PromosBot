@@ -507,6 +507,17 @@ def leer_comando(mensaje: dict) -> dict | None:
                 "tipo": "iniciar_reporte",
             }
 
+        if crudo in ("salud", "diagnostico", "status_admin"):
+            return {
+                "comando": "salud",
+                "deal_hash": None,
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "salud",
+            }
+
         if crudo in ("reportar", "sugerencia", "feedback", "reporte"):
             return {
                 "comando": "iniciar_reporte",
@@ -633,6 +644,11 @@ def leer_comando(mensaje: dict) -> dict | None:
                         "tipo": "categoria",
                     }
                     break
+
+        # Fallback para chat privado: si escribe 'menu', 'tiendas', 'hola', 'inicio', desplegar menu
+        if not res and not es_grupo:
+            if any(texto_norm == t for t in ("menu", "menú", "tiendas", "tienda", "inicio", "departamentos", "hola", "buenas", "ayuda")):
+                res = {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
 
     if res:
         if user_id is not None:

@@ -2932,6 +2932,73 @@ class PruebaBalanceoYDiversificacion(unittest.TestCase):
         self.assertEqual(len(seleccionadas), 2)
 
 
+class PruebaPanelSaludAdmin(unittest.TestCase):
+    def test_leer_comando_salud(self):
+        from core import comandos
+        msg = {
+            "text": "/salud",
+            "chat": {"id": 5583002220, "type": "private"},
+            "from": {"id": 5583002220, "first_name": "Emanuel"},
+        }
+        sol = comandos.leer_comando(msg)
+        self.assertIsNotNone(sol)
+        self.assertEqual(sol["comando"], "salud")
+        self.assertEqual(sol["tipo"], "salud")
+
+    def test_salud_solo_responde_a_admin(self):
+        import radar
+        from unittest.mock import patch
+        mensajes_enviados = []
+        with patch("core.telegram.send", side_effect=lambda txt, **k: mensajes_enviados.append((txt, k))):
+            # 1. Usuario normal intenta ejecutar /salud -> Rechazado
+            sol_normal = {"comando": "salud", "tipo": "salud", "chat_id": 1111, "user_id": 1111}
+            radar.atender_solicitudes([sol_normal])
+            self.assertTrue(any("exclusivo para el administrador" in m[0] for m in mensajes_enviados))
+            self.assertFalse(any("Panel de Diagnóstico" in m[0] for m in mensajes_enviados))
+
+            # 2. Administrador ejecuta /salud -> Autorizado con panel
+            mensajes_enviados.clear()
+            sol_admin = {"comando": "salud", "tipo": "salud", "chat_id": 5583002220, "user_id": 5583002220}
+            radar.atender_solicitudes([sol_admin])
+            self.assertTrue(any("Panel de Diagnóstico y Salud" in m[0] for m in mensajes_enviados))
+            self.assertTrue(any("Alkosto / K-tronix" in m[0] for m in mensajes_enviados))
+
+    def test_recolectar_fuente_registra_metricas_y_aisla_errores(self):
+        import radar
+        # 1. Fuente exitosa
+        def fuente_ok():
+            return [oferta(key="ok1")]
+
+        res_ok = radar._recolectar_fuente("prueba_tienda", fuente_ok)
+        self.assertEqual(len(res_ok), 1)
+        info_ok = radar._SALUD_FUENTES.get("prueba_tienda")
+        self.assertIsNotNone(info_ok)
+        self.assertTrue(info_ok["ok"])
+        self.assertEqual(info_ok["ofertas"], 1)
+
+        # 2. Fuente que falla -> No debe tumbar el sistema, registra error
+        def fuente_rota():
+            raise ConnectionError("Timeout simulado en tienda")
+
+        res_rota = radar._recolectar_fuente("tienda_caida", fuente_rota)
+        self.assertEqual(len(res_rota), 0)
+        info_rota = radar._SALUD_FUENTES.get("tienda_caida")
+        self.assertIsNotNone(info_rota)
+        self.assertFalse(info_rota["ok"])
+        self.assertIn("Timeout simulado", info_rota["error"])
+
+    def test_fallback_menu_chat_privado(self):
+        from core import comandos
+        msg_menu = {
+            "text": "menu",
+            "chat": {"id": 5583002220, "type": "private"},
+            "from": {"id": 5583002220, "first_name": "Emanuel"},
+        }
+        sol = comandos.leer_comando(msg_menu)
+        self.assertIsNotNone(sol)
+        self.assertEqual(sol["tipo"], "menu")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

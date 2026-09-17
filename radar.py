@@ -39,6 +39,35 @@ COLORES = {
     "silver", "gold", "purple", "yellow", "orange", "brown",
 }
 
+_SALUD_FUENTES: dict[str, dict] = {}
+
+
+def _recolectar_fuente(clave: str, fetcher, *args, **kwargs) -> list[Deal]:
+    """Ejecuta la recoleccion de una fuente aislando excepciones y midiendo duracion y cantidad."""
+    t0 = time.time()
+    try:
+        resultado = fetcher(*args, **kwargs) or []
+        dur = round(time.time() - t0, 1)
+        _SALUD_FUENTES[clave] = {
+            "ts": time.time(),
+            "ok": True,
+            "ofertas": len(resultado),
+            "duracion": dur,
+            "error": None,
+        }
+        return resultado
+    except Exception as exc:
+        dur = round(time.time() - t0, 1)
+        _SALUD_FUENTES[clave] = {
+            "ts": time.time(),
+            "ok": False,
+            "ofertas": 0,
+            "duracion": dur,
+            "error": str(exc),
+        }
+        print(f"  [recolectar] error en fuente '{clave}': {exc}")
+        return []
+
 
 def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
     ofertas: list[Deal] = []
@@ -49,8 +78,16 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> Slickdeals: {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
-                                 cfg.get("excluir"), cfg.get("incluir")), cfg)
+                _recolectar_fuente(
+                    "slickdeals",
+                    slickdeals.fetch,
+                    consultas,
+                    cfg.get("por_consulta", 12),
+                    cfg.get("excluir"),
+                    cfg.get("incluir"),
+                ),
+                cfg,
+            )
 
     if "vtex" in activas:
         cfg = watchlist.get("vtex", {})
@@ -58,8 +95,16 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> VTEX ({', '.join(cfg.get('tiendas', vtex.TIENDAS))}): {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 24),
-                           cfg.get("marcas")), cfg)
+                _recolectar_fuente(
+                    "vtex",
+                    vtex.fetch,
+                    consultas,
+                    cfg.get("tiendas"),
+                    cfg.get("por_consulta", 24),
+                    cfg.get("marcas"),
+                ),
+                cfg,
+            )
 
     if "algolia_co" in activas:
         cfg = watchlist.get("algolia_co", {})
@@ -67,16 +112,28 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> Alkosto/K-tronix: {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                algolia_co.fetch(consultas, cfg.get("tiendas"),
-                                 cfg.get("por_consulta", 60)), cfg)
+                _recolectar_fuente(
+                    "algolia_co",
+                    algolia_co.fetch,
+                    consultas,
+                    cfg.get("tiendas"),
+                    cfg.get("por_consulta", 60),
+                ),
+                cfg,
+            )
 
     if "promocajita" in activas:
         cfg = watchlist.get("promocajita", {})
         if cfg.get("canales"):
             print("-> PROMOCAJITA: canal de Telegram")
-            ofertas += promocajita.fetch(cfg.get("canales"),
-                                         cfg.get("por_canal", 20),
-                                         cfg.get("incluir"), cfg.get("excluir"))
+            ofertas += _recolectar_fuente(
+                "promocajita",
+                promocajita.fetch,
+                cfg.get("canales"),
+                cfg.get("por_canal", 20),
+                cfg.get("incluir"),
+                cfg.get("excluir"),
+            )
 
     if "falabella" in activas:
         cfg = watchlist.get("falabella", {})
@@ -84,9 +141,16 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> Falabella/Homecenter: {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                falabella.fetch(consultas, cfg.get("tiendas"),
-                                cfg.get("por_consulta", 30),
-                                cfg.get("marcas")), cfg)
+                _recolectar_fuente(
+                    "falabella",
+                    falabella.fetch,
+                    consultas,
+                    cfg.get("tiendas"),
+                    cfg.get("por_consulta", 30),
+                    cfg.get("marcas"),
+                ),
+                cfg,
+            )
 
     # La drogueria va aparte de las demas VTEX: no se le buscan terminos sino el
     # catalogo entero, y necesita su propio veto (en una tienda de tecnologia
@@ -97,8 +161,15 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> Droguerias ({', '.join(cfg.get('tiendas', []))}): {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                vtex.fetch(consultas, cfg.get("tiendas"),
-                           cfg.get("por_consulta", 40)), cfg)
+                _recolectar_fuente(
+                    "droguerias",
+                    vtex.fetch,
+                    consultas,
+                    cfg.get("tiendas"),
+                    cfg.get("por_consulta", 40),
+                ),
+                cfg,
+            )
 
     if "mercadolibre" in activas:
         cfg = watchlist.get("mercadolibre", {})
@@ -106,18 +177,33 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         if consultas:
             print(f"-> Mercado Libre: {len(consultas)} busquedas")
             ofertas += _sin_ruido(
-                mercadolibre.fetch(consultas, por_consulta=cfg.get("por_consulta", 48)), cfg)
+                _recolectar_fuente(
+                    "mercadolibre",
+                    mercadolibre.fetch,
+                    consultas,
+                    por_consulta=cfg.get("por_consulta", 48),
+                ),
+                cfg,
+            )
         else:
             print("-> Mercado Libre: ofertas destacadas")
             ofertas += _sin_ruido(
-                mercadolibre.fetch(por_consulta=cfg.get("por_consulta", 48)), cfg)
+                _recolectar_fuente(
+                    "mercadolibre",
+                    mercadolibre.fetch,
+                    por_consulta=cfg.get("por_consulta", 48),
+                ),
+                cfg,
+            )
 
     if "ebay" in activas:
         cfg = watchlist.get("ebay", {})
         consultas = cfg.get("queries", [])
         if consultas:
             print(f"-> eBay: {len(consultas)} busquedas")
-            ofertas += ebay.fetch(
+            ofertas += _recolectar_fuente(
+                "ebay",
+                ebay.fetch,
                 consultas,
                 cfg.get("vendedores"),
                 cfg.get("precio_max"),
@@ -130,7 +216,9 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         consultas = cfg.get("queries", [])
         print(f"-> Koaj Colombia: {len(consultas)} busquedas + outlets")
         ofertas += _sin_ruido(
-            koaj.fetch(
+            _recolectar_fuente(
+                "koaj",
+                koaj.fetch,
                 consultas,
                 incluir_outlet=cfg.get("incluir_outlet", True),
                 por_consulta=cfg.get("por_consulta", 24),
@@ -143,7 +231,9 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         paginas = cfg.get("paginas", 2)
         print(f"-> El Promo Hunter: {paginas} páginas web")
         ofertas += _sin_ruido(
-            promohunter.fetch(
+            _recolectar_fuente(
+                "promohunter",
+                promohunter.fetch,
                 paginas=paginas,
                 incluir=cfg.get("incluir"),
                 excluir=cfg.get("excluir"),
@@ -156,7 +246,9 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         por_canal = cfg.get("por_canal", 20)
         print(f"-> Milo Derrocha: {por_canal} ofertas de Telegram")
         ofertas += _sin_ruido(
-            miloderrocha.fetch(
+            _recolectar_fuente(
+                "miloderrocha",
+                miloderrocha.fetch,
                 por_canal=por_canal,
                 incluir=cfg.get("incluir"),
                 excluir=cfg.get("excluir"),
@@ -847,6 +939,71 @@ def nueva_busqueda() -> int:
     return _token_busqueda_activa
 
 
+def generar_panel_salud() -> str:
+    """Construye un informe visual detallado del estado del radar exclusivo para el administrador."""
+    zona_co = dt.timezone(dt.timedelta(hours=-5))
+    ahora = dt.datetime.now(zona_co)
+    ahora_str = ahora.strftime("%I:%M %p").lstrip("0")
+
+    with Store() as store:
+        enviadas_hoy = store.enviadas_hoy()
+        try:
+            archivadas = store.conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+        except Exception:
+            archivadas = 0
+
+    lineas = [
+        "🩺 <b>Panel de Diagnóstico y Salud — PromosBot</b>",
+        "",
+        f"🕒 <b>Hora actual:</b> {ahora_str} (Colombia)",
+        f"🚨 <b>Alertas enviadas hoy:</b> <b>{enviadas_hoy}</b> de {config.MAX_ALERTS_PER_DAY}",
+        f"💾 <b>Gangas registradas en BD:</b> <b>{archivadas}</b>",
+        "",
+        "🏬 <b>Estado de Scrapers y Tiendas:</b>",
+    ]
+
+    nombres_fuentes = [
+        ("algolia_co", "Alkosto / K-tronix"),
+        ("vtex", "Éxito / Carulla / Jumbo"),
+        ("falabella", "Falabella / Homecenter"),
+        ("mercadolibre", "Mercado Libre"),
+        ("koaj", "Koaj Colombia"),
+        ("droguerias", "Droguerías"),
+        ("promohunter", "El Promo Hunter"),
+        ("miloderrocha", "Milo Derrocha"),
+        ("promocajita", "PromoCajita"),
+        ("slickdeals", "Slickdeals (Moda/Calzado)"),
+        ("ebay", "eBay"),
+    ]
+
+    ahora_ts = time.time()
+    for clave, etiqueta in nombres_fuentes:
+        info = _SALUD_FUENTES.get(clave)
+        if not info:
+            lineas.append(f"• ⚪ <b>{etiqueta}:</b> Esperando próxima ronda")
+            continue
+
+        minutos_atras = int((ahora_ts - info["ts"]) / 60)
+        tiempo_str = f"hace {minutos_atras}m" if minutos_atras > 0 else "hace un momento"
+
+        if info["ok"]:
+            conteo = info["ofertas"]
+            dur = info["duracion"]
+            lineas.append(f"• 🟢 <b>{etiqueta}:</b> OK ({tiempo_str}) — {conteo} items ({dur}s)")
+        else:
+            err = info.get("error") or "error desconocido"
+            err_corto = telegram.esc(str(err)[:45])
+            lineas.append(f"• 🔴 <b>{etiqueta}:</b> ⚠️ FALLÓ ({tiempo_str}) — <i>{err_corto}</i>")
+
+    lineas.append("")
+    lineas.append("⚙️ <b>Ritmos Automáticos:</b>")
+    lineas.append("• ⚡ Comunidad: cada 15 min (máx 2 alertas)")
+    lineas.append("• 🏬 Catálogos: cada 60 min (máx 3 alertas diversificadas)")
+    lineas.append("• 🛡️ Anti-Monopolio: máx 1 alerta por tienda en cada ronda")
+
+    return "\n".join(lineas)
+
+
 def atender_comandos(por_comando: int | None = None) -> dict:
     """Pregunta por comandos pendientes (getUpdates) y los responde.
 
@@ -1116,6 +1273,17 @@ def atender_solicitudes(solicitudes: list[dict],
                 "<i>En 'Todo Colombia' se monitorean en las 6 tiendas: Éxito, Carulla, Alkosto, K-tronix, Falabella y Olímpica.</i>",
             ]
             telegram.send(telegram.NL.join(lineas), reply_markup=telegram.teclado_tiendas(), chat_id=chat_id)
+            atendidos += 1
+            continue
+
+        if comando in ("salud", "diagnostico", "status_admin") or tipo == "salud":
+            user_id = solicitud.get("user_id")
+            if not whitelist.es_admin(user_id):
+                telegram.send("⛔ Este comando es exclusivo para el administrador de PromosBot.", chat_id=chat_id)
+                atendidos += 1
+                continue
+            texto_salud = generar_panel_salud()
+            telegram.send(texto_salud, reply_markup=telegram.teclado_tiendas(), chat_id=chat_id)
             atendidos += 1
             continue
 
