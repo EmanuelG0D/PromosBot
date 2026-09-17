@@ -418,5 +418,11 @@
     "por_canal": 20,
     "incluir": [],
     "excluir": []
+  },
+  "republica": {
+    "_nota": "Ofertas verificadas de tecnología, hardware y gaming de República de Descuentos en Telegram.",
+    "por_canal": 20,
+    "incluir": [],
+    "excluir": []
   }
 }

@@ -93,6 +93,15 @@ def es_accesorio(titulo: str, palabras: tuple | list | None = None) -> bool:
     if not palabras:
         return False
     limpio = _normalizar(titulo).strip()
+
+    # Componentes de PC y hardware que no deben ser descartados como accesorios
+    if any(limpio.startswith(hw) for hw in (
+        "tarjeta de video", "tarjeta grafica", "tarjeta madre", "tarjeta de sonido",
+        "board", "motherboard", "placa base", "placa madre", "soporte de monitor", "brazo para monitor",
+        "soporte monitor", "base para monitor"
+    )):
+        return False
+
     return any(limpio == _normalizar(p).strip()
                or limpio.startswith(_normalizar(p).strip() + " ")
                for p in palabras)
@@ -145,8 +154,17 @@ def es_pesado_para_casillero(titulo: str) -> bool:
 
 # Expresiones regulares para la subclasificación de familias (Fase 1)
 REGLAS_FAMILIA: dict[str, re.Pattern] = {
+    "computadores_y_hardware": re.compile(
+        r"\b(computador|computadores|computadora|computadoras|pc\s*gamer|laptop|laptops|portatil|portatiles|"
+        r"procesador|procesadores|ryzen|intel\s*core|cpu|"
+        r"board|motherboard|placa\s*base|placa\s*madre|"
+        r"tarjeta\s*de\s*video|tarjeta\s*grafica|grafica|gpu|geforce|rtx|gtx|radeon|"
+        r"memoria\s*ram|ddr4|ddr5|disco\s*ssd|disco\s*duro|nvme|m\.2|"
+        r"fuente\s*de\s*poder|gabinete|chasis|torre\s*gamer|"
+        r"refrigeracion\s*liquida|enfriador|cooler|disipador)\b"
+    ),
     "tv_y_monitores": re.compile(
-        r"\b(tv|televisor|televisores|smart\s*tv|oled|qled|nanocell|uhd|monitor|monitores|pantalla\s*gamer)\b"
+        r"\b(tv|televisor|televisores|smart\s*tv|oled|qled|nanocell|uhd|monitor|monitores|pantalla\s*gamer|pantalla\s*curva)\b"
     ),
     "refrigeracion": re.compile(
         r"\b(nevera|neveras|refrigerador|refrigeradores|nevecon|nevecones|congelador|congeladores|freezer|minibar)\b"
@@ -158,7 +176,11 @@ REGLAS_FAMILIA: dict[str, re.Pattern] = {
         r"\b(airfryer|freidora|licuadora|cafetera|sandwichera|microondas|arrocera|waflera|tostadora|batidora|procesador\s*de\s*alimentos|extractor|olla\s*a\s*presion)\b"
     ),
     "perifericos": re.compile(
-        r"\b(audifonos|auriculares|headset|earbuds|airpods|mouse|teclado|parlante|parlantes|smartwatch|reloj\s*inteligente|cargador|powerbank|webcam|microfono)\b"
+        r"\b(teclado|teclados|mouse|raton|mousepad|tapete\s*gamer|"
+        r"diadema|diademas|audifonos|auriculares|headset|earbuds|airpods|"
+        r"microfono|microfonos|webcam|camara\s*web|capturadora|"
+        r"parlante|parlantes|brazo\s*para\s*monitor|soporte\s*monitor|"
+        r"smartwatch|reloj\s*inteligente|cargador|powerbank)\b"
     ),
     "ropa_basica": re.compile(
         r"\b(camiseta|camisetas|polo|polos|jean|jeans|pantalon|pantalones|pantaloneta|short|shorts|bermuda|bermudas|ropa\s*interior|boxer|boxers|panty|panties|calcetines|medias|pijama|pijamas|esqueleto|buzo|chaqueta|sueter)\b"

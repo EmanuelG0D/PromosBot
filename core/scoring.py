@@ -19,7 +19,7 @@ from core.models import Deal
 from core.veracidad import Veracidad
 
 # Fuentes donde nadie publica el precio anterior: sin lista no hay porcentaje.
-SIN_PRECIO_DE_LISTA = ("slickdeals", "promocajita")
+SIN_PRECIO_DE_LISTA = ("slickdeals", "promocajita", "republica")
 
 
 @dataclass
@@ -112,12 +112,12 @@ def evaluar(deal: Deal, stats: tuple[int, float | None, float | None],
                or descuento >= config.INSTANT_DISCOUNT_PCT
                or (bool(deal.coupons) and descuento >= config.MIN_DISCOUNT_PCT))
 
-    # Las fuentes de comunidad (Slickdeals, PROMOCAJITA) ya vienen filtradas
+    # Las fuentes de comunidad (Slickdeals, PROMOCAJITA, República) ya vienen filtradas
     # por quien las publica y no traen precio de lista: entran aunque no se
-    # pueda calcular el porcentaje, pero solo interrumpen si traen cupon.
+    # pueda calcular el porcentaje.
     if deal.source in SIN_PRECIO_DE_LISTA:
         return Verdict(True, f"destacada en {deal.store}", etiquetas, confianza,
-                       glitch, inmediata=urgente or bool(deal.coupons))
+                       glitch, inmediata=urgente or bool(deal.coupons) or deal.source == "republica")
 
     # Un precio con fecha de caducidad entra con un listón mas bajo: si espera
     # al umbral normal, para cuando alertemos ya se vencio.

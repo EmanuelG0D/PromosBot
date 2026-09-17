@@ -39,7 +39,7 @@ PUERTO = int(os.environ.get("PORT", "10000"))
 # duran horas y cuestan 23 peticiones; los catalogos de tienda se mueven por
 # dia y cuestan 141. Preguntarle a las 12 tiendas cada 15 minutos era gastar
 # 15.744 peticiones diarias para enterarse de lo mismo.
-RONDA_COMUNIDAD = ("slickdeals", "promocajita", "promohunter", "miloderrocha")
+RONDA_COMUNIDAD = ("slickdeals", "promocajita", "promohunter", "miloderrocha", "republica")
 RONDA_CATALOGOS = ("vtex", "algolia_co", "falabella", "droguerias",
                    "mercadolibre", "ebay", "koaj")
 INTERVALO_COMUNIDAD_MIN = float(os.environ.get("RONDA_COMUNIDAD_MINUTOS", "15"))

@@ -3264,8 +3264,159 @@ class PruebaAntiDuplicadosYPersistencia(unittest.TestCase):
             self.assertIn("amazon.com/dp/B09XYZ1234", deal.url)
 
 
+class PruebaRepublicaDescuentos(unittest.TestCase):
+    """Verifica el extractor estructurado y filtros anti-anuncios de República de Descuentos."""
+
+    MOCK_HTML = r"""
+    <div data-post="Republicadescuentos/25854">
+        <div class="tgme_widget_message_text js-message_text">
+            #ad #amazon 400.000 Envío Incluido AOC 24 Inch Curved Gaming Monitor FHD 1080P 180Hz VA 0.5ms HDR Compra AQUÍ <a href="https://amzn.to/4xzYI1B">https://amzn.to/4xzYI1B</a>
+        </div>
+        <div style="background-image: url('https://cdn1.telesco.pe/file/monitor_aoc.jpg')"></div>
+    </div>
+    <div data-post="Republicadescuentos/25855">
+        <div class="tgme_widget_message_text js-message_text">
+            #ad #amazon REGALADO 58.000 Envío Gratis Prime CUPÓN ZD7DMC76 HUANUO FlowLift ™ Pro Monitor Arm Compra AQUÍ <a href="https://amzn.to/4AkdhsD">https://amzn.to/4AkdhsD</a>
+        </div>
+    </div>
+    <div data-post="Republicadescuentos/25852">
+        <div class="tgme_widget_message_text js-message_text">
+            #ad #aliexpress REGALADO 502.200 Envío Incluido CUPÓN OPOCCO20 Procesador Ryzen 7 5700X Compra AQUÍ <a href="https://s.click.aliexpress.com/e/_mKBHB9v">https://s.click.aliexpress.com/e/_mKBHB9v</a>
+        </div>
+    </div>
+    <div data-post="Republicadescuentos/25857">
+        <div class="tgme_widget_message_text js-message_text">
+            Únete a Morse con mi enlace y recibe hasta &#036;40 USD durante tus primeros 30 días. AHORRA Y GANA. CREA TU CUENTA AQUI 💰 <a href="https://morse.link/es/join/LmLRPq">https://morse.link/es/join/LmLRPq</a>
+        </div>
+    </div>
+    <div data-post="Republicadescuentos/25860">
+        <div class="tgme_widget_message_text js-message_text">
+            Descarga esta app de préstamos y gana dinero ya: <a href="https://appexterna.com/ref123">https://appexterna.com/ref123</a>
+        </div>
+    </div>
+    <div data-post="Republicadescuentos/25861">
+        <div class="tgme_widget_message_text js-message_text">
+            Buenos días miembros del canal! Atentos a los descuentos de hoy 🔥
+        </div>
+    </div>
+    """
+
+    def test_extraer_deals_html_valida_ofertas_y_cupones(self):
+        from sources import republica
+        from unittest.mock import patch, MagicMock
+
+        # Mock para evitar llamadas externas a amzn.to en tests
+        mock_resp = MagicMock()
+        mock_resp.geturl.return_value = "https://www.amazon.com/dp/B08XYZ1234?tag=ajeno"
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__.return_value = mock_resp
+        mock_ctx.__exit__.return_value = None
+
+        with patch("urllib.request.urlopen", return_value=mock_ctx):
+            deals = republica.extraer_deals_html(self.MOCK_HTML)
+
+        # De los 6 posts:
+        # - Post 25854: Monitor AOC Amazon (OK)
+        # - Post 25855: Brazo HUANUO con cupón ZD7DMC76 Amazon (OK)
+        # - Post 25852: Procesador Ryzen AliExpress con cupón OPOCCO20 (OK)
+        # - Post 25857: Morse referido (DESCARTADO)
+        # - Post 25860: App externa spam (DESCARTADO)
+        # - Post 25861: Saludo sin precio (DESCARTADO)
+        self.assertEqual(len(deals), 3)
+
+        # Verificar oferta de AliExpress
+        d_ali = [d for d in deals if d.store == "AliExpress"][0]
+        self.assertEqual(d_ali.price, 502200.0)
+        self.assertEqual(d_ali.coupons, ["OPOCCO20"])
+        self.assertIn("Procesador Ryzen 7 5700X", d_ali.title)
+
+        # Verificar oferta con cupón en Amazon
+        d_arm = [d for d in deals if "HUANUO FlowLift" in d.title][0]
+        self.assertEqual(d_arm.price, 58000.0)
+        self.assertEqual(d_arm.coupons, ["ZD7DMC76"])
+        self.assertEqual(d_arm.key, "amazon:B08XYZ1234")
+
+        # Verificar monitor AOC con foto
+        d_mon = [d for d in deals if "AOC 24 Inch" in d.title][0]
+        self.assertEqual(d_mon.price, 400000.0)
+        self.assertEqual(d_mon.image, "https://cdn1.telesco.pe/file/monitor_aoc.jpg")
+
+    def test_filtro_estricto_descarta_anuncios_y_referidos(self):
+        from sources import republica
+        html_spam = r"""
+        <div data-post="Republicadescuentos/9991">
+            <div class="tgme_widget_message_text js-message_text">
+                Unete a esta app con mi enlace y gana dinero en 30 dias: https://invitacion.xyz/gana
+            </div>
+        </div>
+        <div data-post="Republicadescuentos/9992">
+            <div class="tgme_widget_message_text js-message_text">
+                Crea tu cuenta y reclama bono de bienvenida 50.000 COP https://bancoapp.com/ref
+            </div>
+        </div>
+        """
+        deals = republica.extraer_deals_html(html_spam)
+        self.assertEqual(len(deals), 0)
+
+    def test_republica_en_radar_fuentes(self):
+        import radar
+        self.assertIn("republica", radar.FUENTES)
+
+    def test_subclasificacion_hardware_y_perifericos_pc(self):
+        from core import filtros
+
+        casos_hardware = [
+            ("Diadema Gamer Redragon RGB", "perifericos"),
+            ("Teclado Mecanico Inalambrico RGB", "perifericos"),
+            ("Mouse Gamer Inalambrico Logitech G Pro", "perifericos"),
+            ("Tarjeta de Video RTX 4070 Ti Super 16GB", "computadores_y_hardware"),
+            ("Procesador AMD Ryzen 7 7800X3D", "computadores_y_hardware"),
+            ("Motherboard ASUS ROG Strix B650-E Gaming", "computadores_y_hardware"),
+            ("Placa Madre Gigabyte B550M DS3H", "computadores_y_hardware"),
+            ("Memoria RAM Corsair Vengeance 32GB DDR5", "computadores_y_hardware"),
+            ("Disco SSD NVMe 1TB Kingston Renegade", "computadores_y_hardware"),
+            ("Refrigeracion Liquida Thermalright Frozen 360", "computadores_y_hardware"),
+            ("Monitor Gamer Curvo AOC 24 180Hz", "tv_y_monitores"),
+        ]
+        for titulo, familia_esperada in casos_hardware:
+            fam = filtros.asignar_familia(titulo)
+            self.assertEqual(fam, familia_esperada, f"Falló subclasificación para '{titulo}'")
+
+    def test_es_accesorio_no_descarta_hardware(self):
+        from core import filtros
+        self.assertFalse(filtros.es_accesorio("Tarjeta de video MSI RTX 4060"))
+        self.assertFalse(filtros.es_accesorio("Tarjeta madre ASUS TUF GAMING"))
+        self.assertFalse(filtros.es_accesorio("Motherboard Gigabyte B650"))
+        self.assertFalse(filtros.es_accesorio("Placa base ASRock"))
+        self.assertFalse(filtros.es_accesorio("Diadema Gamer HyperX Cloud"))
+
+    def test_scoring_republica_sin_precio_lista_aprobada(self):
+        from core import scoring
+        from core.models import Deal
+
+        d = Deal("republica", "Amazon", "CO", "amazon:B0TEST99", "Tarjeta de video RTX 4060", "http://amzn", 1_500_000, "COP", None)
+        stats = (0, None, None)
+        v = scoring.evaluar(d, stats)
+        self.assertTrue(v.alertar)
+        self.assertTrue(v.inmediata)
+        self.assertIn("destacada en Amazon", v.motivo)
+
+    def test_torneo_puntuacion_hardware_republica(self):
+        import radar
+        from core.scoring import Verdict
+        from core.models import Deal
+
+        d_gpu = Deal("republica", "Amazon", "CO", "amazon:B0GPU", "Tarjeta de Video RTX 4070", "http://amzn", 2_800_000, "COP", None, coupons=["DESC10"])
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        campeones = radar.torneo_familias([(d_gpu, v)])
+        self.assertEqual(len(campeones), 1)
+        # 55.0 con cupón * peso 1.5 de computadores_y_hardware = 82.5 puntos
+        self.assertEqual(campeones[0][2], 82.5)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
 
 
