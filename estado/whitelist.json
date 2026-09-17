@@ -3,6 +3,7 @@
   "usuarios_permitidos": [
     "9999",
     "3333",
+    "8777798603",
     "1006922878",
     "6534826790",
     "1946483685",
@@ -18,10 +19,5 @@
     "5583002220",
     "8888"
   ],
-  "solicitudes_pendientes": {
-    "8777798603": {
-      "nombre": "Bryan",
-      "username": "bryan0495RL"
-    }
-  }
+  "solicitudes_pendientes": {}
 }
