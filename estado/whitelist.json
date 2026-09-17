@@ -19,5 +19,10 @@
     "5583002220",
     "8888"
   ],
-  "solicitudes_pendientes": {}
+  "solicitudes_pendientes": {
+    "1507242908": {
+      "nombre": "Luis Alejandro",
+      "username": ""
+    }
+  }
 }
