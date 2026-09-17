@@ -142,3 +142,42 @@ def es_pesado_para_casillero(titulo: str) -> bool:
     limpio = _normalizar(titulo).split()
     return any(p in limpio for p in PESADOS_CASILLERO)
 
+
+# Expresiones regulares para la subclasificación de familias (Fase 1)
+REGLAS_FAMILIA: dict[str, re.Pattern] = {
+    "tv_y_monitores": re.compile(
+        r"\b(tv|televisor|televisores|smart\s*tv|oled|qled|nanocell|uhd|monitor|monitores|pantalla\s*gamer)\b"
+    ),
+    "refrigeracion": re.compile(
+        r"\b(nevera|neveras|refrigerador|refrigeradores|nevecon|nevecones|congelador|congeladores|freezer|minibar)\b"
+    ),
+    "smartphones": re.compile(
+        r"\b(celular|celulares|smartphone|smartphones|telefono\s*movil|iphone|galaxy\s*(?:s\d+|a\d+|z|fold|flip)|redmi|xiaomi|motorola\s*(?:edge|g\d+))\b"
+    ),
+    "pequenos_electro": re.compile(
+        r"\b(airfryer|freidora|licuadora|cafetera|sandwichera|microondas|arrocera|waflera|tostadora|batidora|procesador\s*de\s*alimentos|extractor|olla\s*a\s*presion)\b"
+    ),
+    "perifericos": re.compile(
+        r"\b(audifonos|auriculares|headset|earbuds|airpods|mouse|teclado|parlante|parlantes|smartwatch|reloj\s*inteligente|cargador|powerbank|webcam|microfono)\b"
+    ),
+    "ropa_basica": re.compile(
+        r"\b(camiseta|camisetas|polo|polos|jean|jeans|pantalon|pantalones|pantaloneta|short|shorts|bermuda|bermudas|ropa\s*interior|boxer|boxers|panty|panties|calcetines|medias|pijama|pijamas|esqueleto|buzo|chaqueta|sueter)\b"
+    ),
+    "otros": re.compile(r".*"),
+}
+
+
+def asignar_familia(titulo: str) -> str:
+    """Retorna la subfamilia del producto según el título. Si no hace match, retorna 'otros'."""
+    limpio = _normalizar(titulo)
+    for familia, patron in REGLAS_FAMILIA.items():
+        if familia == "otros":
+            continue
+        if patron.search(limpio):
+            return familia
+    return "otros"
+
+
+_asignar_familia = asignar_familia
+
+

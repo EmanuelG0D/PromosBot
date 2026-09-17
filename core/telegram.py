@@ -46,6 +46,9 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
             veracidad: Veracidad | None = None, es_privado: bool = False) -> list[str]:
     lineas: list[str] = []
 
+    if getattr(deal, "es_glitch", False) or getattr(verdict, "glitch", False):
+        lineas.append("🚨 ERROR DE PRECIO / SÚPER GANGA 🚨")
+
     encabezado = f"{_emoji(verdict)} <b>{esc(deal.store)}</b>"
     if deal.discount_verificable:
         encabezado += f" \u00b7 <b>-{deal.discount_verificable:g}%</b>"
@@ -593,6 +596,42 @@ def render_resumen(pares) -> str:
         incluidas += 1
 
     return "\n".join(lineas)
+
+
+def render_menciones_honorificas(menciones: list) -> str:
+    """Genera el mensaje HTML con el formato exacto para menciones honoríficas."""
+    cuerpo = "⚡ <b>Otras gangas que acaban de salir:</b>\n\n"
+    for item in menciones:
+        deal = item[0] if isinstance(item, (tuple, list)) else item
+        link = esc(deal.url)
+        titulo_truncado = esc(deal.title[:45].strip())
+        precio_formateado = money(deal.price, deal.currency)
+        descuento = f"{deal.discount_verificable:g}" if deal.discount_verificable else "0"
+        cuerpo += f"🔸 <a href='{link}'>{titulo_truncado}</a>\n💵 {precio_formateado} (🔥 -{descuento}%)\n\n"
+    return cuerpo
+
+
+def enviar_menciones_honorificas(menciones: list, chat_id: int | str | None = None) -> bool:
+    """Envía un resumen de menciones honoríficas en un único mensaje HTML silencioso (Fase 3)."""
+    if not enabled() or not menciones:
+        return False
+
+    cuerpo = render_menciones_honorificas(menciones)
+    url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendMessage")
+    destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
+    payload = {
+        "chat_id": destino,
+        "text": cuerpo.rstrip(),
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+        "disable_notification": True,
+    }
+    try:
+        respuesta = http.post_json(url, payload, retries=1)
+        return bool(respuesta.get("ok"))
+    except Exception as exc:
+        print(f"  [telegram] fallo enviando menciones honorificas: {exc}")
+        return False
 
 
 def descubrir_chats() -> list[dict]:

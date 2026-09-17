@@ -40,6 +40,20 @@ COLORES = {
 }
 
 _SALUD_FUENTES: dict[str, dict] = {}
+_TELEMETRIA_LIGAS: dict[str, Any] = {
+    "glitches_hoy": 0,
+    "ultimo_top3_avg_score": 0.0,
+    "menciones_hoy": 0,
+    "fecha_hoy": "",
+}
+
+
+def _actualizar_telemetria_dia() -> None:
+    hoy = dt.date.today().isoformat()
+    if _TELEMETRIA_LIGAS["fecha_hoy"] != hoy:
+        _TELEMETRIA_LIGAS["glitches_hoy"] = 0
+        _TELEMETRIA_LIGAS["menciones_hoy"] = 0
+        _TELEMETRIA_LIGAS["fecha_hoy"] = hoy
 
 
 def _recolectar_fuente(clave: str, fetcher, *args, **kwargs) -> list[Deal]:
@@ -679,8 +693,84 @@ DEPTO_HOGAR = {
 }
 
 
+def detectar_errores_precio(oferta: Deal) -> bool:
+    """Detecta si una oferta es un 'Glitch' o 'Error de Precio' matemático (Fase 0).
+
+    Condiciones:
+    - Glitch Tecnológico/Pesado: (descuento_porcentaje >= 65) AND ((precio_original - precio_final) >= 300000)
+    - Glitch General: (descuento_porcentaje >= 85) AND (precio_final >= 20000)
+    """
+    desc = getattr(oferta, "discount_verificable", 0.0) or 0.0
+    p_final = getattr(oferta, "price", 0.0) or 0.0
+    p_orig = getattr(oferta, "list_price", 0.0) or p_final
+
+    if getattr(oferta, "currency", "COP") == "USD":
+        ahorro_usd = max(0.0, p_orig - p_final)
+        glitch_pesado = (desc >= 65.0) and (ahorro_usd >= 75.0)
+        glitch_general = (desc >= 85.0) and (p_final >= 5.0)
+        return bool(glitch_pesado or glitch_general)
+
+    ahorro = max(0.0, p_orig - p_final)
+    glitch_tecnologico_pesado = (desc >= 65.0) and (ahorro >= 300000.0)
+    glitch_general = (desc >= 85.0) and (p_final >= 20000.0)
+    return bool(glitch_tecnologico_pesado or glitch_general)
+
+
+PESOS_FAMILIA: dict[str, float] = {
+    "tv_y_monitores": 1.5,
+    "smartphones": 1.5,
+    "refrigeracion": 1.4,
+    "pequenos_electro": 1.1,
+    "perifericos": 1.0,
+    "ropa_basica": 0.8,
+    "otros": 1.0,
+}
+
+
+def torneo_familias(candidatas: list[tuple[Deal, Verdict]]) -> list[tuple[Deal, Verdict, float]]:
+    """Ejecuta el Sistema de Torneo y Score Ponderado por Familias (Fase 2).
+
+    1. Toma las ofertas válidas y las agrupa por 'familia'.
+    2. De cada familia conserva ÚNICAMENTE la oferta con mayor descuento_porcentaje (El Campeón).
+    3. Calcula score_relevancia = descuento_porcentaje * PESOS_FAMILIA.get(familia, 1.0).
+    4. Ordena la lista final usando ORDER BY score_relevancia DESC.
+    """
+    if not candidatas:
+        return []
+
+    por_fam: dict[str, list[tuple[Deal, Verdict]]] = {}
+    for par in candidatas:
+        fam = filtros.asignar_familia(par[0].title)
+        por_fam.setdefault(fam, []).append(par)
+
+    campeones: list[tuple[Deal, Verdict, float]] = []
+    for fam, grupo in por_fam.items():
+        if not grupo:
+            continue
+        campeon_par = max(
+            grupo,
+            key=lambda p: getattr(p[0], "discount_verificable", 0.0) or 0.0
+        )
+        deal, verdict = campeon_par
+        desc = getattr(deal, "discount_verificable", 0.0) or 0.0
+        peso = PESOS_FAMILIA.get(fam, 1.0)
+        score = round(desc * peso, 2)
+        campeones.append((deal, verdict, score))
+
+    campeones.sort(key=lambda c: c[2], reverse=True)
+    return campeones
+
+
 def _clasificar_departamento(title: str) -> str:
     """Clasifica un producto en un rubro principal para equilibrar la variedad de ofertas."""
+    fam = filtros.asignar_familia(title)
+    if fam in ("tv_y_monitores", "smartphones", "perifericos"):
+        return "tecnologia"
+    if fam in ("refrigeracion", "pequenos_electro"):
+        return "cocina_electro"
+    if fam == "ropa_basica":
+        return "moda_calzado"
+
     t_norm = filtros._normalizar(title)
     if any(filtros.menciona(t_norm, kw) for kw in DEPTO_COCINA | DEPTO_LINEA_BLANCA):
         return "cocina_electro"
@@ -691,6 +781,7 @@ def _clasificar_departamento(title: str) -> str:
     if any(filtros.menciona(t_norm, kw) for kw in DEPTO_HOGAR):
         return "hogar"
     return "otros"
+
 
 
 def _seleccionar_diversificadas(candidatas: list[tuple[Deal, Verdict]],
@@ -957,6 +1048,9 @@ def generar_panel_salud() -> str:
         "",
         f"🕒 <b>Hora actual:</b> {ahora_str} (Colombia)",
         f"🚨 <b>Alertas enviadas hoy:</b> <b>{enviadas_hoy}</b> de {config.MAX_ALERTS_PER_DAY}",
+        f"⚡ <b>Errores de Precio (Glitches) hoy:</b> <b>{_TELEMETRIA_LIGAS.get('glitches_hoy', 0)}</b>",
+        f"🏆 <b>Promedio Score Top 3:</b> <b>{_TELEMETRIA_LIGAS.get('ultimo_top3_avg_score', 0.0)} pts</b>",
+        f"📜 <b>Menciones honoríficas enviadas:</b> <b>{_TELEMETRIA_LIGAS.get('menciones_hoy', 0)}</b>",
         f"💾 <b>Gangas registradas en BD:</b> <b>{archivadas}</b>",
         "",
         "🏬 <b>Estado de Scrapers y Tiendas:</b>",
@@ -1786,30 +1880,40 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             # Sin resumen: todo lo que vale la pena va como tarjeta propia.
             inmediatas, para_resumen = candidatas, []
 
-        es_ronda_comunidad = set(activas).issubset({"slickdeals", "promocajita", "promohunter", "miloderrocha"})
-        es_ronda_catalogos = set(activas).isdisjoint({"slickdeals", "promocajita", "promohunter", "miloderrocha"})
+        # FASE 0: Válvula de Escape / Fast-Track para Errores de Precio
+        fasttrack_glitches: list[tuple[Deal, Verdict]] = []
+        candidatas_ordinarias: list[tuple[Deal, Verdict]] = []
 
+        for par in candidatas:
+            deal, verdict = par
+            if detectar_errores_precio(deal):
+                deal.es_glitch = True
+                verdict.glitch = True
+                fasttrack_glitches.append(par)
+            else:
+                candidatas_ordinarias.append(par)
+
+        # FASE 2: Sistema de Torneo y Score Ponderado
+        campeones_ordenados = torneo_familias(candidatas_ordinarias)
+
+        _actualizar_telemetria_dia()
+        if campeones_ordenados:
+            t3_scores = [c[2] for c in campeones_ordenados[:3]]
+            _TELEMETRIA_LIGAS["ultimo_top3_avg_score"] = round(sum(t3_scores) / len(t3_scores), 1)
+
+        # FASE 3: Bifurcación del Envío (Top 3 ofertas completas + Menciones Honoríficas)
         if top:
-            seleccion = inmediatas[:top]
-        elif es_ronda_comunidad:
-            tope = limite or getattr(config, "MAX_ALERTS_COMUNIDAD", 2)
-            seleccion = inmediatas[:tope]
-        elif es_ronda_catalogos:
-            tope = limite or getattr(config, "MAX_ALERTS_CATALOGOS", 3)
-            max_pt = getattr(config, "MAX_ALERTS_PER_STORE_RUN", 1)
-            seleccion = _seleccionar_diversificadas(inmediatas, tope, max_por_tienda=max_pt)
+            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:top]]
+            menciones = []
+        elif limite:
+            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:limite]]
+            menciones = [(c[0], c[1]) for c in campeones_ordenados[limite:limite + 4]]
         else:
-            # Ronda mixta: separar comunitarias y catálogos para que no se canibalicen
-            inmediatas_com = [p for p in inmediatas if p[0].source in {"slickdeals", "promocajita", "promohunter", "miloderrocha"}]
-            inmediatas_cat = [p for p in inmediatas if p[0].source not in {"slickdeals", "promocajita", "promohunter", "miloderrocha"}]
-            tope_com = getattr(config, "MAX_ALERTS_COMUNIDAD", 2)
-            tope_cat = getattr(config, "MAX_ALERTS_CATALOGOS", 3)
-            max_pt = getattr(config, "MAX_ALERTS_PER_STORE_RUN", 1)
-            sel_com = inmediatas_com[:tope_com]
-            sel_cat = _seleccionar_diversificadas(inmediatas_cat, tope_cat, max_por_tienda=max_pt)
-            seleccion = sel_com + sel_cat
-            if limite:
-                seleccion = seleccion[:limite]
+            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:3]]
+            menciones = [(c[0], c[1]) for c in campeones_ordenados[3:7]]
+
+        # Las de Fast-Track se anteponen para enviarse sin topes ni límites
+        seleccion = fasttrack_glitches + seleccion
 
         print(f"{len(candidatas)} candidatas ({colapsadas} variantes colapsadas): "
               f"{len(inmediatas)} inmediatas (envio {len(seleccion)}), "
@@ -1871,10 +1975,29 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 store.guardar_deal_reciente(deal)
                 store.sumar_enviada(deal)
                 enviados += 1
+                if getattr(deal, "es_glitch", False) or verdict.glitch:
+                    _TELEMETRIA_LIGAS["glitches_hoy"] += 1
                 formatos[via] = formatos.get(via, 0) + 1
                 # Telegram admite ~20 mensajes por minuto en un grupo. Con 20
                 # tarjetas por ronda, 3.5s de pausa deja margen de sobra.
                 time.sleep(3.5)
+
+        # FASE 3: Menciones honoríficas agrupadas
+        en_menciones = 0
+        if menciones:
+            if dry_run or not telegram.enabled():
+                print(telegram.render_menciones_honorificas(menciones))
+                print("-" * 60)
+                en_menciones = len(menciones)
+            else:
+                if telegram.enviar_menciones_honorificas(menciones):
+                    _TELEMETRIA_LIGAS["menciones_hoy"] += len(menciones)
+                    en_menciones = len(menciones)
+                    for m_deal, _ in menciones:
+                        _marcar_avisada(store, m_deal, hermanas)
+                        store.guardar_deal_reciente(m_deal)
+                        store.sumar_enviada(m_deal)
+
 
         # El resumen recoge lo que no ameritaba interrumpir.
         en_resumen = 0
@@ -1897,13 +2020,14 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
         else:
             detalle = ", ".join(f"{n} por {via}" for via, n in sorted(formatos.items()))
             print(f"Enviadas {enviados} alertas ({detalle or 'sin detalle'})"
+                  + (f", {en_menciones} menciones honoríficas" if en_menciones else "")
                   + (f" y {en_resumen} en el resumen." if en_resumen else "."))
 
         borradas = store.prune()
         if borradas:
             print(f"Historial podado: {borradas} observaciones antiguas.")
 
-        if (enviados > 0 or en_resumen > 0) and not dry_run:
+        if (enviados > 0 or en_resumen > 0 or en_menciones > 0) and not dry_run:
             if respaldo.guardar():
                 print("  [radar] historial respaldado inmediatamente en GitHub")
 

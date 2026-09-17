@@ -13,12 +13,28 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 
 import config
-from core import filtros, objetivos, veracidad
+from core import filtros, objetivos, veracidad, http
 from core.coupons import extract_coupons, needs_clipping
 from core.landed import calcular
 from core.models import Deal
 from core.scoring import evaluar
 from core.store import Store
+
+# SALVAGUARDA GLOBAL DE PRUEBAS:
+# Bloquea 100% cualquier intento de llamada a la API real de Telegram durante la ejecución de los tests.
+_real_post_json = http.post_json
+def _seguro_post_json(url, *args, **kwargs):
+    if "api.telegram.org" in str(url):
+        return {"ok": True, "result": {"message_id": 99999, "status": "member"}}
+    return _real_post_json(url, *args, **kwargs)
+http.post_json = _seguro_post_json
+
+_real_post_multipart = http.post_multipart
+def _seguro_post_multipart(url, *args, **kwargs):
+    if "api.telegram.org" in str(url):
+        return {"ok": True, "result": {"message_id": 99999}}
+    return _real_post_multipart(url, *args, **kwargs)
+http.post_multipart = _seguro_post_multipart
 
 
 def oferta(**kwargs) -> Deal:
@@ -27,8 +43,14 @@ def oferta(**kwargs) -> Deal:
         title="Producto de prueba", url="https://ejemplo.co/p",
         price=100_000.0, currency="COP", list_price=400_000.0,
     )
+    if "discount" in kwargs:
+        d = kwargs.pop("discount")
+        p = kwargs.get("price", base["price"])
+        if d > 0 and d < 100 and p:
+            kwargs.setdefault("list_price", round(p / (1.0 - d / 100.0), 2))
     base.update(kwargs)
     return Deal(**base)
+
 
 
 class PruebaCupones(unittest.TestCase):
@@ -2234,11 +2256,13 @@ class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
         ]
 
         ofertas_enviadas = []
+        mensajes_chat = []
         with patch("core.telegram.enviar_oferta", side_effect=lambda d, *a, **k: ofertas_enviadas.append(d.key)), \
+             patch("core.telegram.send", side_effect=lambda txt, **k: mensajes_chat.append(txt) or True), \
              patch.object(radar, "_ofertas_de", return_value=deals_disponibles), \
              patch("time.sleep"):
 
-            cid = config.TELEGRAM_CHAT_ID or 4444
+            cid = 999999
             # 1. Primera tanda (busqueda normal)
             sol1 = {"comando": "categoria", "tipo": "categoria", "categoria_nombre": "❄️ Neveras", "consultas": ["nevera"], "chat_id": cid}
             radar.atender_solicitudes([sol1], por_comando=3)
@@ -2997,6 +3021,166 @@ class PruebaPanelSaludAdmin(unittest.TestCase):
         sol = comandos.leer_comando(msg_menu)
         self.assertIsNotNone(sol)
         self.assertEqual(sol["tipo"], "menu")
+
+    def test_fase0_detectar_errores_precio_glitches(self):
+        import radar
+        from core import telegram
+        from core.scoring import Verdict
+
+        # 1. Glitch Tecnológico/Pesado: desc >= 65% y ahorro >= $300.000 COP
+        d_glitch_pesado = oferta(
+            title="Smart TV OLED 65 LG 4K",
+            price=700000,
+            list_price=2000000,
+            discount=65.0,
+            currency="COP",
+        )
+        self.assertTrue(radar.detectar_errores_precio(d_glitch_pesado))
+
+        # No es glitch: desc < 65% aunque el ahorro sea alto
+        d_no_glitch_1 = oferta(
+            title="Nevera LG",
+            price=1500000,
+            list_price=2000000,
+            discount=25.0,
+            currency="COP",
+        )
+        self.assertFalse(radar.detectar_errores_precio(d_no_glitch_1))
+
+        # 2. Glitch General: desc >= 85% y precio >= $20.000 COP
+        d_glitch_gral = oferta(
+            title="Tenis Running Pro",
+            price=30000,
+            list_price=250000,
+            discount=88.0,
+            currency="COP",
+        )
+        self.assertTrue(radar.detectar_errores_precio(d_glitch_gral))
+
+        # No es glitch: desc 90% pero producto ínfimo < 20.000 COP (ej. pañuelos a 5.000)
+        d_chucheria = oferta(
+            title="Pañuelos Faciales",
+            price=5000,
+            list_price=50000,
+            discount=90.0,
+            currency="COP",
+        )
+        self.assertFalse(radar.detectar_errores_precio(d_chucheria))
+
+        # 3. Verificar etiqueta en cabecera de Telegram
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=True, etiquetas=["test"], motivo="")
+        lineas = telegram._lineas(d_glitch_pesado, v)
+        self.assertEqual(lineas[0], "🚨 ERROR DE PRECIO / SÚPER GANGA 🚨")
+
+    def test_fase1_subclasificacion_por_familias_regex(self):
+        from core import filtros
+
+        casos = [
+            ("Smart TV Samsung 55 Pulgadas 4K UHD", "tv_y_monitores"),
+            ("Monitor Gamer Curvo 27 144Hz", "tv_y_monitores"),
+            ("Nevera No Frost Mabe 400 Litros Inox", "refrigeracion"),
+            ("Nevecon Samsung French Door", "refrigeracion"),
+            ("Celular Samsung Galaxy S24 Ultra 256GB", "smartphones"),
+            ("Smartphone Xiaomi Redmi Note 13", "smartphones"),
+            ("Airfryer Freidora De Aire Imusa 3.2L", "pequenos_electro"),
+            ("Cafetera Espresso Oster Prima Latte", "pequenos_electro"),
+            ("Audifonos Inalambricos Sony WH-1000XM5", "perifericos"),
+            ("Mouse Gamer Logitech G502", "perifericos"),
+            ("Camiseta Polo Classic Fit Hombre", "ropa_basica"),
+            ("Jean Clasico Azul Denim", "ropa_basica"),
+            ("Juguete Carro Monster Truck", "otros"),
+        ]
+        for titulo, familia_esperada in casos:
+            fam = filtros.asignar_familia(titulo)
+            self.assertEqual(fam, familia_esperada, f"Falló para: '{titulo}'")
+            # Probar alias _asignar_familia
+            self.assertEqual(filtros._asignar_familia(titulo), familia_esperada)
+
+    def test_fase2_torneo_y_score_ponderado(self):
+        import radar
+        from core.scoring import Verdict
+
+        # Simular productos:
+        # Camiseta con 80% de descuento (peso 0.8 -> score = 64)
+        d_ropa = oferta(title="Camiseta Basica Cuello Redondo", price=20000, list_price=100000, discount=80.0)
+        # Camiseta peor dentro de la misma familia (60% -> debe ser eliminada)
+        d_ropa_peor = oferta(title="Camiseta Polo Algodon", price=40000, list_price=100000, discount=60.0)
+        # Televisor con 50% de descuento (peso 1.5 -> score = 75)
+        d_tv = oferta(title="Smart TV LG 50 Pulgadas 4K", price=1000000, list_price=2000000, discount=50.0)
+        # Smartphone con 45% (peso 1.5 -> score = 67.5)
+        d_cel = oferta(title="Celular Galaxy A54 128GB", price=800000, list_price=1454545, discount=45.0)
+
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        candidatas = [
+            (d_ropa, v),
+            (d_ropa_peor, v),
+            (d_tv, v),
+            (d_cel, v),
+        ]
+
+        campeones = radar.torneo_familias(candidatas)
+
+        # 1. Solo debe haber 3 campeones (una por cada familia: tv_y_monitores, smartphones, ropa_basica)
+        self.assertEqual(len(campeones), 3)
+
+        # 2. El TV (score 75.0) debe ganar el primer puesto por encima de la camiseta al 80% (score 64.0)
+        primero = campeones[0]
+        self.assertEqual(primero[0].title, d_tv.title)
+        self.assertEqual(primero[2], 75.0)
+
+        # 3. El celular (score 67.5) queda en segundo puesto
+        segundo = campeones[1]
+        self.assertEqual(segundo[0].title, d_cel.title)
+        self.assertEqual(segundo[2], 67.5)
+
+        # 4. La camiseta (score 64.0) queda en tercer puesto
+        tercero = campeones[2]
+        self.assertEqual(tercero[0].title, d_ropa.title)
+        self.assertEqual(tercero[2], 64.0)
+
+    def test_fase3_bifurcacion_telegram_y_menciones_honorificas(self):
+        from unittest.mock import patch
+        from core import telegram
+
+        menciones = [
+            oferta(title="Audifonos Bluetooth Inalambricos Cancelacion de Ruido Sony",
+                   price=150000, discount=40.0, url="https://alkosto.com/audifonos", currency="COP"),
+            oferta(title="Cafetera Electrica Oster 12 Tazas Filtro Permanente",
+                   price=80000, discount=35.0, url="https://exito.com/cafetera", currency="COP"),
+        ]
+
+        # 1. Verificar formato exacto de render_menciones_honorificas
+        html = telegram.render_menciones_honorificas(menciones)
+        self.assertIn("⚡ <b>Otras gangas que acaban de salir:</b>", html)
+        self.assertIn("🔸 <a href='https://alkosto.com/audifonos'>Audifonos Bluetooth Inalambricos Cancelacion", html)
+        self.assertIn("💵 $150.000 (🔥 -40%)", html)
+        self.assertIn("🔸 <a href='https://exito.com/cafetera'>Cafetera Electrica Oster 12 Tazas Filtro P", html)
+        self.assertIn("💵 $80.000 (🔥 -35%)", html)
+
+        # 2. Verificar envío con parámetros críticos parse_mode="HTML", disable_web_page_preview=True, disable_notification=True
+        llamadas_post = []
+        with patch("config.TELEGRAM_BOT_TOKEN", "token_test"), \
+             patch("config.TELEGRAM_CHAT_ID", "-10012345"), \
+             patch("core.http.post_json", side_effect=lambda url, payload, **k: llamadas_post.append(payload) or {"ok": True}):
+            ok = telegram.enviar_menciones_honorificas(menciones)
+            self.assertTrue(ok)
+            self.assertEqual(len(llamadas_post), 1)
+            payload = llamadas_post[0]
+            self.assertEqual(payload["chat_id"], "-10012345")
+            self.assertEqual(payload["parse_mode"], "HTML")
+            self.assertTrue(payload["disable_web_page_preview"])
+            self.assertTrue(payload["disable_notification"])
+
+    def test_fase4_actualizacion_telemetria_salud(self):
+        import radar
+        radar._TELEMETRIA_LIGAS["glitches_hoy"] = 4
+        radar._TELEMETRIA_LIGAS["ultimo_top3_avg_score"] = 73.8
+        radar._TELEMETRIA_LIGAS["menciones_hoy"] = 12
+
+        panel = radar.generar_panel_salud()
+        self.assertIn("Errores de Precio (Glitches) hoy:</b> <b>4</b>", panel)
+        self.assertIn("Promedio Score Top 3:</b> <b>73.8 pts</b>", panel)
+        self.assertIn("Menciones honoríficas enviadas:</b> <b>12</b>", panel)
 
 
 if __name__ == "__main__":
