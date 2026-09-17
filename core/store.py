@@ -39,12 +39,23 @@ CREATE TABLE IF NOT EXISTS deals_recientes (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_deals_recientes_created ON deals_recientes(created_at);
+CREATE INDEX IF NOT EXISTS idx_alerts_store_ts ON alerts(store, last_alert_ts);
 """
+
 
 
 import time
 
+import re
+import unicodedata
+
 _ultimo_ts = 0.0
+
+
+def _normalizar_titulo(texto: str) -> str:
+    plano = unicodedata.normalize("NFKD", (texto or "").lower())
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", plano).strip()
 
 
 def _now() -> str:
@@ -137,29 +148,41 @@ class Store:
         return len(precios), statistics.median(precios), min(precios)
 
     # -- deduplicacion ---------------------------------------------------
-    def should_alert(self, deal: Deal) -> tuple[bool, str]:
+    def should_alert(self, deal: Deal, dias_titulo: int = 2) -> tuple[bool, str]:
         row = self.conn.execute(
             "SELECT last_alert_ts, last_alert_price FROM alerts WHERE key = ?", (deal.key,)
         ).fetchone()
-        if row is None:
-            return True, "nueva"
+        if row is not None:
+            previo = row["last_alert_price"]
+            if deal.price is not None and previo:
+                umbral = previo * (1 - config.REALERT_DROP_PCT / 100)
+                if deal.price <= umbral:
+                    caida = round((1 - deal.price / previo) * 100)
+                    return True, f"bajo {caida}% mas desde la ultima alerta"
 
-        previo = row["last_alert_price"]
-        if deal.price is not None and previo:
-            umbral = previo * (1 - config.REALERT_DROP_PCT / 100)
-            if deal.price <= umbral:
-                caida = round((1 - deal.price / previo) * 100)
-                return True, f"bajo {caida}% mas desde la ultima alerta"
+            try:
+                ultima = dt.datetime.fromisoformat(row["last_alert_ts"])
+                dias = (dt.datetime.now(dt.timezone.utc) - ultima).days
+            except (TypeError, ValueError):
+                return True, "registro previo ilegible"
+            if dias >= config.REALERT_DAYS:
+                return True, f"sigue vigente tras {dias} dias"
 
-        try:
-            ultima = dt.datetime.fromisoformat(row["last_alert_ts"])
-            dias = (dt.datetime.now(dt.timezone.utc) - ultima).days
-        except (TypeError, ValueError):
-            return True, "registro previo ilegible"
-        if dias >= config.REALERT_DAYS:
-            return True, f"sigue vigente tras {dias} dias"
+            return False, "ya avisada"
 
-        return False, "ya avisada"
+        # Deduplicación secundaria por título y tienda (ventana de 2 días / 48 horas)
+        if deal.title and deal.store and dias_titulo > 0:
+            corte_2d = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias_titulo)).isoformat()
+            filas = self.conn.execute(
+                "SELECT title FROM alerts WHERE LOWER(store) = LOWER(?) AND last_alert_ts >= ?",
+                (deal.store.strip(), corte_2d),
+            ).fetchall()
+            t_norm_nuevo = _normalizar_titulo(deal.title)
+            for f in filas:
+                if _normalizar_titulo(f["title"]) == t_norm_nuevo:
+                    return False, f"ya avisada en los ultimos {dias_titulo} dias (mismo producto en {deal.store})"
+
+        return True, "nueva"
 
     def mark_alerted(self, deal: Deal) -> None:
         ahora = _now()

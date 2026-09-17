@@ -3183,6 +3183,87 @@ class PruebaPanelSaludAdmin(unittest.TestCase):
         self.assertIn("Menciones honoríficas enviadas:</b> <b>12</b>", panel)
 
 
+class PruebaAntiDuplicadosYPersistencia(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.store = Store(self.tmp.name)
+
+    def tearDown(self):
+        self.store.close()
+        try:
+            Path(self.tmp.name).unlink()
+        except OSError:
+            pass
+
+    def test_deduplicacion_secundaria_por_titulo_y_tienda_2_dias(self):
+        d1 = oferta(key="vtex:totto:111", store="Totto", title="Morral Escolar Acuarela", price=89900.0)
+        self.store.mark_alerted(d1)
+
+        # Mismo producto con clave diferente (ej. cambio de ID en VTEX o nuevo SKU) dentro de 48h
+        d2 = oferta(key="vtex:totto:222", store="Totto", title="Morral Escolar Acuarela", price=89900.0)
+        pasa, motivo = self.store.should_alert(d2, dias_titulo=2)
+        self.assertFalse(pasa)
+        self.assertIn("ya avisada en los ultimos 2 dias", motivo)
+
+        # En otra tienda no se descarta (ej. Carulla)
+        d_carulla = oferta(key="vtex:carulla:333", store="Carulla", title="Morral Escolar Acuarela", price=89900.0)
+        pasa_carulla, motivo_carulla = self.store.should_alert(d_carulla, dias_titulo=2)
+        self.assertTrue(pasa_carulla)
+        self.assertEqual(motivo_carulla, "nueva")
+
+        # Si pasaron más de 2 días (ej. 3 días atrás), ya debe ser admisible nuevamente
+        hace_3_dias = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=3)).isoformat()
+        self.store.conn.execute("UPDATE alerts SET last_alert_ts = ? WHERE key = ?", (hace_3_dias, d1.key))
+        self.store.conn.commit()
+
+        pasa_expirada, motivo_expirada = self.store.should_alert(d2, dias_titulo=2)
+        self.assertTrue(pasa_expirada)
+        self.assertEqual(motivo_expirada, "nueva")
+
+    def test_persistencia_mostradas_comandos(self):
+        from core import comandos
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_estado = comandos.ESTADO
+            comandos.ESTADO = _Path(tmp_dir) / "comandos_test.json"
+            try:
+                cid = "chat_test_48h"
+                comandos.marcar_mostradas(["oferta_totto_1", "oferta_carulla_1"], chat_id=cid)
+                comandos.marcar_mostradas(["oferta_otra_tienda"], chat_id="otro_chat")
+                mostradas = comandos.ya_mostradas(chat_id=cid)
+                self.assertIn("oferta_totto_1", mostradas)
+                self.assertIn("oferta_carulla_1", mostradas)
+                self.assertNotIn("oferta_totto_1", comandos.ya_mostradas(chat_id="otro_chat"))
+                self.assertIn("oferta_otra_tienda", comandos.ya_mostradas(chat_id="otro_chat"))
+            finally:
+                comandos.ESTADO = orig_estado
+
+    def test_promohunter_expansion_enlace_acortado_amazon(self):
+        from sources import promohunter
+        from unittest.mock import MagicMock, patch
+
+        mock_resp = MagicMock()
+        mock_resp.geturl.return_value = "https://www.amazon.com/dp/B09XYZ1234?tag=ajeno"
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__.return_value = mock_resp
+        mock_ctx.__exit__.return_value = None
+
+        with patch("urllib.request.urlopen", return_value=mock_ctx):
+            item = {
+                "id": "99999",
+                "titulo": "Audífonos Inalámbricos Bluetooth",
+                "precio_oferta": 75000,
+                "enlace": "https://a.co/d/test1234",
+                "casillero": 0,
+            }
+            deal = promohunter.parse_deal(item)
+            self.assertIsNotNone(deal)
+            # Debe extraer el ASIN y unificar la clave canónica como amazon:B09XYZ1234
+            self.assertEqual(deal.key, "amazon:B09XYZ1234")
+            self.assertIn("amazon.com/dp/B09XYZ1234", deal.url)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

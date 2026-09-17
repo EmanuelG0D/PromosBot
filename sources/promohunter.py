@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.request
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 from core import http
@@ -18,6 +19,22 @@ BASE_URL = "https://elpromohunter.com/?page={p}"
 _INITIAL_DEALS_RE = re.compile(r'initialDeals\\":(\[.*?\])(?:,\\|\})')
 _INITIAL_DEALS_FALLBACK_RE = re.compile(r'"initialDeals":(\[.*?\])(?:,\s*"|\})')
 _TAG_PARAM_RE = re.compile(r"[?&]tag=[^&]+")
+_ACORTADORES_AMAZON = ("a.co", "amzn.to", "joylink.io")
+_ASIN_RE = re.compile(r"/(?:dp|product|gp/product)/([A-Z0-9]{10})", re.IGNORECASE)
+
+
+def resolver_enlace_acortado_amazon(url: str, timeout: float = 2.5) -> str:
+    """Sigue la redirección de enlaces cortos (a.co, amzn.to, joylink) para extraer el enlace canónico con ASIN."""
+    if not url:
+        return ""
+    if not any(dom in url for dom in _ACORTADORES_AMAZON):
+        return url
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="HEAD")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.geturl() or url
+    except Exception:
+        return url
 
 
 def limpiar_enlace_amazon(url: str | None) -> str:
@@ -87,9 +104,16 @@ def parse_deal(item: dict) -> Deal | None:
 
     asin = (item.get("asin") or "").strip().upper()
     if not asin:
-        m = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", enlace, re.IGNORECASE)
+        m = _ASIN_RE.search(enlace)
         if m:
             asin = m.group(1).upper()
+        elif any(dom in enlace for dom in _ACORTADORES_AMAZON):
+            enlace_expandido = resolver_enlace_acortado_amazon(enlace)
+            m2 = _ASIN_RE.search(enlace_expandido)
+            if m2:
+                asin = m2.group(1).upper()
+                enlace = f"https://www.amazon.com/dp/{asin}"
+
     key = f"amazon:{asin}" if asin else f"promohunter:{deal_id}"
 
     # Cupones y notas de calificación
