@@ -1926,16 +1926,19 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             t3_scores = [c[2] for c in campeones_ordenados[:3]]
             _TELEMETRIA_LIGAS["ultimo_top3_avg_score"] = round(sum(t3_scores) / len(t3_scores), 1)
 
-        # FASE 3: Bifurcación del Envío (Top 3 ofertas completas + Menciones Honoríficas)
+        # FASE 3: Envío del Top 3 (Ofertas completas, 1 por tienda, sin menciones secundarias)
+        # Convertir a tuplas (Deal, Verdict) para pasar a _seleccionar_diversificadas
+        campeones_pares = [(c[0], c[1]) for c in campeones_ordenados]
+
         if top:
-            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:top]]
-            menciones = []
+            seleccion = campeones_pares[:top]
         elif limite:
-            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:limite]]
-            menciones = [(c[0], c[1]) for c in campeones_ordenados[limite:limite + 4]]
+            seleccion = _seleccionar_diversificadas(campeones_pares, tope=limite, max_por_tienda=1)
         else:
-            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:3]]
-            menciones = [(c[0], c[1]) for c in campeones_ordenados[3:7]]
+            # Ronda automática: máximo 1 oferta por tienda en Top 3
+            seleccion = _seleccionar_diversificadas(campeones_pares, tope=3, max_por_tienda=1)
+
+        menciones = []
 
         # Las de Fast-Track se anteponen para enviarse sin topes ni límites
         seleccion = fasttrack_glitches + seleccion
