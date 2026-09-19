@@ -6,6 +6,7 @@ a Colombia (sin casilleros), con precio en COP, cupón y enlace limpio a Amazon.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 import urllib.request
@@ -78,8 +79,22 @@ def extraer_deals_html(html: str) -> list[dict]:
         return []
 
 
-def parse_deal(item: dict) -> Deal | None:
+def parse_deal(item: dict, max_horas: float = 3.0) -> Deal | None:
     """Convierte un objeto de oferta crudo de PromoHunter al modelo Deal."""
+    # Filtro de frescura: descartar ofertas con más de max_horas de antigüedad
+    ts_str = item.get("ts")
+    if ts_str and max_horas > 0:
+        try:
+            ts_pub = dt.datetime.fromisoformat(ts_str)
+            if ts_pub.tzinfo is None:
+                ts_pub = ts_pub.replace(tzinfo=dt.timezone(dt.timedelta(hours=-5)))
+            ahora = dt.datetime.now(ts_pub.tzinfo)
+            edad_horas = (ahora - ts_pub).total_seconds() / 3600.0
+            if edad_horas > max_horas:
+                return None
+        except Exception:
+            pass
+
     # Filtro estricto: Solo ofertas con envío gratis directo a Colombia (casillero == 0)
     if item.get("casillero") != 0:
         return None
@@ -166,9 +181,10 @@ def parse_deal(item: dict) -> Deal | None:
 
 
 def fetch(
-    paginas: int = 2,
+    paginas: int = 1,
     incluir: list[str] | None = None,
     excluir: list[str] | None = None,
+    max_horas: float = 3.0,
 ) -> list[Deal]:
     """Descarga y procesa ofertas de El Promo Hunter."""
     ofertas: list[Deal] = []
@@ -184,7 +200,7 @@ def fetch(
             continue
 
         for item in raw_deals:
-            deal = parse_deal(item)
+            deal = parse_deal(item, max_horas=max_horas)
             if not deal:
                 continue
 
