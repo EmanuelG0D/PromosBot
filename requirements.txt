@@ -1,2 +1,4 @@
 # Procesamiento y conversion de imagenes (ej. AVIF de K-tronix/Alkosto a JPEG para Telegram)
 Pillow>=10.0.0
+# Driver de PostgreSQL para persistencia permanente en Supabase
+psycopg2-binary>=2.9.9

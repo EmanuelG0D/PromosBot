@@ -69,20 +69,68 @@ def _now() -> str:
 
 _DBS_INICIALIZADAS: set[str] = set()
 
+try:
+    import psycopg2
+    from psycopg2.extras import DictCursor
+    _HAS_PSYCOPG2 = True
+except ImportError:
+    _HAS_PSYCOPG2 = False
+
+
+class _PgConnectionWrapper:
+    """Envoltura ligera de conexión PostgreSQL que adapta la interfaz de SQLite."""
+    def __init__(self, url: str) -> None:
+        self.raw_conn = psycopg2.connect(url, cursor_factory=DictCursor)
+        self.raw_conn.autocommit = False
+
+    def execute(self, sql: str, params: tuple | list | None = None):
+        sql_pg = sql.replace("?", "%s")
+        if "INSERT OR REPLACE INTO observations" in sql_pg:
+            sql_pg = sql_pg.replace(
+                "INSERT OR REPLACE INTO observations(key, ts, price) VALUES(%s, %s, %s)",
+                "INSERT INTO observations(key, ts, price) VALUES(%s, %s, %s) ON CONFLICT(key, ts) DO UPDATE SET price = EXCLUDED.price"
+            )
+        cur = self.raw_conn.cursor()
+        cur.execute(sql_pg, params or ())
+        return cur
+
+    def executescript(self, sql_script: str) -> None:
+        with self.raw_conn.cursor() as cur:
+            cur.execute(sql_script)
+        self.raw_conn.commit()
+
+    def commit(self) -> None:
+        self.raw_conn.commit()
+
+    def rollback(self) -> None:
+        self.raw_conn.rollback()
+
+    def close(self) -> None:
+        self.raw_conn.close()
+
 
 class Store:
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = Path(path or config.DB_PATH)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.execute("PRAGMA busy_timeout=5000")
-        ruta_str = str(self.path.resolve())
-        if ruta_str not in _DBS_INICIALIZADAS:
-            self.conn.executescript(_SCHEMA)
-            self.conn.commit()
-            _DBS_INICIALIZADAS.add(ruta_str)
+    def __init__(self, path: Path | str | None = None) -> None:
+        if path is not None or not config.DATABASE_URL or not _HAS_PSYCOPG2:
+            self.is_pg = False
+            self.path = Path(path or config.DB_PATH)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.conn = sqlite3.connect(self.path)
+            self.conn.row_factory = sqlite3.Row
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("PRAGMA busy_timeout=5000")
+            ruta_str = str(self.path.resolve())
+            if ruta_str not in _DBS_INICIALIZADAS:
+                self.conn.executescript(_SCHEMA)
+                self.conn.commit()
+                _DBS_INICIALIZADAS.add(ruta_str)
+        else:
+            self.is_pg = True
+            self.path = None
+            self.conn = _PgConnectionWrapper(config.DATABASE_URL)
+            if "supabase" not in _DBS_INICIALIZADAS:
+                self.conn.executescript(_SCHEMA)
+                _DBS_INICIALIZADAS.add("supabase")
 
     # -- metadatos (TRM cacheada, marcas de tiempo) ----------------------
     def get_meta(self, key: str) -> str | None:
@@ -296,8 +344,8 @@ class Store:
         cur_recientes = self.conn.execute("DELETE FROM deals_recientes WHERE created_at < ?", (corte_recientes,))
         self.conn.commit()
         total_borradas = cur_obs.rowcount + cur_alerts.rowcount + cur_recientes.rowcount
-        if total_borradas:
-            self.conn.execute("VACUUM")   # el archivo viaja al respaldo: hay que encogerlo
+        if total_borradas and not getattr(self, "is_pg", False):
+            self.conn.execute("VACUUM")   # en SQLite encoge el archivo local; en Postgres opera autovacuum
         return total_borradas
 
     def close(self) -> None:

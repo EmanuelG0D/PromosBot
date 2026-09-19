@@ -27,6 +27,8 @@ LIMITE_BYTES = 900_000
 
 
 def configurado() -> bool:
+    if config.DATABASE_URL:
+        return False
     return bool(TOKEN and REPO)
 
 
@@ -52,6 +54,10 @@ def _metadatos() -> dict | None:
 
 def restaurar() -> bool:
     """Trae la base guardada. Se llama al arrancar, antes de la primera ronda."""
+    if config.DATABASE_URL:
+        print("[respaldo] persistencia gestionada directamente por Supabase (PostgreSQL).")
+        return True
+
     if not configurado():
         print("[respaldo] sin GITHUB_TOKEN/GITHUB_REPO: el historial no sobrevive a un reinicio")
         return False
@@ -75,6 +81,9 @@ def restaurar() -> bool:
 
 def guardar(mensaje: str = "radar: historial de precios") -> bool:
     """Sube la base al repositorio. Se llama al final de cada ronda."""
+    if config.DATABASE_URL:
+        return True
+
     if not configurado():
         return False
 
