@@ -1222,13 +1222,17 @@ def atender_solicitudes(solicitudes: list[dict],
 
         if tipo == "unirse_canal":
             nombre = solicitud.get("nombre", "Usuario")
+            enlace = (getattr(config, "TELEGRAM_CHANNEL_URL", "") or "https://t.me/RadarPromoCol").strip()
+            if not enlace or "+GE1nQO-f0HYwNGQx" in enlace or "joinchat" in enlace or "/+" in enlace:
+                enlace = "https://t.me/RadarPromoCol"
             telegram.send(
                 f"👋 <b>¡Hola, {telegram.esc(nombre)}!</b>\n\n"
                 f"Para poder usar <b>PromosBot</b> y consultar todas las ofertas, "
                 f"primero debes estar unido a nuestro canal oficial:\n\n"
-                f"📢 <b>Promociones Colombia🇨🇴</b>\n\n"
-                f"<i>Únete con el botón de abajo y luego presiona 'Ya me uní':</i>",
-                reply_markup=telegram.teclado_unirse_canal(),
+                f"📢 <b>Promociones Colombia🇨🇴</b>\n"
+                f"👉 <a href=\"{enlace}\">{enlace}</a>\n\n"
+                f"<i>Únete con el enlace o el botón de abajo y luego presiona 'Ya me uní':</i>",
+                reply_markup=telegram.teclado_unirse_canal(enlace),
                 chat_id=chat_id,
             )
             atendidos += 1

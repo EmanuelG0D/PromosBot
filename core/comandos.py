@@ -755,26 +755,60 @@ MENU = [
 
 
 def registrar_menu() -> bool:
-    """Elimina comandos slash en todos los ámbitos para que Telegram no muestre el botón [/] y la navegación sea 100% por botones."""
+    """Registra el comando /start en chats privados y configura el botón de menú azul de Telegram."""
     if not config.TELEGRAM_BOT_TOKEN:
         return False
     try:
+        url_set = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyCommands"
         url_del = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/deleteMyCommands"
+        url_btn = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setChatMenuButton"
+        url_desc = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyDescription"
+        url_short = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/setMyShortDescription"
 
-        # Limpiar comandos de grupos, chats privados y globales
-        http.post_json(url_del, {"scope": {"type": "default"}}, retries=1)
-        http.post_json(url_del, {"scope": {"type": "all_group_chats"}}, retries=1)
-        http.post_json(url_del, {"scope": {"type": "all_chat_administrators"}}, retries=1)
-        http.post_json(url_del, {"scope": {"type": "all_private_chats"}}, retries=1)
-        if config.TELEGRAM_CHAT_ID:
-            http.post_json(url_del, {"scope": {"type": "chat", "chat_id": config.TELEGRAM_CHAT_ID}}, retries=1)
-            http.post_json(url_del, {"scope": {"type": "chat_administrators", "chat_id": config.TELEGRAM_CHAT_ID}}, retries=1)
-            if config.TELEGRAM_ADMIN_ID:
-                try:
-                    http.post_json(url_del, {"scope": {"type": "chat_member", "chat_id": config.TELEGRAM_CHAT_ID, "user_id": int(config.TELEGRAM_ADMIN_ID)}}, retries=1)
-                except (ValueError, TypeError):
-                    pass
+        comandos_privados = [
+            {"command": "start", "description": "🚀 Iniciar PromosBot y ver ofertas"},
+        ]
+
+        # 1. Registrar /start para chats privados y default para que aparezca el botón azul de menú
+        try:
+            http.post_json(url_set, {"commands": comandos_privados, "scope": {"type": "all_private_chats"}}, retries=1)
+        except Exception as exc:
+            print(f"  [comandos] aviso en setMyCommands all_private_chats: {exc}")
+
+        try:
+            http.post_json(url_set, {"commands": comandos_privados, "scope": {"type": "default"}}, retries=1)
+        except Exception as exc:
+            print(f"  [comandos] aviso en setMyCommands default: {exc}")
+
+        # 2. Configurar botón de menú en la barra inferior (tipo commands)
+        try:
+            http.post_json(url_btn, {"menu_button": {"type": "commands"}}, retries=1)
+        except Exception as exc:
+            print(f"  [comandos] aviso en setChatMenuButton: {exc}")
+
+        # 3. Configurar descripciones del bot para pantalla de bienvenida
+        try:
+            http.post_json(url_desc, {
+                "description": "🤖 PromosBot Colombia 🇨🇴\n\nRadar inteligente de ofertas, promociones y liquidaciones en tiendas de Colombia y EE. UU.\n\nPresiona Iniciar para comenzar a explorar."
+            }, retries=1)
+        except Exception as exc:
+            print(f"  [comandos] aviso en setMyDescription: {exc}")
+
+        try:
+            http.post_json(url_short, {
+                "short_description": "Radar de ofertas y descuentos en tiempo real para Colombia 🇨🇴"
+            }, retries=1)
+        except Exception as exc:
+            print(f"  [comandos] aviso en setMyShortDescription: {exc}")
+
+        # 4. Limpiar comandos de grupos para que no saturen la interfaz en grupos
+        try:
+            http.post_json(url_del, {"scope": {"type": "all_group_chats"}}, retries=1)
+            http.post_json(url_del, {"scope": {"type": "all_chat_administrators"}}, retries=1)
+        except Exception:
+            pass
+
         return True
     except Exception as exc:
-        print(f"  [comandos] no se pudo limpiar el menu de comandos: {exc}")
+        print(f"  [comandos] fallo configurando menu de comandos: {exc}")
         return False
