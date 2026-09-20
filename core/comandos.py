@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 import config
@@ -288,6 +289,34 @@ AYUDA = (
     "/ayuda - esta lista\n\n"
     "<i>También puedes navegar tocando los botones del menú inferior.</i>"
 )
+
+
+def _norm_cat(texto: str) -> str:
+    """Normaliza texto para comparar nombres de categoría: minúsculas, sin tildes, sin emojis."""
+    plano = unicodedata.normalize("NFKD", texto.lower())
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", plano)).strip()
+
+
+def _buscar_categoria(texto_norm: str) -> tuple[str, list[str]] | None:
+    """Busca en CATEGORIAS_BUSQUEDA con matching tolerante a emojis, tildes y capitalización.
+
+    Esto evita la necesidad de duplicar entradas (con/sin emoji, con/sin tilde, singular/plural)
+    en el diccionario. Una sola entrada con emoji es suficiente: el helper encuentra la
+    coincidencia en cualquiera de sus variantes.
+    """
+    clave = _norm_cat(texto_norm)
+    for cat_label, queries in CATEGORIAS_BUSQUEDA.items():
+        sin_emoji = cat_label.split(" ", 1)[-1]
+        variantes = (
+            cat_label.lower(),
+            sin_emoji.lower(),
+            _norm_cat(cat_label),
+            _norm_cat(sin_emoji),
+        )
+        if clave in variantes:
+            return cat_label, queries
+    return None
 
 
 def _cargar() -> dict:
@@ -638,20 +667,20 @@ def leer_comando(mensaje: dict) -> dict | None:
                 "tipo": "todo_tienda",
             }
 
-        # Boton de categoria
+        # Boton de categoria — usa el helper normalizado: tolera emojis, tildes y
+        # variantes de capitalización sin necesitar aliases duplicados en el diccionario.
         if not res:
-            for cat_label, queries in CATEGORIAS_BUSQUEDA.items():
-                sin_emoji = cat_label.split(" ", 1)[-1].lower()
-                if texto_norm == cat_label.lower() or texto_norm == sin_emoji:
-                    res = {
-                        "comando": "categoria",
-                        "categoria_nombre": cat_label,
-                        "consultas": queries,
-                        "chat_id": chat,
-                        "cantidad": None,
-                        "tipo": "categoria",
-                    }
-                    break
+            cat_resultado = _buscar_categoria(texto_norm)
+            if cat_resultado:
+                cat_label, queries = cat_resultado
+                res = {
+                    "comando": "categoria",
+                    "categoria_nombre": cat_label,
+                    "consultas": queries,
+                    "chat_id": chat,
+                    "cantidad": None,
+                    "tipo": "categoria",
+                }
 
         # Fallback para chat privado: si escribe 'menu', 'tiendas', 'hola', 'inicio', desplegar menu
         if not res and not es_grupo:

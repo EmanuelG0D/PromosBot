@@ -1054,8 +1054,12 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
 
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
     if consultas_custom:
-        disponibles = [d for d in disponibles
-                       if any(filtros.menciona(d.title, c) for c in consultas_custom)]
+        # Slickdeals ya filtra en origen (es_calzado_o_ropa_de_marca): aplicar el filtro
+        # local encima descartaria ofertas validas cuyo titulo no repite el termino exacto
+        # (ej: "Nike Air Force 1" al buscar "shoes"). Para el resto de fuentes si aplica.
+        if not all(f == "slickdeals" for f in fuentes):
+            disponibles = [d for d in disponibles
+                           if any(filtros.menciona(d.title, c) for c in consultas_custom)]
     if all(f in SIN_PRECIO_DE_LISTA for f in fuentes):
         # Ni Slickdeals ni PROMOCAJITA publican precio de lista: no hay
         # porcentaje que ordenar, pero ya vienen ordenadas por la comunidad.
