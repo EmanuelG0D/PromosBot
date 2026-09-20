@@ -3394,6 +3394,50 @@ class PruebaRepublicaDescuentos(unittest.TestCase):
         deals = republica.extraer_deals_html(html_spam)
         self.assertEqual(len(deals), 0)
 
+    def test_aliexpress_no_obtiene_nota_amazon_prime(self):
+        from sources import republica
+        html_ali = r"""
+        <div data-post="Republicadescuentos/1234">
+            <div class="tgme_widget_message_text js-message_text">
+                #ad #aliexpress 150.000 Envío Gratis Prime RAM DDR4 16GB Compra AQUÍ <a href="https://s.click.aliexpress.com/e/_c38RMcut">https://s.click.aliexpress.com/e/_c38RMcut</a>
+            </div>
+        </div>
+        """
+        deals = republica.extraer_deals_html(html_ali)
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(deals[0].store, "AliExpress")
+        # NUNCA debe asignarse Amazon Prime a AliExpress
+        for nota in deals[0].notes:
+            self.assertNotIn("Amazon Prime", nota)
+
+    def test_descarte_de_posts_tipo_combo(self):
+        from sources import republica
+        html_combo = r"""
+        <div data-post="Republicadescuentos/5555">
+            <div class="tgme_widget_message_text js-message_text">
+                #COMBO #AD #AMAZON #ALIEXPRESS EL MEJOR COMBO CPU - BOARD
+                PRECIO TOTAL 1.325.000 ENVIO INCLUIDO
+                Memoria RAM 467.800 <a href="https://s.click.aliexpress.com/e/_c38RMcut">link1</a>
+                Board ASRock 347.800 ENVIO GRATIS PRIME <a href="https://amzn.to/4dKQpIW">link2</a>
+            </div>
+        </div>
+        """
+        deals = republica.extraer_deals_html(html_combo)
+        self.assertEqual(len(deals), 0)
+
+    def test_telegram_render_purga_prime_de_otras_tiendas(self):
+        from core import telegram
+        from core.models import Deal
+        from core.scoring import Verdict
+
+        d = Deal("republica", "AliExpress", "CO", "k_ali", "Memoria RAM DDR4 16GB", "http://ali", 150_000, "COP", None,
+                 notes=["🅿️ Envío gratis con Amazon Prime", "🎟 Cupón: DESC10"])
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        msg = telegram.render(d, v, None, None)
+        # El renderizador debe haber purgado Amazon Prime porque la tienda es AliExpress
+        self.assertNotIn("Amazon Prime", msg)
+        self.assertIn("Cupón: DESC10", msg)
+
     def test_republica_en_radar_fuentes(self):
         import radar
         self.assertIn("republica", radar.FUENTES)

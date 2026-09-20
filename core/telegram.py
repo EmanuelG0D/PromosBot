@@ -88,7 +88,16 @@ def _lineas(deal: Deal, verdict: Verdict, landed: Landed | None = None,
             lineas.append(f"   <i>Le subieron {veracidad.alza_previa:g}% "
                           "antes de anunciar la rebaja.</i>")
 
-    for nota in deal.notes[:3]:
+    # Blindaje: Notas de Prime solo tienen sentido si la tienda es Amazon.
+    # Si la oferta es de AliExpress, Mercado Libre, Falabella, etc., se purgan notas de Prime.
+    notas_filtradas = []
+    es_amazon = "amazon" in (deal.store or "").lower()
+    for nota in (deal.notes or []):
+        if not es_amazon and "prime" in nota.lower():
+            continue
+        notas_filtradas.append(nota)
+
+    for nota in notas_filtradas[:3]:
         # Tarjeta de credito para promos bancarias, vineta para el resto.
         icono = "\U0001F4B3" if "arjeta" in nota else "\u2022"
         lineas.append(f"{icono} {esc(nota)}")

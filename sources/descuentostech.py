@@ -99,7 +99,7 @@ def extraer_deals_html(html_str: str, canal_nombre: str = "DescuentosTech", por_
         es_gratis = "envío gratis" in texto_plano.lower() or "envio gratis" in texto_plano.lower()
         if es_gratis:
             notas.append("✈️🇨🇴 Envío gratis")
-        if "prime" in texto_plano.lower():
+        if re.search(r'\bprime\b', texto_plano, re.IGNORECASE):
             notas.append("🅿️ Amazon Prime")
         if cupones:
             notas.append(f"Cupón: {cupones[0]}")

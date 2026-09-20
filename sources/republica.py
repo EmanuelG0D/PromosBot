@@ -28,7 +28,8 @@ TIENDAS_PERMITIDAS = {
 PALABRAS_SPAM = [
     "unete", "únete", "mi enlace", "gana dinero", "crea tu cuenta", 
     "bono de", "cashback", "invita a", "primeros 30 dias", "primeros 30 días",
-    "morse.link", "app de", "tarjeta de credito", "tarjeta de crédito"
+    "morse.link", "app de", "tarjeta de credito", "tarjeta de crédito",
+    "#combo", "combo cpu"
 ]
 
 
@@ -174,9 +175,9 @@ def extraer_deals_html(html_str: str, por_canal: int = 20) -> list[Deal]:
         notas: list[str] = []
         if c["cupon"]:
             notas.append(f"🎟 Cupón: {c['cupon']}")
-        if "prime" in c.get("raw_texto", "").lower():
+        if c["tienda_id"] == "amazon" and re.search(r'\bprime\b', c.get("raw_texto", ""), re.IGNORECASE):
             notas.append("🅿️ Envío gratis con Amazon Prime")
-        elif "gratis" in c.get("raw_texto", "").lower():
+        elif "gratis" in c.get("raw_texto", "").lower() or "incluido" in c.get("raw_texto", "").lower():
             notas.append("✈️🇨🇴 Envío gratis")
 
         deal = Deal(
