@@ -158,7 +158,7 @@ CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
     "🍳 Sartenes y Baterías": ["sarten", "bateria de cocina", "olla"],
     "sartenes y baterías": ["sarten", "bateria de cocina", "olla"],
     "sartenes y baterias": ["sarten", "bateria de cocina", "olla"],
-    "🌟 Toda la Cocina": ["freidora de aire", "licuadora", "sandwichera", "cafetera", "microondas"],
+    "🌟 Toda la Cocina": ["sarten", "freidora de aire", "licuadora", "sandwichera", "cafetera", "microondas", "bateria de cocina"],
 
     # --- Cositas Específicas: Neveras y Lavadoras ---
     "❄️ Neveras": ["nevera", "refrigerador", "nevecon", "refrigeradora", "freezer"],
