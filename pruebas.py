@@ -2662,7 +2662,9 @@ class PruebaDeduplicacionYDosificacionGangas(unittest.TestCase):
 
     def test_configuracion_dosificacion_y_topes(self):
         import config
-        self.assertEqual(config.MAX_ALERTS_COMUNIDAD, 2)
+        self.assertEqual(config.MAX_ALERTS_COMUNIDAD, 3)
+        self.assertEqual(config.MAX_ALERTS_CATALOGOS, 6)
+        self.assertEqual(config.MAX_ALERTS_PER_STORE_RUN, 1)
         self.assertEqual(config.MAX_ALERTS_PER_DAY, 60)
         self.assertEqual(config.MAX_ALERTS_PER_SOURCE_DAY, 15)
         self.assertEqual(config.MAX_ALERTS_PER_STORE_DAY, 15)
@@ -3446,6 +3448,82 @@ class PruebaRepublicaDescuentos(unittest.TestCase):
         self.assertEqual(len(campeones), 1)
         # 55.0 con cupón * peso 1.5 de computadores_y_hardware = 82.5 puntos
         self.assertEqual(campeones[0][2], 82.5)
+
+
+class PruebaCuposPorTienda(unittest.TestCase):
+    def test_competencia_interna_por_tienda(self):
+        import radar
+        from core.scoring import Verdict
+
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        d1 = oferta(source="algolia_co", store="Alkosto", key="k1", title="Televisor 55 Pulgadas 4K", price=1_500_000, discount=50.0)
+        d2 = oferta(source="algolia_co", store="Alkosto", key="k2", title="Portatil Gamer Ryzen 7", price=2_600_000, discount=35.0)
+        d3 = oferta(source="algolia_co", store="Alkosto", key="k3", title="Celular Galaxy A34", price=800_000, discount=20.0)
+
+        candidatas = [(d1, v), (d2, v), (d3, v)]
+        res = radar.seleccionar_por_tiendas(candidatas, max_por_tienda=1)
+
+        self.assertEqual(len(res), 1)
+        # El TV (score 50 * 1.5 = 75.0) debe ganar la competencia interna de Alkosto frente al portatil (35 * 1.5 = 52.5)
+        self.assertEqual(res[0][0].key, "k1")
+
+    def test_multiples_tiendas_coexisten_misma_categoria(self):
+        import radar
+        from core.scoring import Verdict
+
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        # 3 tiendas distintas con la misma categoria (computadores)
+        d_alkosto = oferta(source="algolia_co", store="Alkosto", key="k_alk", title="Portatil Lenovo ThinkPad", price=2_000_000, discount=40.0)
+        d_falabella = oferta(source="falabella", store="Falabella", key="k_fal", title="Portatil Asus ZenBook", price=2_600_000, discount=35.0)
+        d_exito = oferta(source="vtex", store="Exito", key="k_ext", title="Portatil HP Pavilion", price=2_100_000, discount=30.0)
+
+        candidatas = [(d_alkosto, v), (d_falabella, v), (d_exito, v)]
+        # En el sistema anterior, torneo_familias mataba 2 de las 3 laptops.
+        # Ahora, cada tienda tiene su cupo y las 3 coexisten!
+        res = radar.seleccionar_por_tiendas(candidatas, max_por_tienda=1, tope_ronda=6)
+
+        self.assertEqual(len(res), 3)
+        tiendas = {par[0].store for par in res}
+        self.assertEqual(tiendas, {"Alkosto", "Falabella", "Exito"})
+
+    def test_tienda_sin_promocion_entrega_cero(self):
+        import radar
+        from core.scoring import Verdict
+
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        # Solo Alkosto y Falabella tienen ofertas reales hoy
+        d_alk = oferta(source="algolia_co", store="Alkosto", key="k1", title="Televisor 55", price=1_500_000, discount=50.0)
+        d_fal = oferta(source="falabella", store="Falabella", key="k2", title="Refrigerador No Frost", price=1_800_000, discount=40.0)
+
+        candidatas = [(d_alk, v), (d_fal, v)]
+        res = radar.seleccionar_por_tiendas(candidatas, max_por_tienda=1)
+
+        self.assertEqual(len(res), 2)
+        tiendas = {par[0].store.lower() for par in res}
+        # Haceb, Koaj, Jumbo no tienen ofertas y no se inventan ofertas ni cupos fantasma
+        self.assertNotIn("haceb", tiendas)
+        self.assertNotIn("koaj", tiendas)
+
+    def test_respeto_tope_ronda(self):
+        import radar
+        from core.scoring import Verdict
+
+        v = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        # 10 tiendas distintas con ofertas
+        candidatas = []
+        for i in range(10):
+            d = oferta(source="vtex", store=f"Tienda_{i}", key=f"k_{i}", title=f"Producto Destacado {i}", price=100_000, discount=20.0 + i * 5)
+            candidatas.append((d, v))
+
+        # Con tope de ronda = 6 (ej. catálogo retail), debe tomar exactamente las 6 mejores tiendas
+        res = radar.seleccionar_por_tiendas(candidatas, max_por_tienda=1, tope_ronda=6)
+
+        self.assertEqual(len(res), 6)
+        # Verificar que sean 6 tiendas diferentes
+        tiendas = [par[0].store for par in res]
+        self.assertEqual(len(set(tiendas)), 6)
+        # La primera debe ser la de mayor descuento (Tienda_9 con 65%)
+        self.assertEqual(res[0][0].store, "Tienda_9")
 
 
 if __name__ == "__main__":

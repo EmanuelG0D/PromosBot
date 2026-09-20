@@ -98,11 +98,11 @@ GLITCH_DISCOUNT_PCT = _float("GLITCH_DISCOUNT_PCT", 75.0)
 # Dosificacion elastica: maximo 4 por ronda para repartir el cupo diario a lo largo
 # del dia (manana, tarde, noche) sin saturar el grupo y priorizando siempre calidad.
 MAX_ALERTS_PER_RUN = _int("MAX_ALERTS_PER_RUN", 4)
-# Cazadores comunitarios (PromoHunter, Milo, PromoCajita): salen de a poco (1-2 por ronda)
-MAX_ALERTS_COMUNIDAD = _int("MAX_ALERTS_COMUNIDAD", 2)
-# Catálogos de tiendas nacionales (Alkosto, Éxito, Falabella, etc.): cupo dedicado por ronda
-MAX_ALERTS_CATALOGOS = _int("MAX_ALERTS_CATALOGOS", 3)
-# Máximo de alertas de una misma tienda en una sola ronda para garantizar diversidad de marcas
+# Cazadores comunitarios (PromoHunter, Milo, PromoCajita, DescuentosTech, República): cupo por ronda
+MAX_ALERTS_COMUNIDAD = _int("MAX_ALERTS_COMUNIDAD", 3)
+# Catálogos de tiendas nacionales (Alkosto, Éxito, Falabella, etc.): cupo dedicado por ronda (hasta 6 tiendas)
+MAX_ALERTS_CATALOGOS = _int("MAX_ALERTS_CATALOGOS", 6)
+# Máximo de alertas de una misma tienda en una sola ronda para garantizar diversidad de tiendas
 MAX_ALERTS_PER_STORE_RUN = _int("MAX_ALERTS_PER_STORE_RUN", 1)
 # Freno de mano diario para el grupo: 60 gangas al dia para cubrir manana, tarde y noche sin apagarse temprano.
 MAX_ALERTS_PER_DAY = _int("MAX_ALERTS_PER_DAY", 60)

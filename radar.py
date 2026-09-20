@@ -740,6 +740,17 @@ PESOS_FAMILIA: dict[str, float] = {
 }
 
 
+def calcular_score_deal(deal: Deal) -> float:
+    """Calcula el score de relevancia ponderado por categoría de un deal."""
+    desc = getattr(deal, "discount_verificable", 0.0) or 0.0
+    if deal.source in {"republica", "promocajita", "slickdeals", "miloderrocha", "descuentostech"}:
+        piso = 55.0 if deal.coupons else 45.0
+        desc = max(desc, piso)
+    fam = filtros.asignar_familia(deal.title)
+    peso = PESOS_FAMILIA.get(fam, 1.0)
+    return round(desc * peso, 2)
+
+
 def torneo_familias(candidatas: list[tuple[Deal, Verdict]]) -> list[tuple[Deal, Verdict, float]]:
     """Ejecuta el Sistema de Torneo y Score Ponderado por Familias (Fase 2).
 
@@ -765,17 +776,49 @@ def torneo_familias(candidatas: list[tuple[Deal, Verdict]]) -> list[tuple[Deal, 
             key=lambda p: getattr(p[0], "discount_verificable", 0.0) or 0.0
         )
         deal, verdict = campeon_par
-        desc = getattr(deal, "discount_verificable", 0.0) or 0.0
-        # Fuentes de comunidad curadas (República, PromoCajita, Slickdeals, Milo Derrocha, Descuentos Tech)
-        if deal.source in {"republica", "promocajita", "slickdeals", "miloderrocha", "descuentostech"}:
-            piso = 55.0 if deal.coupons else 45.0
-            desc = max(desc, piso)
-        peso = PESOS_FAMILIA.get(fam, 1.0)
-        score = round(desc * peso, 2)
+        score = calcular_score_deal(deal)
         campeones.append((deal, verdict, score))
 
     campeones.sort(key=lambda c: c[2], reverse=True)
     return campeones
+
+
+def seleccionar_por_tiendas(candidatas: list[tuple[Deal, Verdict]],
+                            max_por_tienda: int = 1,
+                            tope_ronda: int | None = None) -> list[tuple[Deal, Verdict]]:
+    """Selecciona ofertas garantizando que la competencia sea interna por tienda.
+
+    1. Agrupa las candidatas por tienda (o fuente si no tiene tienda asignada).
+    2. En cada tienda, ordena sus ofertas por score y toma hasta `max_por_tienda` (la campeona de esa tienda).
+    3. Si una tienda no tiene ofertas válidas que superen el filtro, aporta 0 ofertas.
+    4. Reúne las campeonas de cada tienda y las ordena por score global descendente.
+    5. Aplica `tope_ronda` si se especificó, garantizando que nunca se sature el canal.
+    """
+    if not candidatas:
+        return []
+
+    por_tienda: dict[str, list[tuple[Deal, Verdict, float]]] = {}
+    for par in candidatas:
+        deal, verdict = par
+        t_nombre = (deal.store or deal.source or "tienda").strip().lower()
+        score = calcular_score_deal(deal)
+        por_tienda.setdefault(t_nombre, []).append((deal, verdict, score))
+
+    campeones_tiendas: list[tuple[Deal, Verdict, float]] = []
+    cupo_tienda = max(1, max_por_tienda)
+
+    for t_nombre, grupo in por_tienda.items():
+        # Ordenar dentro de la tienda por score ponderado descendente
+        grupo_ordenado = sorted(grupo, key=lambda x: x[2], reverse=True)
+        campeones_tiendas.extend(grupo_ordenado[:cupo_tienda])
+
+    # Ordenar los campeones de cada tienda por score global para priorizar lo mejor del país
+    campeones_tiendas.sort(key=lambda x: x[2], reverse=True)
+
+    if tope_ronda is not None and tope_ronda > 0:
+        campeones_tiendas = campeones_tiendas[:tope_ronda]
+
+    return [(item[0], item[1]) for item in campeones_tiendas]
 
 
 def _clasificar_departamento(title: str) -> str:
@@ -1910,25 +1953,33 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             else:
                 candidatas_ordinarias.append(par)
 
-        # FASE 2: Sistema de Torneo y Score Ponderado
-        campeones_ordenados = torneo_familias(candidatas_ordinarias)
+        # FASE 2: Selección por Tiendas (Competencia interna, cupos por tienda)
+        fuentes_comunidad = {"slickdeals", "promocajita", "promohunter", "miloderrocha", "republica", "descuentostech"}
+        es_ronda_comunidad = set(activas).issubset(fuentes_comunidad)
 
-        _actualizar_telemetria_dia()
-        if campeones_ordenados:
-            t3_scores = [c[2] for c in campeones_ordenados[:3]]
-            _TELEMETRIA_LIGAS["ultimo_top3_avg_score"] = round(sum(t3_scores) / len(t3_scores), 1)
+        if limite is not None:
+            tope_efectivo = limite
+        elif es_ronda_comunidad:
+            tope_efectivo = getattr(config, "MAX_ALERTS_COMUNIDAD", 3)
+        else:
+            tope_efectivo = getattr(config, "MAX_ALERTS_CATALOGOS", 6)
 
-        # FASE 3: Envío del Top 3 (Ofertas completas, 1 por tienda, sin menciones secundarias)
-        # Convertir a tuplas (Deal, Verdict) para pasar a _seleccionar_diversificadas
-        campeones_pares = [(c[0], c[1]) for c in campeones_ordenados]
+        max_tienda = getattr(config, "MAX_ALERTS_PER_STORE_RUN", 1)
 
         if top:
-            seleccion = campeones_pares[:top]
-        elif limite:
-            seleccion = _seleccionar_diversificadas(campeones_pares, tope=limite, max_por_tienda=1)
+            campeones_ordenados = torneo_familias(candidatas_ordinarias)
+            seleccion = [(c[0], c[1]) for c in campeones_ordenados[:top]]
         else:
-            # Ronda automática: máximo 1 oferta por tienda en Top 3
-            seleccion = _seleccionar_diversificadas(campeones_pares, tope=3, max_por_tienda=1)
+            seleccion = seleccionar_por_tiendas(
+                candidatas_ordinarias,
+                max_por_tienda=max_tienda,
+                tope_ronda=tope_efectivo,
+            )
+
+        _actualizar_telemetria_dia()
+        if seleccion:
+            scores_sel = [calcular_score_deal(par[0]) for par in seleccion[:3]]
+            _TELEMETRIA_LIGAS["ultimo_top3_avg_score"] = round(sum(scores_sel) / len(scores_sel), 1)
 
         menciones = []
 
@@ -1983,7 +2034,10 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 landed = calcular(deal.price, trm, deal.weight_lb)
 
             if dry_run or not telegram.enabled():
-                print(telegram.render(deal, verdict, landed, veracidad))
+                try:
+                    print(telegram.render(deal, verdict, landed, veracidad))
+                except UnicodeEncodeError:
+                    print(telegram.render(deal, verdict, landed, veracidad).encode("ascii", "replace").decode("ascii"))
                 if deal.image:
                     print(f"   [foto] {deal.image}")
                 print("-" * 60)
