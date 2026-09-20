@@ -741,9 +741,10 @@ def torneo_familias(candidatas: list[tuple[Deal, Verdict]]) -> list[tuple[Deal, 
         )
         deal, verdict = campeon_par
         desc = getattr(deal, "discount_verificable", 0.0) or 0.0
-        # Fuentes de comunidad curadas (República, PromoCajita, Slickdeals) sin precio de lista
-        if desc <= 0.0 and deal.source in {"republica", "promocajita", "slickdeals"}:
-            desc = 55.0 if deal.coupons else 45.0
+        # Fuentes de comunidad curadas (República, PromoCajita, Slickdeals, Milo Derrocha)
+        if deal.source in {"republica", "promocajita", "slickdeals", "miloderrocha"}:
+            piso = 55.0 if deal.coupons else 45.0
+            desc = max(desc, piso)
         peso = PESOS_FAMILIA.get(fam, 1.0)
         score = round(desc * peso, 2)
         campeones.append((deal, verdict, score))
