@@ -249,10 +249,18 @@ CATEGORIAS_BUSQUEDA_EN: dict[str, list[str]] = {
     "💻 Portátiles": ["laptop", "macbook", "notebook"],
     "🖥️ Monitores": ["monitor", "gaming monitor"],
     "📱 Celulares": ["phone", "smartphone", "iphone"],
-    "👟 Zapatos y Tenis": ["sneakers", "shoes", "running shoes"],
+    "👟 Tenis y Zapatos": ["shoes", "sneakers", "running shoes", "footwear", "boots"],
+    "👟 Zapatos y Tenis": ["shoes", "sneakers", "running shoes", "footwear", "boots"],
+    "tenis y zapatos": ["shoes", "sneakers", "running shoes", "footwear", "boots"],
+    "zapatos y tenis": ["shoes", "sneakers", "running shoes", "footwear", "boots"],
     "🎧 Audio y Diademas": ["headphones", "earbuds", "speaker"],
     "❄️ Electrodomésticos": ["air fryer", "vacuum", "coffee maker", "appliance"],
     "👕 Ropa y Moda": ["clothing", "hoodie", "jacket", "jeans"],
+    "🌟 Toda la Ropa": ["clothing", "hoodie", "jacket", "jeans", "shirt", "shoes", "sneakers"],
+    "👕 Camisetas y Polos": ["shirt", "t-shirt", "polo", "tee"],
+    "👖 Jeans y Pantalones": ["jeans", "pants", "shorts", "jogger"],
+    "🧥 Chaquetas y Buzos": ["jacket", "hoodie", "fleece", "coat", "sweatshirt"],
+    "🩳 Ropa Deportiva": ["sportswear", "running", "athletic", "shorts", "activewear"],
 }
 
 # Cuantas claves de ofertas ya mostradas se recuerdan. Alcanza para que pedir
