@@ -25,10 +25,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, ebay, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica
+from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
-           "droguerias", "mercadolibre", "ebay", "koaj", "promohunter", "miloderrocha", "republica")
+           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -166,24 +166,6 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                 cfg,
             )
 
-    # La drogueria va aparte de las demas VTEX: no se le buscan terminos sino el
-    # catalogo entero, y necesita su propio veto (en una tienda de tecnologia
-    # "Base" es un soporte de TV; en una drogueria es maquillaje).
-    if "droguerias" in activas:
-        cfg = watchlist.get("droguerias", {})
-        consultas = cfg.get("queries", [])
-        if consultas:
-            print(f"-> Droguerias ({', '.join(cfg.get('tiendas', []))}): {len(consultas)} busquedas")
-            ofertas += _sin_ruido(
-                _recolectar_fuente(
-                    "droguerias",
-                    vtex.fetch,
-                    consultas,
-                    cfg.get("tiendas"),
-                    cfg.get("por_consulta", 40),
-                ),
-                cfg,
-            )
 
     if "mercadolibre" in activas:
         cfg = watchlist.get("mercadolibre", {})
@@ -210,20 +192,6 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                 cfg,
             )
 
-    if "ebay" in activas:
-        cfg = watchlist.get("ebay", {})
-        consultas = cfg.get("queries", [])
-        if consultas:
-            print(f"-> eBay: {len(consultas)} busquedas")
-            ofertas += _recolectar_fuente(
-                "ebay",
-                ebay.fetch,
-                consultas,
-                cfg.get("vendedores"),
-                cfg.get("precio_max"),
-                cfg.get("condiciones"),
-                cfg.get("por_consulta", 50),
-            )
 
     if "koaj" in activas:
         cfg = watchlist.get("koaj", {})
@@ -411,7 +379,7 @@ def _con_objetivos(watchlist: dict, objetivos: list[dict]) -> dict:
     # Mercado Libre queda fuera: su catalogo responde 403 a las apps no
     # certificadas, asi que inyectarle terminos solo gastaria peticiones.
     for fuente, lista in (("vtex", en_pesos), ("algolia_co", en_pesos),
-                          ("slickdeals", en_dolares), ("ebay", en_dolares)):
+                          ("slickdeals", en_dolares)):
         if not lista:
             continue
         cfg = copia.setdefault(fuente, {})
@@ -570,8 +538,7 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
     elif fuente == "falabella":
         crudas = falabella.fetch(consultas, tiendas or cfg.get("tiendas"),
                                  cfg.get("por_consulta", 30), cfg.get("marcas"))
-    elif fuente == "droguerias":
-        crudas = vtex.fetch(consultas, cfg.get("tiendas"), cfg.get("por_consulta", 40))
+
     elif fuente == "slickdeals":
         crudas = slickdeals.fetch(consultas, cfg.get("por_consulta", 12),
                                   cfg.get("excluir"), cfg.get("incluir"))
@@ -1086,13 +1053,11 @@ def generar_panel_salud() -> str:
         ("falabella", "Falabella / Homecenter"),
         ("mercadolibre", "Mercado Libre"),
         ("koaj", "Koaj Colombia"),
-        ("droguerias", "Droguerías"),
         ("promohunter", "El Promo Hunter"),
         ("miloderrocha", "Milo Derrocha"),
         ("republica", "República de Descuentos"),
         ("promocajita", "PromoCajita"),
         ("slickdeals", "Slickdeals (Moda/Calzado)"),
-        ("ebay", "eBay"),
     ]
 
     ahora_ts = time.time()
@@ -1535,7 +1500,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 seleccion = _mejores_colombia(watchlist, vistas, cuantas, consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
             elif fuente == "*":
                 del_exterior = max(cuantas // 5, 1)
-                seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
+                seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella"],
                                       None, vistas, cuantas - del_exterior, consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
                              + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
             else:
@@ -1647,7 +1612,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 seleccion = _mejores_colombia(watchlist, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
             elif fuente == "*":
                 del_exterior = max(cuantas // 5, 1)
-                seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
+                seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella"],
                                       None, vistas, cuantas - del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
                              + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
             else:
@@ -1748,7 +1713,7 @@ def atender_solicitudes(solicitudes: list[dict],
             # las del exterior no tienen porcentaje y nunca ganarian ese orden,
             # asi que se les reserva un cupo.
             del_exterior = max(cuantas // 5, 1)
-            seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella", "droguerias"],
+            seleccion = (_mejores(watchlist, ["algolia_co", "vtex", "falabella"],
                                   None, vistas, cuantas - del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
                           + _mejores(watchlist, ["slickdeals"], None, vistas, del_exterior, trm=trm or 4000.0, solo_nuevas=solo_nuevas))
         else:

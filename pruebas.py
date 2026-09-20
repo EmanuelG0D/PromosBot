@@ -571,7 +571,6 @@ class PruebaComandos(unittest.TestCase):
         disponibles = {
             "algolia_co": set(algolia_co.TIENDAS),
             "vtex": set(vtex.TIENDAS),
-            "droguerias": set(vtex.TIENDAS),      # la drogueria tambien es VTEX
             "falabella": set(falabella.TIENDAS),
         }
         for comando, (fuente, tiendas, _t) in CATALOGO.items():
@@ -677,7 +676,7 @@ class PruebaComandos(unittest.TestCase):
         from core.comandos import AYUDA, MENU
         codigo = inspect.getsource(radar.atender_solicitudes)
         self.assertIn('if fuente == "co"', codigo)
-        for fuente in ("algolia_co", "vtex", "droguerias"):
+        for fuente in ("algolia_co", "vtex"):
             self.assertIn(fuente, codigo)
         texto = AYUDA + " ".join(d for _c, d in MENU)
         for cifra in ("cinco tiendas", "5 tiendas"):
@@ -923,7 +922,7 @@ class PruebaTodasLasFuentesLlegan(unittest.TestCase):
         import radar
         w = config.load_watchlist()
         modulos = {"algolia_co": "algolia_co", "vtex": "vtex",
-                   "falabella": "falabella", "droguerias": "vtex",
+                   "falabella": "falabella",
                    "slickdeals": "slickdeals", "promocajita": "promocajita"}
         for fuente, modulo in modulos.items():
             cfg = w.get(fuente) or {}
@@ -1172,20 +1171,12 @@ class PruebaRuido(unittest.TestCase):
         import config
         from sources import algolia_co, falabella, vtex
         w = config.load_watchlist()
-        conocidas = {"vtex": set(vtex.TIENDAS), "droguerias": set(vtex.TIENDAS),
+        conocidas = {"vtex": set(vtex.TIENDAS),
                      "algolia_co": set(algolia_co.TIENDAS),
                      "falabella": set(falabella.TIENDAS)}
         for fuente, validas in conocidas.items():
             for tienda in (w.get(fuente) or {}).get("tiendas") or []:
                 self.assertIn(tienda, validas, f"{fuente}: {tienda}")
-
-    def test_la_drogueria_pide_el_catalogo_entero(self):
-        """No se le buscan terminos: se le pide lo mas rebajado de la tienda."""
-        import config
-        from sources import vtex
-        cfg = config.load_watchlist().get("droguerias") or {}
-        self.assertEqual(cfg.get("queries"), [vtex.CATALOGO])
-        self.assertNotIn("ft=", vtex.RUTA_CATALOGO)
 
 
 class PruebaWebhook(unittest.TestCase):

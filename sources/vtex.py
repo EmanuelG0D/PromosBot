@@ -38,7 +38,6 @@ TIENDAS = {
     "whirlpool":    {"nombre": "Whirlpool",     "api": "https://www.whirlpool.com.co",     "web": "https://www.whirlpool.com.co"},
     "imusa":        {"nombre": "Imusa",         "api": "https://www.imusa.com.co",         "web": "https://www.imusa.com.co"},
     "oster":        {"nombre": "Oster",         "api": "https://www.ostercolombia.com",    "web": "https://www.ostercolombia.com"},
-    "larebaja":     {"nombre": "La Rebaja",    "api": "https://www.larebajavirtual.com", "web": "https://www.larebajavirtual.com"},
 }
 
 RUTA = "/api/catalog_system/pub/products/search?ft={q}&O=OrderByBestDiscountDESC&_from=0&_to={hasta}"

@@ -272,39 +272,11 @@
     ],
     "por_consulta": 10
   },
-  "ebay": {
-    "queries": [
-      "running shoes",
-      "sneakers"
-    ],
-    "vendedores": [
-      "adidas_official",
-      "puma_official",
-      "reebokofficial",
-      "underarmour"
-    ],
-    "precio_max": 45,
-    "condiciones": [
-      "NEW"
-    ],
-    "por_consulta": 50
-  },
   "mercadolibre": {
     "_nota": "Activa: obtiene ofertas destacadas y ofertas relampago oficiales de mercadolibre.com.co/ofertas con filtro anti-chucherias y descarte de accesorios.",
     "queries": [],
     "solo_tienda_oficial": false,
     "por_consulta": 50
-  },
-  "droguerias": {
-    "_nota": "La Rebaja es la unica cadena con local en Ocana. Se pide el catalogo entero ordenado por descuento (la consulta especial 'rebajas') porque aqui no se busca un producto concreto sino a ver que hay rebajado. 'excluir' va vacio a proposito: el veto general tumbaria maquillaje ('Base liquida') y protector solar.",
-    "tiendas": [
-      "larebaja"
-    ],
-    "queries": [
-      "rebajas"
-    ],
-    "por_consulta": 40,
-    "excluir": []
   },
   "falabella": {
     "_nota": "Falabella y Homecenter no publican API: el catalogo se lee del JSON que Next.js incrusta en la pagina del buscador. Homecenter es la de ferreteria y hogar; Falabella la de tecnologia y ropa.",
