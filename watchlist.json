@@ -451,5 +451,15 @@
     "por_canal": 20,
     "incluir": [],
     "excluir": []
+  },
+  "descuentostech": {
+    "_nota": "Ofertas de Descuentos Tech Colombia y Descuentos Home en Telegram.",
+    "canales": [
+      "DescuentosTech",
+      "DescuentosHome"
+    ],
+    "por_canal": 20,
+    "incluir": [],
+    "excluir": []
   }
 }

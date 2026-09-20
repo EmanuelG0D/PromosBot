@@ -25,10 +25,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica
+from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
-           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica")
+           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica", "descuentostech")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -246,6 +246,23 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
             _recolectar_fuente(
                 "republica",
                 republica.fetch,
+                por_canal=por_canal,
+                incluir=cfg.get("incluir"),
+                excluir=cfg.get("excluir"),
+            ),
+            cfg,
+        )
+
+    if "descuentostech" in activas:
+        cfg = watchlist.get("descuentostech", {})
+        canales = cfg.get("canales", ["DescuentosTech"])
+        por_canal = cfg.get("por_canal", 20)
+        print(f"-> Descuentos Tech ({', '.join(canales)}): {por_canal} ofertas de Telegram")
+        ofertas += _sin_ruido(
+            _recolectar_fuente(
+                "descuentostech",
+                descuentostech.fetch,
+                canales=canales,
                 por_canal=por_canal,
                 incluir=cfg.get("incluir"),
                 excluir=cfg.get("excluir"),
@@ -501,6 +518,14 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
         _guardar_en_cache(clave, resultado)
         return resultado
 
+    if fuente == "descuentostech":
+        resultado = descuentostech.fetch(canales=cfg.get("canales", ["DescuentosTech"]),
+                                         por_canal=cfg.get("por_canal", 20),
+                                         incluir=cfg.get("incluir"),
+                                         excluir=cfg.get("excluir"))
+        _guardar_en_cache(clave, resultado)
+        return resultado
+
     if fuente in ("amazon", "amazon_gangas"):
         cfg_ph = watchlist.get("promohunter", {})
         cfg_milo = watchlist.get("miloderrocha", {})
@@ -619,9 +644,9 @@ def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
     if deal.price is None:
         return True
 
-    # Cazadores de comunidad (PromoHunter, Milo Derrocha, Promocajita, República) ya vienen curados
+    # Cazadores de comunidad (PromoHunter, Milo Derrocha, Promocajita, República, DescuentosTech) ya vienen curados
     # y quedan exentos de topes para no bloquear gangas reales de alto valor.
-    if deal.source in {"promohunter", "miloderrocha", "promocajita", "republica"}:
+    if deal.source in {"promohunter", "miloderrocha", "promocajita", "republica", "descuentostech"}:
         return True
 
     precio_cop = deal.price if deal.currency == "COP" else (deal.price * trm)
@@ -741,8 +766,8 @@ def torneo_familias(candidatas: list[tuple[Deal, Verdict]]) -> list[tuple[Deal, 
         )
         deal, verdict = campeon_par
         desc = getattr(deal, "discount_verificable", 0.0) or 0.0
-        # Fuentes de comunidad curadas (República, PromoCajita, Slickdeals, Milo Derrocha)
-        if deal.source in {"republica", "promocajita", "slickdeals", "miloderrocha"}:
+        # Fuentes de comunidad curadas (República, PromoCajita, Slickdeals, Milo Derrocha, Descuentos Tech)
+        if deal.source in {"republica", "promocajita", "slickdeals", "miloderrocha", "descuentostech"}:
             piso = 55.0 if deal.coupons else 45.0
             desc = max(desc, piso)
         peso = PESOS_FAMILIA.get(fam, 1.0)
@@ -1059,6 +1084,7 @@ def generar_panel_salud() -> str:
         ("republica", "República de Descuentos"),
         ("promocajita", "PromoCajita"),
         ("slickdeals", "Slickdeals (Moda/Calzado)"),
+        ("descuentostech", "Descuentos Tech"),
     ]
 
     ahora_ts = time.time()
@@ -1828,7 +1854,7 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             # Contraste contra el minimo real de la ventana: es lo unico que
             # desenmascara la maniobra de subir el precio para luego "rebajarlo".
             veracidad = mod_veracidad.analizar(deal.price, historial)
-            es_cazador = deal.source in {"promohunter", "miloderrocha", "promocajita", "republica"}
+            es_cazador = deal.source in {"promohunter", "miloderrocha", "promocajita", "republica", "descuentostech"}
             objetivo = None if es_cazador else mod_objetivos.alcanzado(deal, objetivos_cfg)
             if not es_cazador and not objetivo and not _precio_admisible(deal, trm):
                 continue
@@ -1929,8 +1955,8 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 (deal.discount_verificable >= getattr(config, "SUPER_DEAL_DISCOUNT_PCT", 60.0) and verdict.confianza != "baja")
                 or (veracidad is not None and getattr(veracidad, "es_real", False) and getattr(veracidad, "descuento_real", 0.0) >= 25.0)
                 or (deal.vence_pronto and deal.discount_verificable >= 50.0)
-                or (bool(deal.coupons) and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals", "republica"})
-                or (deal.discount_verificable >= 50.0 and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals", "republica"})
+                or (bool(deal.coupons) and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals", "republica", "descuentostech"})
+                or (deal.discount_verificable >= 50.0 and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals", "republica", "descuentostech"})
             )
             es_intocable = es_glitch or es_objetivo or es_super_ganga
 

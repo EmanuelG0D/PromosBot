@@ -33,6 +33,7 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "falabella":  ("falabella", ["falabella"],  "Falabella"),
     "homecenter": ("falabella", ["homecenter"], "Homecenter"),
     "cajita":   ("promocajita", None,        "PROMOCAJITA"),
+    "descuentostech": ("descuentostech", None, "Descuentos Tech"),
     "mercadolibre": ("mercadolibre", None,   "Mercado Libre"),
     "meli":     ("mercadolibre", None,       "Mercado Libre"),
     "totto":        ("vtex",   ["totto"],        "Totto"),
@@ -272,6 +273,7 @@ AYUDA = (
     "/mercadolibre - ofertas de Mercado Libre\n"
     "/colombia - lo mejor de las tiendas colombianas\n"
     "/cajita - lo que publica PROMOCAJITA\n"
+    "/descuentostech - ofertas de Descuentos Tech\n"
     "/exterior - ofertas de EE. UU. (Slickdeals)\n"
     "/todo - Colombia y exterior mezclados\n"
     "Puedes pedir mas: <code>/alkosto 25</code>\n"
@@ -745,6 +747,7 @@ MENU = [
     ("koaj", "Ofertas de Koaj"),
     ("colombia", "Lo mejor de las tiendas colombianas"),
     ("cajita", "Ofertas de PROMOCAJITA"),
+    ("descuentostech", "Ofertas de Descuentos Tech"),
     ("exterior", "Ofertas de EE. UU."),
     ("todo", "Colombia y exterior mezclados"),
     ("ayuda", "Lista de comandos"),

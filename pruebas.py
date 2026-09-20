@@ -923,7 +923,8 @@ class PruebaTodasLasFuentesLlegan(unittest.TestCase):
         w = config.load_watchlist()
         modulos = {"algolia_co": "algolia_co", "vtex": "vtex",
                    "falabella": "falabella",
-                   "slickdeals": "slickdeals", "promocajita": "promocajita"}
+                   "slickdeals": "slickdeals", "promocajita": "promocajita",
+                   "descuentostech": "descuentostech"}
         for fuente, modulo in modulos.items():
             cfg = w.get(fuente) or {}
             if not (cfg.get("queries") or cfg.get("canales")):
@@ -2512,6 +2513,48 @@ class PruebaMiloDerrocha(unittest.TestCase):
     def test_miloderrocha_en_radar_fuentes(self):
         import radar
         self.assertIn("miloderrocha", radar.FUENTES)
+
+
+class PruebaDescuentosTech(unittest.TestCase):
+    """Verifica el extractor y filtros de Descuentos Tech Colombia."""
+
+    MOCK_HTML = r"""
+    <div data-post="DescuentosTech/100">
+        <div class="tgme_widget_message_text js-message_text">
+            #PanelLED ✨ Por solo ✨ USD$69 ✅ Panel LED Govee Gaming Pixel inteligente 7.28"<br>
+            👉 Ver oferta: <a href="https://www.facebook.com/permalink.php?id=123&story_fbid=456">Ver Oferta</a>
+        </div>
+        <div style="background-image: url('https://cdn1.telesco.pe/file/sample123.jpg')"></div>
+    </div>
+    <div data-post="DescuentosTech/101">
+        <div class="tgme_widget_message_text js-message_text">
+            #Manicura ✨ Por solo ✨ USD$8 ✅ Código: B7V9CW9N 60% Descuento 🏷️ Kit de manicura gel MelodySusie<br>
+            👉 Ver oferta: <a href="https://www.facebook.com/permalink.php?id=123&story_fbid=789">Ver Oferta</a>
+        </div>
+        <div style="background-image: url('https://cdn1.telesco.pe/file/sample456.jpg')"></div>
+    </div>
+    """
+
+    def test_extraer_deals_html(self):
+        from sources import descuentostech
+        deals = descuentostech.extraer_deals_html(self.MOCK_HTML)
+        self.assertEqual(len(deals), 2)
+        d1 = deals[0]
+        self.assertEqual(d1.key, "descuentostech:DescuentosTech/100")
+        self.assertEqual(d1.store, "DescuentosTech")
+        self.assertIn("Panel LED Govee", d1.title)
+        self.assertEqual(d1.price, 69.0)
+        self.assertEqual(d1.currency, "USD")
+        self.assertEqual(d1.url, "https://www.facebook.com/permalink.php?id=123&story_fbid=456")
+
+        d2 = deals[1]
+        self.assertEqual(d2.price, 8.0)
+        self.assertEqual(d2.coupons, ["B7V9CW9N"])
+        self.assertIn("-60% OFF", d2.notes)
+
+    def test_descuentostech_en_radar_fuentes(self):
+        import radar
+        self.assertIn("descuentostech", radar.FUENTES)
 
     def test_cazadores_exentos_de_topes_y_sin_objetivo_cumplido(self):
         import radar
