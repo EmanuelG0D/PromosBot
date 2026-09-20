@@ -1226,7 +1226,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 f"👋 <b>¡Hola, {telegram.esc(nombre)}!</b>\n\n"
                 f"Para poder usar <b>PromosBot</b> y consultar todas las ofertas, "
                 f"primero debes estar unido a nuestro canal oficial:\n\n"
-                f"📢 <b>Ofertas</b>\n\n"
+                f"📢 <b>Promociones Colombia🇨🇴</b>\n\n"
                 f"<i>Únete con el botón de abajo y luego presiona 'Ya me uní':</i>",
                 reply_markup=telegram.teclado_unirse_canal(),
                 chat_id=chat_id,

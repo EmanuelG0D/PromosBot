@@ -448,11 +448,11 @@ def teclado_aprobacion(user_id: int | str) -> dict:
 def teclado_unirse_canal(url_canal: str | None = None) -> dict:
     """Botones inline para invitar al usuario al canal y verificar su membresia."""
     enlace = (url_canal or getattr(config, "TELEGRAM_CHANNEL_URL", "")
-              or "https://t.me/+GE1nQO-f0HYwNGQx").strip()
+              or "https://t.me/RadarPromoCol").strip()
     return {
         "inline_keyboard": [
             [
-                {"text": "📢 Unirme a Ofertas", "url": enlace},
+                {"text": "📢 Unirme al Canal Oficial", "url": enlace},
             ],
             [
                 {"text": "🔄 Ya me uní", "callback_data": "verificar_canal"},
