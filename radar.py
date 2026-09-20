@@ -1225,6 +1225,15 @@ def atender_solicitudes(solicitudes: list[dict],
             enlace = (getattr(config, "TELEGRAM_CHANNEL_URL", "") or "https://t.me/RadarPromoCol").strip()
             if not enlace or "+GE1nQO-f0HYwNGQx" in enlace or "joinchat" in enlace or "/+" in enlace:
                 enlace = "https://t.me/RadarPromoCol"
+
+            # Ocultar cualquier teclado de tiendas previo que pudiera persistir en la pantalla del usuario
+            telegram.send(
+                "🔒 <b>Acceso exclusivo para miembros</b>\n"
+                "<i>El menú de tiendas y la consulta de ofertas están reservados para miembros del canal oficial.</i>",
+                reply_markup={"remove_keyboard": True},
+                chat_id=chat_id,
+            )
+
             telegram.send(
                 f"👋 <b>¡Hola, {telegram.esc(nombre)}!</b>\n\n"
                 f"Para poder usar <b>PromosBot</b> y consultar todas las ofertas, "

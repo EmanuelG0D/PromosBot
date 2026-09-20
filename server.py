@@ -194,6 +194,13 @@ def atender_callback_query(callback_query: dict) -> None:
 
     # 0. Petición de siguientes ofertas (paginación)
     if data == "siguientes_ofertas":
+        if not telegram.es_miembro_del_canal(remitente_id):
+            telegram.responder_callback(
+                cq_id,
+                "🔒 Debes estar unido al canal oficial para ver ofertas.",
+                alerta=True,
+            )
+            return
         telegram.responder_callback(cq_id, "Buscando siguientes ofertas...")
         solicitud_sig = {
             "comando": "siguientes",

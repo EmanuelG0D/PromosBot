@@ -1819,6 +1819,49 @@ class PruebaControlAccesoWhitelist(unittest.TestCase):
                 telegram.editar_mensaje = orig_edit
                 telegram.es_miembro_del_canal = orig_miembro
 
+    def test_no_miembro_canal_no_recibe_siguientes_ofertas(self):
+        import server
+        from core import telegram
+        respuestas_cb = []
+        orig_resp = telegram.responder_callback
+        orig_miembro = telegram.es_miembro_del_canal
+        try:
+            telegram.responder_callback = lambda qid, txt="", alerta=False, **k: respuestas_cb.append((qid, txt, alerta)) or True
+            telegram.es_miembro_del_canal = lambda uid, **k: False
+            cb_sig = {
+                "id": "cb_sig_test",
+                "from": {"id": 7777},
+                "data": "siguientes_ofertas",
+                "message": {"chat": {"id": 7777}},
+            }
+            server.atender_callback_query(cb_sig)
+            self.assertTrue(any("Debes estar unido al canal" in r[1] and r[2] is True for r in respuestas_cb))
+        finally:
+            telegram.responder_callback = orig_resp
+            telegram.es_miembro_del_canal = orig_miembro
+
+    def test_unirse_canal_remueve_teclado_de_tiendas(self):
+        import radar
+        from core import telegram
+        mensajes_enviados = []
+        orig_send = telegram.send
+        try:
+            telegram.send = lambda txt, **k: mensajes_enviados.append((txt, k)) or True
+            solicitud = {
+                "tipo": "unirse_canal",
+                "chat_id": 9999,
+                "nombre": "Carlos",
+            }
+            radar.atender_solicitudes([solicitud])
+            # Debe haber enviado un mensaje con remove_keyboard=True para que el usuario no vea el menú de tiendas
+            removidos = [m for m in mensajes_enviados if m[1].get("reply_markup") == {"remove_keyboard": True}]
+            self.assertEqual(len(removidos), 1)
+            self.assertIn("exclusivo", removidos[0][0].lower())
+            # Y el mensaje con el botón para unirse al canal
+            invitaciones = [m for m in mensajes_enviados if "inline_keyboard" in m[1].get("reply_markup", {})]
+            self.assertEqual(len(invitaciones), 1)
+        finally:
+            telegram.send = orig_send
 
 
 class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
