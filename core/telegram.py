@@ -449,6 +449,8 @@ def teclado_unirse_canal(url_canal: str | None = None) -> dict:
     """Botones inline para invitar al usuario al canal y verificar su membresia."""
     enlace = (url_canal or getattr(config, "TELEGRAM_CHANNEL_URL", "")
               or "https://t.me/RadarPromoCol").strip()
+    if not enlace or "+GE1nQO-f0HYwNGQx" in enlace or "joinchat" in enlace or "/+" in enlace:
+        enlace = "https://t.me/RadarPromoCol"
     return {
         "inline_keyboard": [
             [

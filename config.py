@@ -52,8 +52,10 @@ def _bool(name: str, default: bool) -> bool:
 TELEGRAM_BOT_TOKEN = _str("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _str("TELEGRAM_CHAT_ID")
 TELEGRAM_ADMIN_ID = _str("TELEGRAM_ADMIN_ID", "5583002220")
-TELEGRAM_CHANNEL_ID = _str("TELEGRAM_CHANNEL_ID", TELEGRAM_CHAT_ID)
-TELEGRAM_CHANNEL_URL = _str("TELEGRAM_CHANNEL_URL", "https://t.me/RadarPromoCol")
+_raw_channel_url = _str("TELEGRAM_CHANNEL_URL", "https://t.me/RadarPromoCol")
+if not _raw_channel_url or "+GE1nQO-f0HYwNGQx" in _raw_channel_url or "joinchat" in _raw_channel_url or "/+" in _raw_channel_url:
+    _raw_channel_url = "https://t.me/RadarPromoCol"
+TELEGRAM_CHANNEL_URL = _raw_channel_url
 TELEGRAM_BOT_USERNAME = _str("TELEGRAM_BOT_USERNAME", "PromosOn_bot")
 
 # --- eBay (opcional: sin credenciales la fuente se omite sola) ----------
