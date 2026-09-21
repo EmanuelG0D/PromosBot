@@ -3639,7 +3639,7 @@ class PruebaCuposPorTienda(unittest.TestCase):
         self.assertIn("Monitor Gamer Curvo 27 Pulgadas 165Hz", texto)
         self.assertIn("💵 Antes: $1.600.000 ➡️ Ahora: $800.000", texto)
         self.assertIn("🎟️ Cupón de descuento: DESCUENTO20", texto)
-        self.assertIn("https://amazon.com/dp/B123", texto)
+        self.assertIn("https://t.me/PromosOn_bot?start=deal_", texto)
 
     def test_facebook_publicar_oferta_mock(self):
         from unittest.mock import patch, MagicMock
