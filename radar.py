@@ -17,7 +17,7 @@ import time
 import unicodedata
 
 import config
-from core import filtros, fx, respaldo, telegram, whitelist
+from core import facebook, filtros, fx, respaldo, telegram, whitelist
 from core import comandos as mod_comandos
 from core import objetivos as mod_objetivos
 from core import veracidad as mod_veracidad
@@ -2069,6 +2069,11 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 if getattr(deal, "es_glitch", False) or verdict.glitch:
                     _TELEMETRIA_LIGAS["glitches_hoy"] += 1
                 formatos[via] = formatos.get(via, 0) + 1
+
+                # Difusión en Página de Facebook si está configurada
+                if facebook.configurado():
+                    facebook.publicar_oferta(deal, verdict, landed, veracidad)
+
                 # Telegram admite ~20 mensajes por minuto en un grupo. Con 20
                 # tarjetas por ronda, 3.5s de pausa deja margen de sobra.
                 time.sleep(3.5)

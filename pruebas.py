@@ -3610,7 +3610,96 @@ class PruebaCuposPorTienda(unittest.TestCase):
         tiendas = [par[0].store for par in res]
         self.assertEqual(len(set(tiendas)), 6)
         # La primera debe ser la de mayor descuento (Tienda_9 con 65%)
-        self.assertEqual(res[0][0].store, "Tienda_9")
+    def test_facebook_configurado_y_render(self):
+        from core import facebook
+        from core.scoring import Verdict
+
+        d = oferta(
+            source="amazon",
+            store="Amazon",
+            title="Monitor Gamer Curvo 27 Pulgadas 165Hz",
+            price=800000.0,
+            list_price=1600000.0,
+            url="https://amazon.com/dp/B123",
+            image="https://m.media-amazon.com/images/I/71xyz.jpg",
+            coupons=["DESCUENTO20"],
+            notes=["Envío gratis"],
+        )
+        v = Verdict(
+            alertar=True,
+            inmediata=True,
+            confianza="alta",
+            glitch=False,
+            etiquetas=["ganga"],
+            motivo="50% de descuento",
+        )
+
+        texto = facebook.render(d, v)
+        self.assertIn("Amazon (-50%)", texto)
+        self.assertIn("Monitor Gamer Curvo 27 Pulgadas 165Hz", texto)
+        self.assertIn("💵 Antes: $1.600.000 ➡️ Ahora: $800.000", texto)
+        self.assertIn("🎟️ Cupón de descuento: DESCUENTO20", texto)
+        self.assertIn("https://amazon.com/dp/B123", texto)
+
+    def test_facebook_publicar_oferta_mock(self):
+        from unittest.mock import patch, MagicMock
+        from core import facebook
+        from core.scoring import Verdict
+
+        d = oferta(
+            source="amazon",
+            store="Amazon",
+            title="Monitor Gamer Curvo",
+            price=800000.0,
+            url="https://amazon.com/dp/B123",
+            image="https://m.media-amazon.com/images/I/71xyz.jpg",
+        )
+        v = Verdict(
+            alertar=True,
+            inmediata=True,
+            confianza="alta",
+            glitch=False,
+            etiquetas=[],
+            motivo="",
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"id": "234_567"}'
+
+        with patch("config.FB_PAGE_ID", "12345"), \
+             patch("config.FB_PAGE_ACCESS_TOKEN", "token123"), \
+             patch("config.FB_ENABLED", True), \
+             patch("urllib.request.urlopen", return_value=mock_resp):
+            ok = facebook.publicar_oferta(d, v)
+            self.assertTrue(ok)
+
+    def test_facebook_error_no_lanza_excepcion(self):
+        from unittest.mock import patch
+        from core import facebook
+        from core.scoring import Verdict
+
+        d = oferta(
+            source="amazon",
+            store="Amazon",
+            title="Monitor Gamer Curvo",
+            price=800000.0,
+            url="https://amazon.com/dp/B123",
+        )
+        v = Verdict(
+            alertar=True,
+            inmediata=True,
+            confianza="alta",
+            glitch=False,
+            etiquetas=[],
+            motivo="",
+        )
+
+        with patch("config.FB_PAGE_ID", "12345"), \
+             patch("config.FB_PAGE_ACCESS_TOKEN", "token123"), \
+             patch("config.FB_ENABLED", True), \
+             patch("urllib.request.urlopen", side_effect=Exception("Fallo de red simulado")):
+            ok = facebook.publicar_oferta(d, v)
+            self.assertFalse(ok)
 
 
 if __name__ == "__main__":

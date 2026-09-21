@@ -62,6 +62,11 @@ TELEGRAM_BOT_USERNAME = _str("TELEGRAM_BOT_USERNAME", "PromosOn_bot")
 EBAY_CLIENT_ID = _str("EBAY_CLIENT_ID")
 EBAY_CLIENT_SECRET = _str("EBAY_CLIENT_SECRET")
 
+# --- Facebook Page (opcional: sin credenciales se omite solo) ------------
+FB_PAGE_ID = _str("FB_PAGE_ID")
+FB_PAGE_ACCESS_TOKEN = _str("FB_PAGE_ACCESS_TOKEN")
+FB_ENABLED = _bool("FB_ENABLED", True)
+
 # --- Umbrales de alerta -------------------------------------------------
 # Piso para que una oferta exista siquiera. Todo lo que pase de aqui se ve,
 # pero agrupado en el resumen: al 40% entran ~158 productos por ronda.
