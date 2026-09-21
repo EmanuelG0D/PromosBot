@@ -92,8 +92,10 @@ def spintax_camuflaje() -> str:
 
 def render_individual(deal: Deal, verdict: Verdict | None = None,
                       landed: Landed | None = None,
-                      veracidad: Veracidad | None = None) -> str:
-    """Genera el caption para una oferta individual SIN URLs (para máximo alcance en Meta)."""
+                      veracidad: Veracidad | None = None,
+                      hash_id: str | None = None,
+                      base_url: str | None = None) -> str:
+    """Genera el caption para una oferta individual con link cloaked seguro si se pasa hash_id."""
     lineas = []
     pct = round(deal.discount_pct or 0)
     descuento_str = f" (-{pct}%)" if pct > 0 else ""
@@ -135,18 +137,31 @@ def render_individual(deal: Deal, verdict: Verdict | None = None,
         lineas.append(f"• {nota}")
 
     lineas.append("")
-    lineas.append(spintax_aviso_comentario())
+    if hash_id:
+        dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
+        lineas.append(f"👉 Ver oferta y comprar: {dominio}/ir/{hash_id}")
+    else:
+        lineas.append(spintax_aviso_comentario())
     return "\n".join(lineas)
 
 
-def render_agrupado(deals: list[Deal]) -> str:
+def render_agrupado(elementos: list[Deal] | list[tuple[str, Deal]], base_url: str | None = None) -> str:
     """Genera el caption para un lote de 2 a 4 ofertas agrupadas con descripciones truncadas a 60 chars."""
     encabezado = spintax_encabezado()
     lineas = [encabezado, ""]
     emojis_num = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
+    dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
 
-    for i, d in enumerate(deals[:4]):
+    # Detectar si vienen tuplas (hash_id, deal) o solo Deals
+    es_tuplas = bool(elementos and isinstance(elementos[0], tuple))
+
+    for i, item in enumerate(elementos[:4]):
         num = emojis_num[i] if i < len(emojis_num) else f"{i+1}."
+        if es_tuplas:
+            hash_id, d = item
+        else:
+            hash_id, d = "", item
+
         pct = round(d.discount_pct or 0)
         dcto = f" (-{pct}%)" if pct > 0 else ""
         tienda = d.store or d.source or "Tienda"
@@ -158,9 +173,14 @@ def render_agrupado(deals: list[Deal]) -> str:
         lineas.append(f"💵 Ahora: {precio_str}")
         if d.coupons:
             lineas.append(f"🎟️ Cupón: {d.coupons[0]}")
+        if hash_id:
+            lineas.append(f"👉 {dominio}/ir/{hash_id}")
         lineas.append("")
 
-    lineas.append(spintax_aviso_comentario())
+    if es_tuplas:
+        lineas.append("⚡ Tócalos para ver fotos, cupón y comprar directo en la tienda oficial.")
+    else:
+        lineas.append(spintax_aviso_comentario())
     return "\n".join(lineas)
 
 
@@ -391,11 +411,11 @@ def procesar_cola(limite: int = 4, base_url: str | None = None) -> dict:
                 if m_id:
                     media_ids.append(m_id)
 
-        # 4. Construir caption principal (CERO URLs)
+        # 4. Construir caption principal con links cloaked protegidos de Render (/ir/{id})
         if len(deals) == 1:
-            texto_post = render_individual(deals[0])
+            texto_post = render_individual(deals[0], hash_id=hash_ids[0], base_url=base_url)
         else:
-            texto_post = render_agrupado(deals)
+            texto_post = render_agrupado(items, base_url=base_url)
 
         # 5. Publicar en feed con fotos adjuntas
         post_id = publicar_post_con_medios(texto_post, media_ids=media_ids)
