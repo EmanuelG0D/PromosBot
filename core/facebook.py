@@ -53,6 +53,36 @@ SPINTAX_CAMUFLAJE = [
     "Verdad del comprador online: Llenar el carrito de compras a medianoche solo para ver cuánto sería el total y luego no comprar nada 😂 ¿A quién más le pasa?",
     "🎯 ¿Cuál ha sido la mejor ganga o error de precio que has logrado comprar en internet? ¡Déjanos tu historia en los comentarios!",
     "📱 ¿Prefieres comprar desde la aplicación móvil de las tiendas o directamente desde la página web en el computador? Déjanos tu opinión 👇",
+    "💳 Regla de oro financiera: Si vas a pagar con tarjeta de crédito para aprovechar una oferta, págalo a 1 sola cuota. Así ganas puntos o cashback sin pagar un solo peso de interés.",
+    "🎮 Encuesta gamer: ¿PlayStation 5, Xbox Series X o PC Gamer? ¿Cuál consideran que ofrece mejor relación costo-beneficio hoy en día?",
+    "📦 ¿Cuánto es lo máximo que han esperado por un paquete de compras por internet? ¿Son de los que miran el rastreo del envío cada 10 minutos?",
+    "💡 Consejo para comprar tecnología: No siempre el modelo del año actual vale la pena. Muchas veces el modelo del año anterior baja 40% de precio y rinde casi igual.",
+    "🛍️ Debate de tiendas en Colombia: ¿Qué tienda consideran que tiene los mejores tiempos de entrega y garantía: Alkosto, Falabella o Éxito?",
+    "👟 Amantes de los tenis y ropa deportiva: ¿Prefieren comprar en outlets físicos o cazar rebajas por internet? Los leemos en comentarios 👇",
+    "🚨 Situación clásica: Compras algo con descuento y al día siguiente la tienda le baja todavía más el precio 🤦‍♂️ ¿Les ha pasado?",
+    "📺 Para el hogar: ¿Smart TV de 55 pulgadas o proyector portátil? ¿Qué recomiendan para una sala de entretenimiento en casa?",
+    "💡 Tip para comprar en Amazon desde Colombia: Recuerda que compras de productos enviados por Amazon superiores a 35 dólares tienen envío GRATIS directo a Colombia.",
+    "🎧 En audífonos inalámbricos: ¿Priorizan la cancelación activa de ruido, la duración de la batería o la calidad del micrófono para llamadas?",
+    "🛒 Pregunta sincera: ¿Compran por necesidad real o la emoción de ver un 60% de descuento es irresistible? 😂 ¡Confiesen en comentarios!",
+    "💻 Para trabajar o estudiar: ¿Son del equipo portátil ligero (tipo MacBook/Zenbook) o prefieren armar un computador de escritorio potente?",
+    "💡 Tip de compras: Antes de pagar, abre una pestaña en modo incógnito. Algunas tiendas suben los precios si detectan que visitaste el mismo producto varias veces.",
+    "⌚ Relojes inteligentes: ¿Realmente los usan para deporte y salud o solo para ver las notificaciones de WhatsApp sin sacar el celular?",
+    "🇨🇴 Compras nacionales vs importadas: ¿Prefieren pagar un poco más por tener garantía local en Colombia o pedir directo de USA/China por mejor precio?",
+    "🍳 Para la cocina: ¿La freidora de aire realmente les cambió la vida o terminó arrumada en una esquina de la cocina? ¡Queremos opiniones reales!",
+    "💡 Tip de seguridad: Nunca compres en páginas que te pidan pagar únicamente por transferencia directa a cuentas personales de Nequi o Daviplata sin pasarela de pagos segura.",
+    "☕ Debate mañanero: ¿Cuál es el electrodoméstico que más les ha ahorrado tiempo en la casa este año?",
+    "📦 Sensación insuperable: Cuando el domiciliario te llama diciendo 'tengo una entrega para usted' y ni te acordabas qué habías pedido 🎁",
+    "📱 ¿Cada cuántos años cambian de celular en promedio? ¿Esperan a que muera por completo o cambian cada 2 años?",
+    "💡 Tip para temporadas de rebajas (CyberLunes/Black Friday): Anota los precios desde dos semanas antes; así detectas de inmediato si el descuento es real o si inflaron el precio.",
+    "🏠 Domótica y hogar inteligente: ¿Qué dispositivo inteligente recomiendan para empezar? ¿Bombillos WiFi, enchufes inteligentes o asistentes de voz?",
+    "🎒 ¿Qué es lo primero que empacan en su morral cuando van a viajar: cargador portátil, audífonos o cámara?",
+    "🛒 Pregunta de fin de semana: ¿Cuál es esa compra que hicieron por internet y que superó todas sus expectativas por lo barata que fue?",
+    "💡 Tip de garantía: Guarda siempre la factura digital en una carpeta de Google Drive o correo. La mayoría de tiendas en Colombia exigen la factura para cualquier trámite.",
+    "🔊 Parlantes Bluetooth para reuniones: ¿Equipo JBL, Sony o alternativas económicas de buena calidad? ¿Qué marca prefieren?",
+    "🚗 ¿Qué accesorio para el carro o la moto consideran 100% indispensable que hayan comprado en oferta?",
+    "💤 Domingo de descanso: ¿Qué serie o película se van a ver hoy? Dejen sus mejores recomendaciones en comentarios 👇",
+    "🎯 Meta de ahorro: ¿Qué compra grande tienen planeada para este año: computador, moto, celular nuevo o remodelación del hogar?",
+    "💡 Tip de compras online: Siempre revisa la sección de opiniones y fotos reales de compradores antes de decidirte por un producto poco conocido.",
 ]
 
 
@@ -112,7 +142,27 @@ def spintax_aviso_comentario() -> str:
 
 
 def spintax_camuflaje() -> str:
-    return random.choice(SPINTAX_CAMUFLAJE)
+    """Devuelve un post de camuflaje sin repetición garantizada mediante rotación cíclica."""
+    try:
+        with Store() as store:
+            row = store.conn.execute("SELECT v FROM meta WHERE k = 'fb_camuflaje_usados'").fetchone()
+            usados = json.loads(row["v"]) if row and row["v"] else []
+            disponibles = [i for i in range(len(SPINTAX_CAMUFLAJE)) if i not in usados]
+            if not disponibles:
+                # Si ya rotaron todas las frases del banco, reinicia el ciclo
+                disponibles = list(range(len(SPINTAX_CAMUFLAJE)))
+                usados = []
+            elegido_idx = random.choice(disponibles)
+            usados.append(elegido_idx)
+            store.conn.execute(
+                "INSERT INTO meta(k, v) VALUES ('fb_camuflaje_usados', ?) "
+                "ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+                (json.dumps(usados),)
+            )
+            store.conn.commit()
+            return SPINTAX_CAMUFLAJE[elegido_idx]
+    except Exception:
+        return random.choice(SPINTAX_CAMUFLAJE)
 
 
 # --- RENDERIZADORES DE TEXTO (REGLA: CERO URLS EN EL POST PRINCIPAL) -------
