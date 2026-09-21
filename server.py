@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, urlparse
 
 import config
 import radar
-from core import comandos, respaldo, telegram, whitelist
+from core import comandos, facebook, respaldo, telegram, whitelist
 
 PUERTO = int(os.environ.get("PORT", "10000"))
 
@@ -492,6 +492,8 @@ class Manejador(BaseHTTPRequestHandler):
                 "horario": f"{HORA_DESDE}:00 a {HORA_HASTA}:00 (Colombia)",
                 "en_horario_ahora": en_horario(),
                 "telegram_configurado": telegram.enabled(),
+                "facebook_configurado": facebook.configurado(),
+                "facebook_page_id": (config.FB_PAGE_ID[:4] + "..." + config.FB_PAGE_ID[-4:]) if config.FB_PAGE_ID else "no configurado",
                 "webhook": _estado["webhook"],
                 "comandos_atendidos": _estado["comandos_atendidos"],
                 "respaldo_configurado": respaldo.configurado(),
