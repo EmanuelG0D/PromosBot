@@ -652,17 +652,41 @@ core/
   respaldo.py       Copia del historial en GitHub (Render borra el disco)
   landed.py         Costo puesto en Colombia (flete, IVA, arancel)
   fx.py             TRM oficial con respaldos
+  facebook.py       Publicación multicanal en Facebook Graph API con fotos HD y deep links
+  whitelist.py      Control de acceso, auto-aprobación y gestión de usuarios
   telegram.py       Formato y envío de mensajes
 sources/
   slickdeals.py     RSS de la comunidad (EE. UU.)
   algolia_co.py     Alkosto, K-tronix (Algolia)
-  vtex.py           Éxito, Carulla, Olímpica, Droguerías (VTEX)
+  vtex.py           Éxito, Carulla, Olímpica, Droguerías (VTEX en alta resolución)
   falabella.py      Falabella, Homecenter (Next.js SSR)
   mercadolibre.py   Centro oficial de liquidaciones y cupones (SSR)
   promocajita.py    Canal público de Telegram de ofertas
   ebay.py           Browse API (opcional)
 pruebas.py          Pruebas de la lógica de decisión y catálogo
 ```
+
+---
+
+## Publicación en Facebook y Embudo a Telegram
+
+El sistema cuenta con publicación automática en la Página oficial de **Facebook** para captar tráfico externo y convertirlo en suscriptores:
+
+- **Publicación automática con foto HD:** Las gangas de alta confianza o errores de precio se publican en el muro de Facebook con imagen original en alta definición (limpiando miniaturas en tiendas VTEX).
+- **Llamado a la acción claro:** Cada post incluye el enlace directo de compra y cupón:
+  > 👉 Consigue el link directo de compra y cupón aquí 👇  
+  > `https://t.me/PromosOn_bot?start=deal_<hash>`  
+  > *(⚡ Nuestro radar te entrega la oferta verificada y el enlace oficial a la tienda)*
+- **Onboarding sin fricción:** Cuando un usuario nuevo llega desde Facebook y toca el enlace:
+  1. El bot detecta el parámetro `deal_<hash>` y **auto-aprueba** su acceso de inmediato.
+  2. Le entrega al instante la tarjeta con foto, cupón y botón directo a la tienda oficial.
+  3. Le envía una invitación cordial con botón para unirse al canal oficial (`@RadarPromoCol`).
+  4. Si posteriormente desea consultar el motor de búsqueda interactivo o `/menu`, se le recuerda la suscripción al canal.
+
+**Variables en Render / Entorno:**
+- `FB_PAGE_ID`: ID numérico de la Página de Facebook.
+- `FB_PAGE_ACCESS_TOKEN`: Token de acceso de página permanente.
+
 
 ## Comandos
 
