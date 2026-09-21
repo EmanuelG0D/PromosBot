@@ -125,21 +125,26 @@ def verificar_conexion() -> dict:
         return {"ok": False, "error": "credenciales no configuradas"}
     page_id = config.FB_PAGE_ID
     token = config.FB_PAGE_ACCESS_TOKEN
+    tok_info = {
+        "longitud": len(token),
+        "prefijo": token[:6] if len(token) >= 6 else "",
+        "sufijo": token[-6:] if len(token) >= 6 else "",
+    }
     url = f"https://graph.facebook.com/v20.0/{page_id}?fields=id,name&access_token={token}"
     req = urllib.request.Request(url)
     try:
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return {"ok": True, "nombre": data.get("name"), "id": data.get("id")}
+            return {"ok": True, "nombre": data.get("name"), "id": data.get("id"), "token_info": tok_info}
     except urllib.error.HTTPError as exc:
         cuerpo = ""
         try:
             cuerpo = exc.read().decode("utf-8", errors="replace")
         except Exception:
             pass
-        return {"ok": False, "codigo": exc.code, "error": cuerpo or exc.reason}
+        return {"ok": False, "codigo": exc.code, "error": cuerpo or exc.reason, "token_info": tok_info}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": str(exc), "token_info": tok_info}
 
 
 def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
