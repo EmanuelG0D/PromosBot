@@ -3802,14 +3802,14 @@ class PruebaCuposPorTienda(unittest.TestCase):
         tiendas = [par[0].store for par in res]
         self.assertEqual(len(set(tiendas)), 6)
         # La primera debe ser la de mayor descuento (Tienda_9 con 65%)
-    def test_facebook_configurado_y_render(self):
+    def test_facebook_configurado_y_render_cero_urls(self):
         from core import facebook
         from core.scoring import Verdict
 
         d = oferta(
             source="amazon",
             store="Amazon",
-            title="Monitor Gamer Curvo 27 Pulgadas 165Hz",
+            title="Monitor Gamer Curvo 27 Pulgadas 165Hz con resolución QHD y panel IPS de alta tasa de refresco",
             price=800000.0,
             list_price=1600000.0,
             url="https://amazon.com/dp/B123",
@@ -3826,45 +3826,135 @@ class PruebaCuposPorTienda(unittest.TestCase):
             motivo="50% de descuento",
         )
 
-        texto = facebook.render(d, v)
+        texto = facebook.render_individual(d, v)
         self.assertIn("Amazon (-50%)", texto)
-        self.assertIn("Monitor Gamer Curvo 27 Pulgadas 165Hz", texto)
+        self.assertIn("Monitor Gamer Curvo", texto)
         self.assertIn("💵 Antes: $1.600.000 ➡️ Ahora: $800.000", texto)
         self.assertIn("🎟️ Cupón de descuento: DESCUENTO20", texto)
-        self.assertIn("Consigue el link directo de compra y cupón aquí", texto)
-        self.assertIn("https://t.me/PromosOn_bot?start=deal_", texto)
+        # REGLA DE ORO: Cero URLs en el caption del post principal
+        self.assertNotIn("http://", texto)
+        self.assertNotIn("https://", texto)
+        self.assertNotIn("t.me", texto)
+        self.assertIn("primer comentario", texto.lower())
 
-    def test_facebook_publicar_oferta_mock(self):
+    def test_facebook_spintax_y_truncamiento(self):
+        from core import facebook
+
+        # Truncamiento estricto a 60 caracteres
+        largo = "Este es un título excesivamente largo para una oferta que debe ser truncada según requerimiento anti-spam"
+        truncado = facebook.truncar(largo, 60)
+        self.assertTrue(len(truncado) <= 63)
+        self.assertTrue(truncado.endswith("..."))
+
+        corto = "Oferta corta"
+        self.assertEqual(facebook.truncar(corto, 60), "Oferta corta")
+
+        # Spintax genera cadenas no vacías de los bancos
+        self.assertIn(facebook.spintax_encabezado(), facebook.SPINTAX_ENCABEZADOS)
+        self.assertIn(facebook.spintax_aviso_comentario(), facebook.SPINTAX_AVISOS_COMENTARIO)
+        self.assertIn(facebook.spintax_camuflaje(), facebook.SPINTAX_CAMUFLAJE)
+
+    def test_facebook_render_agrupado_y_comentario(self):
+        from core import facebook
+
+        d1 = oferta(source="alkosto", store="Alkosto", title="Smart TV 55 Pulgadas 4K UHD", price=1200000.0, list_price=2000000.0)
+        d2 = oferta(source="exito", store="Éxito", title="Lavadora Carga Frontal 18kg Inverter", price=1300000.0, list_price=2000000.0, coupons=["EXITO10"])
+
+        post_caption = facebook.render_agrupado([d1, d2])
+        # Caption sin URLs
+        self.assertNotIn("http://", post_caption)
+        self.assertNotIn("https://", post_caption)
+        self.assertIn("Alkosto (-40%)", post_caption)
+        self.assertIn("Éxito (-35%)", post_caption)
+        self.assertIn("primer comentario", post_caption.lower())
+
+        # Primer comentario con links cloaked Render /ir/{hash}
+        items = [("hash1", d1), ("hash2", d2)]
+        comentario = facebook.render_comentario_links(items, base_url="https://promosbot.onrender.com")
+        self.assertIn("https://promosbot.onrender.com/ir/hash1", comentario)
+        self.assertIn("https://promosbot.onrender.com/ir/hash2", comentario)
+        self.assertIn("🎟️ Cupón: EXITO10", comentario)
+
+    def test_facebook_encolar_y_procesar_lote_con_comentario(self):
         from unittest.mock import patch, MagicMock
         from core import facebook
-        from core.scoring import Verdict
+        from core.store import Store
 
-        d = oferta(
-            source="amazon",
-            store="Amazon",
-            title="Monitor Gamer Curvo",
-            price=800000.0,
-            url="https://amazon.com/dp/B123",
-            image="https://m.media-amazon.com/images/I/71xyz.jpg",
-        )
-        v = Verdict(
-            alertar=True,
-            inmediata=True,
-            confianza="alta",
-            glitch=False,
-            etiquetas=[],
-            motivo="",
-        )
+        d = oferta(source="amazon", store="Amazon", title="Teclado Mecánico RGB", price=150000.0, image="https://amazon.com/img.jpg")
 
         mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{"id": "234_567"}'
+        mock_resp.read.return_value = b'{"id": "post_789_123"}'
+        mock_resp.__enter__.return_value = mock_resp
 
         with patch("config.FB_PAGE_ID", "12345"), \
              patch("config.FB_PAGE_ACCESS_TOKEN", "token123"), \
              patch("config.FB_ENABLED", True), \
              patch("urllib.request.urlopen", return_value=mock_resp):
-            ok = facebook.publicar_oferta(d, v)
-            self.assertTrue(ok)
+            with Store() as store:
+                store.facebook_resetear_camuflaje()
+                pendientes = store.obtener_cola_facebook(limite=100)
+                if pendientes:
+                    store.remover_de_cola_facebook([h for h, _ in pendientes])
+
+            # Encolar oferta
+            h = facebook.encolar_oferta(d)
+            self.assertIsNotNone(h)
+
+            # Procesar la cola (1 deal -> post individual + comentario)
+            res = facebook.procesar_cola(limite=4, base_url="https://test.render.com")
+            self.assertTrue(res.get("ok"))
+            self.assertEqual(res.get("post_id"), "post_789_123")
+
+    def test_facebook_regla_camuflaje_5_a_1(self):
+        from unittest.mock import patch, MagicMock
+        from core import facebook
+        from core.store import Store
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"id": "camuflaje_post_999"}'
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("config.FB_PAGE_ID", "12345"), \
+             patch("config.FB_PAGE_ACCESS_TOKEN", "token123"), \
+             patch("config.FB_ENABLED", True), \
+             patch("urllib.request.urlopen", return_value=mock_resp):
+            with Store() as store:
+                # Simular que ya se hicieron 5 publicaciones promocionales
+                for _ in range(5):
+                    store.facebook_incrementar_promos()
+                self.assertGreaterEqual(store.facebook_contador_promos(), 5)
+
+            # La siguiente ejecución debe ser obligatoriamente un post de camuflaje limpio
+            res = facebook.procesar_cola(limite=4)
+            self.assertTrue(res.get("ok"))
+            self.assertEqual(res.get("tipo"), "camuflaje")
+
+            # El contador debe resetearse a 0
+            with Store() as store:
+                self.assertEqual(store.facebook_contador_promos(), 0)
+
+    def test_server_endpoint_link_cloaking_302(self):
+        import server
+        from unittest.mock import MagicMock
+
+        manejador = server.Manejador.__new__(server.Manejador)
+        manejador.send_response = MagicMock()
+        manejador.send_header = MagicMock()
+        manejador.end_headers = MagicMock()
+
+        # Caso 1: ID numérico -> redirige a canal de Telegram https://t.me/RadarPromoCol/1234
+        manejador.path = "/ir/1234"
+        manejador.do_GET()
+        manejador.send_response.assert_called_with(302)
+        manejador.send_header.assert_any_call("Location", "https://t.me/RadarPromoCol/1234")
+
+        # Caso 2: Hash alfanumérico -> redirige a bot de Telegram https://t.me/PromosOn_bot?start=deal_abc123
+        manejador.send_response.reset_mock()
+        manejador.send_header.reset_mock()
+        manejador.path = "/ir/abc123"
+        manejador.do_GET()
+        manejador.send_response.assert_called_with(302)
+        manejador.send_header.assert_any_call("Location", "https://t.me/PromosOn_bot?start=deal_abc123")
 
     def test_facebook_error_no_lanza_excepcion(self):
         from unittest.mock import patch

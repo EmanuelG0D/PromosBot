@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, urlparse
 import config
 import radar
 from core import comandos, facebook, respaldo, telegram, whitelist
+from core.store import Store
 
 PUERTO = int(os.environ.get("PORT", "10000"))
 
@@ -46,6 +47,9 @@ INTERVALO_COMUNIDAD_MIN = float(os.environ.get("RONDA_COMUNIDAD_MINUTOS", "15"))
 # RUN_EVERY_MINUTES quedo obsoleta a proposito: heredarla aqui habria dejado
 # los catalogos en 15 minutos, que es justo lo que este cambio evita.
 INTERVALO_CATALOGOS_MIN = float(os.environ.get("RONDA_CATALOGOS_MINUTOS", "60"))
+# Ritmo de publicación en Facebook: Meta penaliza ráfagas continuas. Se agrupan
+# ofertas en lotes carrusel y se publican estrictamente cada 45 minutos.
+INTERVALO_FACEBOOK_MIN = float(os.environ.get("RONDA_FACEBOOK_MINUTOS", "45"))
 
 # Horario de trabajo, en hora de Colombia. De madrugada las tiendas no
 # publican nada, y el servicio gratuito de Render tiene 750 horas al mes:
@@ -459,6 +463,31 @@ def programador(nombre: str, fuentes, intervalo_min: float,
         time.sleep(intervalo_min * 60)
 
 
+def programador_facebook(intervalo_min: float = INTERVALO_FACEBOOK_MIN) -> None:
+    """Hilo de fondo: procesa la cola de Facebook estrictamente cada 45 minutos."""
+    # Retraso inicial para permitir que el servicio web y la base de datos se estabilicen
+    time.sleep(ESPERA_INICIAL_S + 25)
+    log(f"iniciando programador de Facebook (lotes cada {intervalo_min:g} min)")
+    while True:
+        try:
+            if en_horario():
+                res = facebook.procesar_cola(limite=4)
+                if res.get("ok"):
+                    if res.get("tipo") == "camuflaje":
+                        log("Facebook: post de camuflaje publicado exitosamente (regla 5:1)")
+                    elif res.get("tipo") in ("lote", "individual"):
+                        log(f"Facebook: publicación realizada exitosamente ({res.get('tipo')}, "
+                            f"{res.get('deals_count', 1)} ofertas, post_id={res.get('post_id')}, "
+                            f"comentario_id={res.get('comentario_id')})")
+                elif res.get("tipo") == "error_publicacion":
+                    log(f"Facebook: fallo al publicar lote: {res.get('error')}")
+            else:
+                log("Facebook: lote omitido (fuera de horario)")
+        except Exception as exc:
+            log(f"Facebook: error en hilo programador: {type(exc).__name__}: {exc}")
+        time.sleep(intervalo_min * 60)
+
+
 class Manejador(BaseHTTPRequestHandler):
     server_version = "RadarOfertas/1.0"
 
@@ -519,7 +548,27 @@ class Manejador(BaseHTTPRequestHandler):
             self._responder(202, {"ok": True, "mensaje": "ronda lanzada en segundo plano"})
             return
 
-        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/healthz", "/run", RUTA_WEBHOOK]})
+        if ruta.path.startswith("/ir/"):
+            id_oferta = ruta.path[len("/ir/"):].strip()
+            if not id_oferta:
+                self._responder(400, {"error": "id de oferta requerido"})
+                return
+
+            if id_oferta.isdigit():
+                canal = (getattr(config, "TELEGRAM_CHANNEL_URL", "") or "https://t.me/RadarPromoCol").rstrip("/")
+                destino = f"{canal}/{id_oferta}"
+            else:
+                bot_user = (getattr(config, "TELEGRAM_BOT_USERNAME", "") or "PromosOn_bot").lstrip("@")
+                param = id_oferta if id_oferta.startswith("deal_") else f"deal_{id_oferta}"
+                destino = f"https://t.me/{bot_user}?start={param}"
+
+            self.send_response(302)
+            self.send_header("Location", destino)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/ir/{id}", RUTA_WEBHOOK]})
 
     def do_POST(self) -> None:  # noqa: N802  (lo exige BaseHTTPRequestHandler)
         # El cuerpo se lee SIEMPRE y antes de decidir nada. Responder sin
@@ -596,6 +645,8 @@ def main() -> None:
             "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
         threading.Thread(target=programador, daemon=True, args=(
             "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
+        if facebook.configurado():
+            threading.Thread(target=programador_facebook, daemon=True).start()
     else:
         log("modo interactivo local: rondas de fondo desactivadas para maxima velocidad de respuesta")
 

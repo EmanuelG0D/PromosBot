@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS deals_recientes (
     deal_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS facebook_cola (
+    hash_id TEXT PRIMARY KEY,
+    deal_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fb_cola_created ON facebook_cola(created_at);
 CREATE INDEX IF NOT EXISTS idx_deals_recientes_created ON deals_recientes(created_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_store_ts ON alerts(store, last_alert_ts);
 """
@@ -335,6 +341,75 @@ class Store:
         except Exception:
             return None
 
+    def encolar_facebook(self, deal: Deal) -> str:
+        """Guarda la oferta para deep links y la encola para publicación dosificada en Facebook."""
+        h = self.guardar_deal_reciente(deal)
+        datos = {
+            "source": deal.source,
+            "store": deal.store,
+            "country": deal.country,
+            "key": deal.key,
+            "title": deal.title,
+            "url": deal.url,
+            "price": deal.price,
+            "currency": deal.currency,
+            "list_price": deal.list_price,
+            "coupons": deal.coupons,
+            "notes": deal.notes,
+            "image": deal.image,
+            "expires_at": deal.expires_at,
+            "free_shipping_co": deal.free_shipping_co,
+        }
+        ahora = dt.datetime.now(dt.timezone.utc).isoformat()
+        self.conn.execute(
+            """
+            INSERT INTO facebook_cola(hash_id, deal_json, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(hash_id) DO UPDATE SET deal_json = excluded.deal_json, created_at = excluded.created_at
+            """,
+            (h, json.dumps(datos), ahora)
+        )
+        self.conn.commit()
+        return h
+
+    def obtener_cola_facebook(self, limite: int = 4) -> list[tuple[str, Deal]]:
+        """Obtiene hasta `limite` ofertas pendientes de la cola para procesar en lote."""
+        rows = self.conn.execute(
+            "SELECT hash_id, deal_json FROM facebook_cola ORDER BY created_at ASC LIMIT ?",
+            (limite,)
+        ).fetchall()
+        items: list[tuple[str, Deal]] = []
+        for r in rows:
+            try:
+                d_dict = json.loads(r["deal_json"])
+                items.append((r["hash_id"], Deal(**d_dict)))
+            except Exception:
+                pass
+        return items
+
+    def remover_de_cola_facebook(self, hash_ids: list[str]) -> None:
+        """Elimina de la cola las ofertas que ya fueron procesadas y publicadas."""
+        if not hash_ids:
+            return
+        for hid in hash_ids:
+            self.conn.execute("DELETE FROM facebook_cola WHERE hash_id = ?", (hid,))
+        self.conn.commit()
+
+    def facebook_contador_promos(self) -> int:
+        """Devuelve cuántos posts promocionales se han publicado desde el último post de camuflaje."""
+        val = self.get_meta("fb_promos_desde_camuflaje")
+        return int(val) if val else 0
+
+    def facebook_incrementar_promos(self) -> int:
+        """Incrementa el contador de publicaciones promocionales."""
+        actual = self.facebook_contador_promos() + 1
+        self.set_meta("fb_promos_desde_camuflaje", str(actual))
+        return actual
+
+    def facebook_resetear_camuflaje(self) -> None:
+        """Resetea a 0 el contador tras publicar un post de camuflaje limpio."""
+        self.set_meta("fb_promos_desde_camuflaje", "0")
+
     def prune(self, dias: int = 120, dias_alertas: int = 30) -> int:
         corte_obs = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias)).isoformat()
         cur_obs = self.conn.execute("DELETE FROM observations WHERE ts < ?", (corte_obs,))
@@ -342,8 +417,9 @@ class Store:
         cur_alerts = self.conn.execute("DELETE FROM alerts WHERE last_alert_ts < ?", (corte_alertas,))
         corte_recientes = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=7)).isoformat()
         cur_recientes = self.conn.execute("DELETE FROM deals_recientes WHERE created_at < ?", (corte_recientes,))
+        cur_fb = self.conn.execute("DELETE FROM facebook_cola WHERE created_at < ?", (corte_recientes,))
         self.conn.commit()
-        total_borradas = cur_obs.rowcount + cur_alerts.rowcount + cur_recientes.rowcount
+        total_borradas = cur_obs.rowcount + cur_alerts.rowcount + cur_recientes.rowcount + cur_fb.rowcount
         if total_borradas and not getattr(self, "is_pg", False):
             self.conn.execute("VACUUM")   # en SQLite encoge el archivo local; en Postgres opera autovacuum
         return total_borradas
