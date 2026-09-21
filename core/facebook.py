@@ -95,9 +95,9 @@ def render(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     bot_user = getattr(config, "TELEGRAM_BOT_USERNAME", "PromosOn_bot")
     link_bot = f"https://t.me/{bot_user}?start=deal_{deal_hash}"
 
-    lineas.append("🛒 Ver oferta y comprar en nuestro Bot de Telegram 👇")
+    lineas.append("👉 Consigue el link directo de compra y cupón aquí 👇")
     lineas.append(link_bot)
-    lineas.append("(⚡ Al tocar el enlace, el Bot te enviará la oferta con foto, cupón y enlace directo)")
+    lineas.append("(⚡ Nuestro radar te entrega la oferta verificada y el enlace oficial a la tienda)")
     lineas.append("")
     if config.TELEGRAM_CHANNEL_URL:
         lineas.append(f"📲 O únete al canal para alertas en vivo: {config.TELEGRAM_CHANNEL_URL}")
