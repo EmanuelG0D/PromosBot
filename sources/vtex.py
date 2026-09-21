@@ -111,6 +111,13 @@ def enlace_publico(tienda: dict, producto: dict) -> str:
     return producto.get("link") or ""
 
 
+def _alta_resolucion(url: str | None) -> str | None:
+    """Elimina sufijos de miniatura (ej: -55-55, -200-200) para solicitar la imagen original en máxima calidad."""
+    if not url:
+        return None
+    return re.sub(r"/ids/(\d+)(?:-\d+-\d+)?/", r"/ids/\1/", url)
+
+
 def _oferta(producto: dict):
     """Devuelve (vendedor, commertialOffer) del SKU disponible mas barato."""
     mejor = None
@@ -207,7 +214,7 @@ def _consultar(clave: str, tienda: dict, consulta: str, hasta: int,
                                and precio >= config.MARKETPLACE_MIN_PRICE_COP)
 
         imagenes = (producto.get("items") or [{}])[0].get("images") or []
-        foto = imagenes[0].get("imageUrl") if imagenes else None
+        foto = _alta_resolucion(imagenes[0].get("imageUrl")) if imagenes else None
 
         enlace = enlace_publico(tienda, producto)
 

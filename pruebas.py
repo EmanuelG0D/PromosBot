@@ -2958,6 +2958,81 @@ class PruebaBotonEnviarmelaAlChat(unittest.TestCase):
             self.assertEqual(req["deal_hash"], "a1b2c3d4e5")
             self.assertEqual(req["nombre"], "Carlos")
 
+    def test_atender_solicitud_start_deal_invita_al_canal(self):
+        from unittest.mock import patch
+        import radar
+        from core.models import Deal
+
+        d = Deal(source="vtex", store="Olimpica", country="CO", key="ol:1", title="Bicicleta", url="http://ol.co", price=300000.0, currency="COP")
+        h = self.store.guardar_deal_reciente(d)
+
+        solicitudes = [{
+            "tipo": "start_deal",
+            "deal_hash": h,
+            "chat_id": 9999,
+            "user_id": 9999,
+            "nombre": "Pedro",
+        }]
+
+        with patch("core.telegram.enviar_oferta") as mock_oferta, \
+             patch("core.telegram.es_miembro_del_canal", return_value=False), \
+             patch("core.telegram.send") as mock_send, \
+             patch("core.telegram.teclado_unirse_canal", return_value={"inline_keyboard": []}), \
+             patch("radar.Store", return_value=self.store):
+
+            radar.atender_solicitudes(solicitudes)
+            mock_oferta.assert_called_once()
+            self.assertTrue(any("¿Te gustó esta oferta?" in call.args[0] for call in mock_send.call_args_list))
+
+
+    def test_deep_link_usuario_nuevo_no_miembro_del_canal_pasa_directo(self):
+        from unittest.mock import patch
+        from core import comandos, whitelist
+
+        user_nuevo = 987654321
+        # Asegurarse de que no esté en whitelist
+        whitelist.rechazar(user_nuevo)
+
+        # Usuario no es admin y no está en el canal oficial
+        with patch("core.whitelist.es_admin", return_value=False), \
+             patch("core.telegram.es_miembro_del_canal", return_value=False):
+
+            # Caso 1: Envía deep link de oferta desde Facebook -> DEBE pasar directo a la oferta
+            msg_deal = {
+                "text": "/start deal_fb12345678",
+                "chat": {"id": user_nuevo, "type": "private"},
+                "from": {"id": user_nuevo, "first_name": "Ana"}
+            }
+            req_deal = comandos.leer_comando(msg_deal)
+            self.assertIsNotNone(req_deal)
+            self.assertEqual(req_deal["tipo"], "start_deal")
+            self.assertEqual(req_deal["deal_hash"], "fb12345678")
+            self.assertTrue(whitelist.es_permitido(user_nuevo))
+
+            # Caso 2: Si intenta consultar el menú general sin estar en el canal -> DEBE pedirle unirse
+            msg_menu = {
+                "text": "/menu",
+                "chat": {"id": user_nuevo, "type": "private"},
+                "from": {"id": user_nuevo, "first_name": "Ana"}
+            }
+            req_menu = comandos.leer_comando(msg_menu)
+            self.assertIsNotNone(req_menu)
+            self.assertEqual(req_menu["tipo"], "unirse_canal")
+
+    def test_vtex_alta_resolucion_imagenes(self):
+        from sources.vtex import _alta_resolucion
+
+        url_thumb1 = "https://olimpica.vteximg.com.br/arquivos/ids/1465909-200-200/WhatsApp-Image.jpg?v=123"
+        url_thumb2 = "https://carulla.vteximg.com.br/arquivos/ids/26176034-55-55/Parlante.jpg"
+        url_hd = "https://exito.vteximg.com.br/arquivos/ids/999999/Foto.jpg"
+
+        self.assertEqual(_alta_resolucion(url_thumb1),
+                         "https://olimpica.vteximg.com.br/arquivos/ids/1465909/WhatsApp-Image.jpg?v=123")
+        self.assertEqual(_alta_resolucion(url_thumb2),
+                         "https://carulla.vteximg.com.br/arquivos/ids/26176034/Parlante.jpg")
+        self.assertEqual(_alta_resolucion(url_hd), url_hd)
+        self.assertIsNone(_alta_resolucion(None))
+
 
 class PruebaBuzonFeedbackYReportes(unittest.TestCase):
     def tearDown(self):

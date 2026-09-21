@@ -483,9 +483,15 @@ def leer_comando(mensaje: dict) -> dict | None:
 
     # 2. En chat privado:
     else:
-        # Los usuarios que no sean admin SOLO pueden usar el bot si están inscritos en el grupo
+        # Los usuarios que no sean admin SOLO pueden usar el bot si están inscritos en el canal
         if not es_admin:
-            if not telegram.es_miembro_del_canal(user_id):
+            es_deep_link = texto.startswith("/start") and any(k in texto for k in ("deal_", "report_"))
+            if es_deep_link:
+                # Si llega desde Facebook o enlace externo con una oferta específica, se auto-aprueba
+                # para entregarle la oferta de inmediato sin fricción
+                if not whitelist.es_permitido(user_id):
+                    whitelist.aprobar(user_id)
+            elif not telegram.es_miembro_del_canal(user_id):
                 return {
                     "comando": "unirse_canal",
                     "chat_id": chat,
@@ -494,22 +500,17 @@ def leer_comando(mensaje: dict) -> dict | None:
                     "username": username,
                     "tipo": "unirse_canal",
                 }
-
-            # Si viene desde el grupo a guardar una oferta con Enviármela o a Reportar, auto-aprobamos
-            if not whitelist.es_permitido(user_id):
-                if texto.startswith("/start") and any(k in texto for k in ("deal_", "report_")):
-                    whitelist.aprobar(user_id)
-                else:
-                    es_nueva = whitelist.registrar_solicitud(user_id, nombre=nombre, username=username)
-                    return {
-                        "comando": "solicitud_acceso",
-                        "chat_id": chat,
-                        "user_id": user_id,
-                        "nombre": nombre,
-                        "username": username,
-                        "tipo": "solicitud_acceso",
-                        "es_nueva": es_nueva,
-                    }
+            elif not whitelist.es_permitido(user_id):
+                es_nueva = whitelist.registrar_solicitud(user_id, nombre=nombre, username=username)
+                return {
+                    "comando": "solicitud_acceso",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "solicitud_acceso",
+                    "es_nueva": es_nueva,
+                }
 
     res = None
     # 1. Comandos tradicionales con "/"

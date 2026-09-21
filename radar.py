@@ -1304,6 +1304,21 @@ def atender_solicitudes(solicitudes: list[dict],
                 verdict = Verdict(True, "guardada desde el canal", inmediata=True)
                 telegram.enviar_oferta(deal_guardado, verdict, landed, chat_id=chat_id,
                                        reply_markup={"remove_keyboard": True})
+
+                # Si el usuario llegó desde Facebook u otro enlace externo y aún no está en el canal,
+                # le enviamos la invitación para que se suscriba al canal de ofertas
+                user_id = solicitud.get("user_id")
+                if user_id and not telegram.es_miembro_del_canal(user_id):
+                    enlace = (getattr(config, "TELEGRAM_CHANNEL_URL", "") or "https://t.me/RadarPromoCol").strip()
+                    if not enlace or "+GE1nQO-f0HYwNGQx" in enlace or "joinchat" in enlace or "/+" in enlace:
+                        enlace = "https://t.me/RadarPromoCol"
+                    telegram.send(
+                        "📢 <b>¿Te gustó esta oferta?</b>\n\n"
+                        "Únete a nuestro canal oficial para no perderte las mejores gangas y errores de precio en Colombia antes de que se agoten:\n"
+                        f"👉 <a href=\"{enlace}\">{enlace}</a>",
+                        reply_markup=telegram.teclado_unirse_canal(enlace),
+                        chat_id=chat_id,
+                    )
             else:
                 telegram.send(
                     "⚠️ <i>Esta oferta ya expiró o no está disponible.</i>",
