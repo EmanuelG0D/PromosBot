@@ -38,6 +38,7 @@ TIENDAS = {
     "whirlpool":    {"nombre": "Whirlpool",     "api": "https://www.whirlpool.com.co",     "web": "https://www.whirlpool.com.co"},
     "imusa":        {"nombre": "Imusa",         "api": "https://www.imusa.com.co",         "web": "https://www.imusa.com.co"},
     "oster":        {"nombre": "Oster",         "api": "https://www.ostercolombia.com",    "web": "https://www.ostercolombia.com"},
+    "nike":         {"nombre": "Nike",          "api": "https://www.nike.com.co",         "web": "https://www.nike.com.co"},
 }
 
 RUTA = "/api/catalog_system/pub/products/search?ft={q}&O=OrderByBestDiscountDESC&_from=0&_to={hasta}"
@@ -156,7 +157,13 @@ def _notas(oferta: dict) -> list[str]:
 
 def _consultar(clave: str, tienda: dict, consulta: str, hasta: int,
                exigir: bool = False) -> list[Deal]:
-    if consulta == CATALOGO:
+    if clave == "nike":
+        # Nike Colombia: enfocar en calzado con rango de precio nativo de VTEX (<= 220.000 COP)
+        if consulta.lower() in ("calzado", "tenis", "zapatos", "zapatillas", "sneakers", "botas", "nike", CATALOGO):
+            url = tienda["api"] + f"/api/catalog_system/pub/products/search/calzado?fq=P:[0%20TO%20220000]&O=OrderByBestDiscountDESC&_from=0&_to={hasta}"
+        else:
+            url = tienda["api"] + f"/api/catalog_system/pub/products/search/calzado?ft={quote(consulta)}&fq=P:[0%20TO%20220000]&O=OrderByBestDiscountDESC&_from=0&_to={hasta}"
+    elif consulta == CATALOGO:
         url = tienda["api"] + RUTA_CATALOGO.format(hasta=hasta)
     else:
         url = tienda["api"] + RUTA.format(q=quote(consulta), hasta=hasta)
@@ -177,6 +184,17 @@ def _consultar(clave: str, tienda: dict, consulta: str, hasta: int,
 
         precio = float(oferta["Price"])
         lista = float(oferta.get("ListPrice") or oferta.get("PriceWithoutDiscount") or precio)
+
+        # Regla estricta para Nike Colombia: solo calzado y precio <= $220.000 COP
+        if clave == "nike":
+            categorias = producto.get("categories") or []
+            es_calzado = any(
+                "/calzado" in c.lower() or "/tenis" in c.lower() or "/zapat" in c.lower()
+                for c in categorias
+            )
+            if not es_calzado or precio > 220000.0:
+                continue
+
         es_marketplace = str(vendedor.get("sellerId")) != "1"
         lista_confiable = lista <= precio * 10   # un 10x no es rebaja, es basura
         if es_marketplace and lista > 0:
@@ -193,12 +211,18 @@ def _consultar(clave: str, tienda: dict, consulta: str, hasta: int,
 
         enlace = enlace_publico(tienda, producto)
 
+        titulo = producto.get("productName") or producto.get("productTitle") or ""
+        if clave == "nike":
+            kw_calzado = ("tenis", "zapato", "zapatos", "zapatilla", "zapatillas", "sneaker", "sneakers", "bota", "botas", "sandalia", "sandalias", "calzado", "guayo", "guayos")
+            if not any(filtros.menciona(titulo, kw) for kw in kw_calzado):
+                titulo = f"Tenis {titulo}".strip()
+
         ofertas.append(Deal(
             source="vtex",
             store=tienda["nombre"],
             country="CO",
             key="vtex:" + clave + ":" + str(producto.get("productId")),
-            title=producto.get("productName") or producto.get("productTitle") or "",
+            title=titulo,
             url=enlace,
             price=precio,
             currency="COP",

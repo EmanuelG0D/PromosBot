@@ -651,6 +651,12 @@ def _precio_admisible(deal: Deal, trm: float = 4000.0) -> bool:
 
     precio_cop = deal.price if deal.currency == "COP" else (deal.price * trm)
 
+    # Regla específica para Nike Colombia: solo calzado y hasta $220.000 COP
+    if deal.store == "Nike":
+        kw_calzado = ("tenis", "zapatos", "zapatillas", "sneakers", "botas", "sandalias", "calzado", "guayos")
+        es_calzado = any(filtros.menciona(deal.title, kw) for kw in kw_calzado)
+        return es_calzado and precio_cop <= 220000.0
+
     # 1. Buscar si coincide con alguna categoria especifica
     for keywords, tope in TOPES_CATEGORIA_COP:
         if any(filtros.menciona(deal.title, kw) for kw in keywords):
@@ -915,7 +921,7 @@ def _tiendas_por_departamento(consultas_custom: list[str] | None) -> tuple[list[
     algolia_todas = ["alkosto", "ktronix", "alkomprar"]
     vtex_todas = [
         "exito", "carulla", "olimpica", "jumbo", "haceb", "whirlpool", "imusa", "oster",
-        "arturocalle", "totto", "studiof", "velez", "americanino"
+        "arturocalle", "totto", "studiof", "velez", "americanino", "nike"
     ]
     falabella_todas = ["falabella", "homecenter"]
 
@@ -931,7 +937,7 @@ def _tiendas_por_departamento(consultas_custom: list[str] | None) -> tuple[list[
     if palabras & DEPTO_ROPA:
         return (
             [],  # Ninguna de Algolia vende moda
-            ["exito", "jumbo", "totto", "arturocalle", "studiof", "velez", "americanino"],
+            ["exito", "jumbo", "totto", "arturocalle", "studiof", "velez", "americanino", "nike"],
             ["falabella"],
         )
 

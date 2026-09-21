@@ -524,6 +524,107 @@ class PruebaEnlacesVtex(unittest.TestCase):
                          "https://www.exito.com/algo/p")
 
 
+class PruebaNikeVtex(unittest.TestCase):
+    """Verifica el filtrado estricto en origen para la tienda oficial Nike Colombia."""
+
+    def test_nike_filtra_calzado_y_precio_maximo(self):
+        from unittest.mock import patch
+        from sources import vtex
+
+        mock_productos = [
+            # 1. Calzado económico válido (debe pasar y anteponer 'Tenis')
+            {
+                "productId": "101",
+                "productName": "Nike Star Runner 5",
+                "linkText": "nike-star-runner-5-hf7006",
+                "categories": ["/Hombre/Calzado/Tenis/", "/Hombre/Calzado/"],
+                "items": [{
+                    "sellers": [{
+                        "sellerId": "1",
+                        "sellerName": "Nike",
+                        "commertialOffer": {
+                            "Price": 189900.0,
+                            "ListPrice": 270000.0,
+                            "AvailableQuantity": 5,
+                            "IsAvailable": True
+                        }
+                    }]
+                }]
+            },
+            # 2. Calzado que supera el tope de $220.000 COP (debe descartarse)
+            {
+                "productId": "102",
+                "productName": "Nike Pegasus 41",
+                "linkText": "nike-pegasus-41",
+                "categories": ["/Hombre/Calzado/Tenis/"],
+                "items": [{
+                    "sellers": [{
+                        "sellerId": "1",
+                        "sellerName": "Nike",
+                        "commertialOffer": {
+                            "Price": 249900.0,
+                            "ListPrice": 450000.0,
+                            "AvailableQuantity": 2,
+                            "IsAvailable": True
+                        }
+                    }]
+                }]
+            },
+            # 3. Ropa o accesorio barato (debe descartarse aunque valga $50.000)
+            {
+                "productId": "103",
+                "productName": "Camiseta Nike Dri-Fit",
+                "linkText": "camiseta-nike-dri-fit",
+                "categories": ["/Hombre/Ropa/Camisetas/"],
+                "items": [{
+                    "sellers": [{
+                        "sellerId": "1",
+                        "sellerName": "Nike",
+                        "commertialOffer": {
+                            "Price": 59900.0,
+                            "ListPrice": 120000.0,
+                            "AvailableQuantity": 10,
+                            "IsAvailable": True
+                        }
+                    }]
+                }]
+            },
+            # 4. Calzado que ya contiene la palabra 'Tenis' en el nombre
+            {
+                "productId": "104",
+                "productName": "Tenis Nike Court Royale",
+                "linkText": "tenis-nike-court-royale",
+                "categories": ["/Hombre/Calzado/Tenis/"],
+                "items": [{
+                    "sellers": [{
+                        "sellerId": "1",
+                        "sellerName": "Nike",
+                        "commertialOffer": {
+                            "Price": 200000.0,
+                            "ListPrice": 250000.0,
+                            "AvailableQuantity": 3,
+                            "IsAvailable": True
+                        }
+                    }]
+                }]
+            },
+        ]
+
+        with patch("core.http.get_json", return_value=mock_productos):
+            ofertas = vtex._consultar("nike", vtex.TIENDAS["nike"], "calzado", hasta=10)
+
+        # Solo deben pasar el 101 y el 104
+        self.assertEqual(len(ofertas), 2)
+        titulos = [o.title for o in ofertas]
+        precios = [o.price for o in ofertas]
+
+        # Verifica normalización de título y precio
+        self.assertIn("Tenis Nike Star Runner 5", titulos)
+        self.assertIn("Tenis Nike Court Royale", titulos)
+        self.assertNotIn("Camiseta Nike Dri-Fit", titulos)
+        self.assertTrue(all(p <= 220000.0 for p in precios))
+
+
 class PruebaMediosPagoAlkosto(unittest.TestCase):
     def test_traduce_las_etiquetas_utiles(self):
         from sources.algolia_co import _medios_pago
@@ -1870,7 +1971,7 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
     def test_tiendas_vtex_nuevas_registradas(self):
         from sources import vtex
         from core import comandos
-        tiendas_esperadas = ["totto", "studiof", "velez", "americanino", "arturocalle"]
+        tiendas_esperadas = ["totto", "studiof", "velez", "americanino", "arturocalle", "nike"]
         for t in tiendas_esperadas:
             self.assertIn(t, vtex.TIENDAS)
             self.assertIn(t, comandos.CATALOGO)
@@ -2117,6 +2218,7 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertEqual(alg_ropa, [])
         self.assertIn("totto", vtex_ropa)
         self.assertIn("arturocalle", vtex_ropa)
+        self.assertIn("nike", vtex_ropa)
         self.assertNotIn("haceb", vtex_ropa)
         self.assertNotIn("imusa", vtex_ropa)
         self.assertEqual(fala_ropa, ["falabella"])
@@ -2128,12 +2230,13 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("whirlpool", vtex_nev)
         self.assertNotIn("totto", vtex_nev)
         self.assertNotIn("arturocalle", vtex_nev)
+        self.assertNotIn("nike", vtex_nev)
         self.assertIn("homecenter", fala_nev)
 
         # Sin categoría (TODO): devuelve todas
         alg_todas, vtex_todas, fala_todas = radar._tiendas_por_departamento(None)
         self.assertEqual(len(alg_todas), 3)
-        self.assertEqual(len(vtex_todas), 13)
+        self.assertEqual(len(vtex_todas), 14)
         self.assertEqual(len(fala_todas), 2)
 
 
@@ -2225,6 +2328,20 @@ class PruebaCacheYTopesCategoria(unittest.TestCase):
         cam_cara = Deal("vtex", "Koaj", "CO", "c2", "Camiseta Estampada Premium", "http://c", 75_000, "COP", in_stock=True)
         self.assertTrue(radar._precio_admisible(cam_buena))
         self.assertFalse(radar._precio_admisible(cam_cara))
+
+        # Nike Colombia: solo calzado y hasta $220.000 COP
+        nike_tenis_ganga = Deal("vtex", "Nike", "CO", "nk1", "Tenis Nike Court Royale", "http://nk", 180_000, "COP", in_stock=True)
+        nike_tenis_limite = Deal("vtex", "Nike", "CO", "nk2", "Tenis Nike Star Runner 5", "http://nk", 220_000, "COP", in_stock=True)
+        nike_tenis_caro = Deal("vtex", "Nike", "CO", "nk3", "Tenis Nike Alphafly 3", "http://nk", 225_000, "COP", in_stock=True)
+        nike_ropa_barata = Deal("vtex", "Nike", "CO", "nk4", "Camiseta Nike Dry Fit", "http://nk", 45_000, "COP", in_stock=True)
+        nike_bolso = Deal("vtex", "Nike", "CO", "nk5", "Bolsa Nike Brasilia", "http://nk", 119_950, "COP", in_stock=True)
+
+        self.assertTrue(radar._precio_admisible(nike_tenis_ganga))
+        self.assertTrue(radar._precio_admisible(nike_tenis_limite))
+        self.assertFalse(radar._precio_admisible(nike_tenis_caro))
+        self.assertFalse(radar._precio_admisible(nike_ropa_barata))  # Solo calzado permitido para Nike
+        self.assertFalse(radar._precio_admisible(nike_bolso))        # Solo calzado permitido para Nike
+
 
 
 class PruebaPaginacionSiguientesOfertas(unittest.TestCase):
