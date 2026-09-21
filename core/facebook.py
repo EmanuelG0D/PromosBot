@@ -56,6 +56,33 @@ SPINTAX_CAMUFLAJE = [
 ]
 
 
+_PAGE_TOKEN_CACHE: str | None = None
+
+
+def _obtener_page_token() -> str:
+    """Devuelve el token de página listo. Si el token configurado es de usuario, obtiene el Page Token de /me/accounts."""
+    global _PAGE_TOKEN_CACHE
+    if _PAGE_TOKEN_CACHE:
+        return _PAGE_TOKEN_CACHE
+    token = config.FB_PAGE_ACCESS_TOKEN
+    page_id = config.FB_PAGE_ID
+    if not token or not page_id:
+        return token
+    try:
+        url = f"https://graph.facebook.com/v20.0/me/accounts?access_token={token}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for item in data.get("data", []):
+                if str(item.get("id")) == str(page_id):
+                    _PAGE_TOKEN_CACHE = item.get("access_token")
+                    return _PAGE_TOKEN_CACHE
+    except Exception:
+        pass
+    _PAGE_TOKEN_CACHE = token
+    return _PAGE_TOKEN_CACHE
+
+
 def configurado() -> bool:
     """Indica si las credenciales de Facebook están presentes y habilitadas."""
     return bool(config.FB_PAGE_ID and config.FB_PAGE_ACCESS_TOKEN and config.FB_ENABLED)
@@ -243,7 +270,7 @@ def verificar_conexion() -> dict:
     if not configurado():
         return {"ok": False, "error": "credenciales no configuradas"}
     page_id = config.FB_PAGE_ID
-    token = config.FB_PAGE_ACCESS_TOKEN
+    token = _obtener_page_token()
     tok_info = {
         "longitud": len(token),
         "prefijo": token[:6] if len(token) >= 6 else "",
@@ -273,7 +300,7 @@ def subir_foto_oculta(url_imagen: str) -> str | None:
     if not configurado() or not url_imagen or not url_imagen.startswith("http"):
         return None
     page_id = config.FB_PAGE_ID
-    token = config.FB_PAGE_ACCESS_TOKEN
+    token = _obtener_page_token()
     url = f"https://graph.facebook.com/v20.0/{page_id}/photos"
     data = urllib.parse.urlencode({
         "url": url_imagen,
@@ -296,7 +323,7 @@ def publicar_post_con_medios(texto: str, media_ids: list[str] | None = None) -> 
     if not configurado():
         return None
     page_id = config.FB_PAGE_ID
-    token = config.FB_PAGE_ACCESS_TOKEN
+    token = _obtener_page_token()
     url = f"https://graph.facebook.com/v20.0/{page_id}/feed"
     payload: dict = {
         "message": texto,
@@ -332,7 +359,7 @@ def publicar_comentario(post_id: str, texto: str) -> str | None:
     """Publica el primer comentario con los enlaces cloaked bajo el post principal."""
     if not configurado() or not post_id or not texto:
         return None
-    token = config.FB_PAGE_ACCESS_TOKEN
+    token = _obtener_page_token()
     url = f"https://graph.facebook.com/v20.0/{post_id}/comments"
     data = urllib.parse.urlencode({
         "message": texto,
