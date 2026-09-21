@@ -105,6 +105,43 @@ def render(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     return "\n".join(lineas)
 
 
+_TELEMETRIA: dict = {
+    "publicados": 0,
+    "fallidos": 0,
+    "ultimo_exito": None,
+    "ultimo_error": None,
+    "ultima_oferta": None,
+}
+
+
+def telemetria() -> dict:
+    """Devuelve las métricas de publicaciones en Facebook."""
+    return dict(_TELEMETRIA)
+
+
+def verificar_conexion() -> dict:
+    """Valida en tiempo real que el token y la página tengan conexión activa con Graph API."""
+    if not configurado():
+        return {"ok": False, "error": "credenciales no configuradas"}
+    page_id = config.FB_PAGE_ID
+    token = config.FB_PAGE_ACCESS_TOKEN
+    url = f"https://graph.facebook.com/v20.0/{page_id}?fields=id,name&access_token={token}"
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return {"ok": True, "nombre": data.get("name"), "id": data.get("id")}
+    except urllib.error.HTTPError as exc:
+        cuerpo = ""
+        try:
+            cuerpo = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        return {"ok": False, "codigo": exc.code, "error": cuerpo or exc.reason}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
                      veracidad: Veracidad | None = None) -> bool:
     """Publica la oferta en la Página de Facebook sin bloquear el bot."""
@@ -129,11 +166,19 @@ def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
                 resp = json.loads(urllib.request.urlopen(req, timeout=12).read().decode("utf-8"))
                 if resp.get("id"):
                     print(f"  [facebook] oferta publicada con foto en muro ({resp['id']})")
+                    _TELEMETRIA["publicados"] += 1
+                    _TELEMETRIA["ultimo_exito"] = dt.datetime.now(dt.timezone.utc).isoformat()
+                    _TELEMETRIA["ultima_oferta"] = deal.title[:40]
                     return True
+            except urllib.error.HTTPError as e_img:
+                cuerpo = ""
+                try:
+                    cuerpo = e_img.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                print(f"  [facebook] aviso: foto rechazada por CDN ({e_img.code}: {cuerpo or e_img.reason}), reintentando como post de feed...")
             except Exception as e_img:
-                # Fallback: Si el CDN de la tienda rechaza el scraper de Facebook,
-                # publicamos como post estándar en el feed.
-                print(f"  [facebook] aviso: foto rechazada por CDN ({e_img}), reintentando como post de feed...")
+                print(f"  [facebook] aviso: error al subir foto ({e_img}), reintentando como post de feed...")
 
         # Publicación en feed estándar
         url = f"https://graph.facebook.com/v20.0/{page_id}/feed"
@@ -145,9 +190,27 @@ def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode("utf-8"))
         if resp.get("id"):
             print(f"  [facebook] oferta publicada en feed ({resp['id']})")
+            _TELEMETRIA["publicados"] += 1
+            _TELEMETRIA["ultimo_exito"] = dt.datetime.now(dt.timezone.utc).isoformat()
+            _TELEMETRIA["ultima_oferta"] = deal.title[:40]
             return True
         return False
 
-    except Exception as exc:
-        print(f"  [facebook] no se pudo publicar oferta: {exc}")
+    except urllib.error.HTTPError as exc:
+        cuerpo = ""
+        try:
+            cuerpo = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        mensaje_err = f"HTTP {exc.code}: {cuerpo or exc.reason}"
+        print(f"  [facebook] no se pudo publicar oferta: {mensaje_err}")
+        _TELEMETRIA["fallidos"] += 1
+        _TELEMETRIA["ultimo_error"] = mensaje_err
         return False
+    except Exception as exc:
+        mensaje_err = f"{type(exc).__name__}: {exc}"
+        print(f"  [facebook] no se pudo publicar oferta: {mensaje_err}")
+        _TELEMETRIA["fallidos"] += 1
+        _TELEMETRIA["ultimo_error"] = mensaje_err
+        return False
+

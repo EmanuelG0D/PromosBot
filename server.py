@@ -494,6 +494,8 @@ class Manejador(BaseHTTPRequestHandler):
                 "telegram_configurado": telegram.enabled(),
                 "facebook_configurado": facebook.configurado(),
                 "facebook_page_id": (config.FB_PAGE_ID[:4] + "..." + config.FB_PAGE_ID[-4:]) if config.FB_PAGE_ID else "no configurado",
+                "facebook_conexion": facebook.verificar_conexion(),
+                "facebook_telemetria": facebook.telemetria(),
                 "webhook": _estado["webhook"],
                 "comandos_atendidos": _estado["comandos_atendidos"],
                 "respaldo_configurado": respaldo.configurado(),
