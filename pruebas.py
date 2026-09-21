@@ -3985,6 +3985,136 @@ class PruebaCuposPorTienda(unittest.TestCase):
             self.assertFalse(ok)
 
 
+class PruebaFacebookHistorias(unittest.TestCase):
+    def setUp(self):
+        from core.store import Store
+        with Store() as store:
+            store.conn.execute("DELETE FROM meta WHERE k LIKE 'fb_historia%'")
+            store.conn.commit()
+
+    def tearDown(self):
+        from core.store import Store
+        with Store() as store:
+            store.conn.execute("DELETE FROM meta WHERE k LIKE 'fb_historia%'")
+            store.conn.commit()
+
+    def test_filtro_ganga_para_historia(self):
+        from core import facebook
+        from core.scoring import Verdict
+
+        v_normal = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
+        v_glitch = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=True, etiquetas=[], motivo="")
+
+        # 1. Slickdeals descartado
+        d_sd = oferta(source="slickdeals", store="Target", title="TV 55", price=200.0, list_price=500.0, image="https://img.com/tv.jpg")
+        self.assertFalse(facebook.es_ganga_para_historia(d_sd, v_normal))
+
+        # 2. Sin imagen descartado
+        d_no_img = oferta(source="vtex", store="Falabella", title="Tenis", price=100000.0, list_price=250000.0, image="")
+        self.assertFalse(facebook.es_ganga_para_historia(d_no_img, v_normal))
+
+        # 3. Descuento bajo (30%) descartado
+        d_bajo = oferta(source="vtex", store="Nike", title="Tenis Nike", price=280000.0, list_price=400000.0, image="https://img.com/n.jpg")
+        self.assertFalse(facebook.es_ganga_para_historia(d_bajo, v_normal))
+
+        # 4. Baratija menor a 25.000 COP descartada
+        d_baratija = oferta(source="vtex", store="Alkosto", title="Cable USB", price=10000.0, list_price=30000.0, image="https://img.com/c.jpg")
+        self.assertFalse(facebook.es_ganga_para_historia(d_baratija, v_normal))
+
+        # 5. Ganga local >= 50% aprobada
+        d_ganga = oferta(source="vtex", store="Falabella", title="Chaqueta Pluma", price=150000.0, list_price=350000.0, image="https://img.com/ch.jpg")
+        self.assertTrue(facebook.es_ganga_para_historia(d_ganga, v_normal))
+
+        # 6. Error de precio (glitch) aprobado
+        d_glitch = oferta(source="vtex", store="Éxito", title="Smart TV 65", price=300000.0, list_price=3500000.0, image="https://img.com/tv.jpg")
+        self.assertTrue(facebook.es_ganga_para_historia(d_glitch, v_glitch))
+
+    def test_generador_canvas_dimensiones(self):
+        from core import facebook
+        from PIL import Image
+        import io
+
+        d = oferta(
+            source="vtex",
+            store="Nike",
+            title="Tenis Running Nike Pegasus",
+            price=220000.0,
+            list_price=550000.0,
+            image="https://img.com/fake_no_existe.jpg",
+        )
+        img_bytes = facebook.generar_canvas_historia(d)
+        self.assertIsInstance(img_bytes, bytes)
+        self.assertGreater(len(img_bytes), 10000)
+
+        # Abrir y verificar dimensiones 1080x1920 exactas
+        img = Image.open(io.BytesIO(img_bytes))
+        self.assertEqual(img.size, (1080, 1920))
+
+    def test_control_cupo_historias(self):
+        import datetime as dt
+        from core.store import Store
+
+        with Store() as store:
+            # 1. Al inicio del día debe permitir la 1ra historia
+            self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+
+            # Registrar la 1ra historia
+            n1 = store.facebook_registrar_historia()
+            self.assertEqual(n1, 1)
+
+            # 2. De inmediato NO debe permitir otra (no han pasado 4 horas)
+            self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+
+            # 3. Simular que pasaron 5 horas
+            zona_co = dt.timezone(dt.timedelta(hours=-5))
+            hace_5h = dt.datetime.now(zona_co) - dt.timedelta(hours=5)
+            store.set_meta("fb_historia_ultimo_ts", hace_5h.isoformat())
+
+            # Ahora sí debe permitir la 2da historia
+            self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+
+            # Registrar la 2da historia
+            n2 = store.facebook_registrar_historia()
+            self.assertEqual(n2, 2)
+
+            # 4. Con 2 historias registradas, el tope diario está alcanzado incluso tras pasar horas
+            store.set_meta("fb_historia_ultimo_ts", hace_5h.isoformat())
+            self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+
+    def test_publicar_historia_flujo_mock(self):
+        from unittest.mock import patch, MagicMock
+        from core import facebook
+
+        d = oferta(
+            source="vtex",
+            store="Alkosto",
+            title="Freidora de Aire Digital 5L",
+            price=149900.0,
+            list_price=399900.0,
+            image="https://img.com/freidora.jpg",
+        )
+
+        mock_resp_photo = MagicMock()
+        mock_resp_photo.read.return_value = json.dumps({"id": "photo_mock_123"}).encode("utf-8")
+        mock_resp_photo.__enter__.return_value = mock_resp_photo
+
+        mock_resp_story = MagicMock()
+        mock_resp_story.read.return_value = json.dumps({"id": "story_mock_456", "post_id": "story_mock_456"}).encode("utf-8")
+        mock_resp_story.__enter__.return_value = mock_resp_story
+
+        respuestas = [mock_resp_photo, mock_resp_story]
+
+        with patch("config.FB_PAGE_ID", "12345"), \
+             patch("config.FB_PAGE_ACCESS_TOKEN", "token_valido"), \
+             patch("config.FB_ENABLED", True), \
+             patch("core.facebook.descargar_foto_producto", return_value=None), \
+             patch("urllib.request.urlopen", side_effect=respuestas):
+            res = facebook.publicar_historia(d)
+            self.assertTrue(res.get("ok"))
+            self.assertEqual(res.get("story_id"), "story_mock_456")
+            self.assertEqual(res.get("photo_id"), "photo_mock_123")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

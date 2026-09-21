@@ -558,6 +558,34 @@ class Manejador(BaseHTTPRequestHandler):
             self._responder(200, {"ok": True, "resultado": res})
             return
 
+        if ruta.path in ("/run_historia", "/run_story"):
+            if RUN_TOKEN:
+                enviado = parse_qs(ruta.query).get("token", [""])[0]
+                if enviado != RUN_TOKEN:
+                    self._responder(403, {"error": "token invalido"})
+                    return
+            with Store() as s:
+                pendientes = s.obtener_cola_facebook(limite=10)
+            if not pendientes:
+                self._responder(200, {"ok": False, "motivo": "no hay ofertas en cola"})
+                return
+            deal_elegido = None
+            for _, d in pendientes:
+                if facebook.es_ganga_para_historia(d):
+                    deal_elegido = d
+                    break
+            if not deal_elegido:
+                for _, d in pendientes:
+                    if d.image:
+                        deal_elegido = d
+                        break
+            if not deal_elegido:
+                self._responder(200, {"ok": False, "motivo": "ninguna oferta con imagen"})
+                return
+            res = facebook.publicar_historia(deal_elegido, forzar=True)
+            self._responder(200, {"ok": True, "resultado": res, "oferta": deal_elegido.title})
+            return
+
         if ruta.path.startswith("/ir/"):
             id_oferta = ruta.path[len("/ir/"):].strip()
             if not id_oferta:

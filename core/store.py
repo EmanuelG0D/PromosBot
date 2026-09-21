@@ -410,6 +410,50 @@ class Store:
         """Resetea a 0 el contador tras publicar un post de camuflaje limpio."""
         self.set_meta("fb_promos_desde_camuflaje", "0")
 
+    def facebook_puede_publicar_historia(self, max_diarias: int = 2, min_horas_espaciado: float = 4.0) -> bool:
+        """Indica si hay cupo para publicar una historia en Facebook hoy respetando el espaciado mínimo."""
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        ahora = dt.datetime.now(zona_co)
+        hoy = ahora.date().isoformat()
+        contador = int(self.get_meta(f"fb_historias:{hoy}") or 0)
+        if contador >= max_diarias:
+            return False
+        if contador == 0:
+            return True
+        ultimo_ts_str = self.get_meta("fb_historia_ultimo_ts")
+        if not ultimo_ts_str:
+            return True
+        try:
+            ultimo_ts = dt.datetime.fromisoformat(ultimo_ts_str)
+            horas_pasadas = (ahora - ultimo_ts).total_seconds() / 3600.0
+            return horas_pasadas >= min_horas_espaciado
+        except Exception:
+            return True
+
+    def facebook_registrar_historia(self) -> int:
+        """Registra que se publicó una historia hoy y actualiza el timestamp."""
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        ahora = dt.datetime.now(zona_co)
+        hoy = ahora.date().isoformat()
+        nuevo_total = int(self.get_meta(f"fb_historias:{hoy}") or 0) + 1
+        self.set_meta(f"fb_historias:{hoy}", str(nuevo_total))
+        self.set_meta("fb_historia_ultimo_ts", ahora.isoformat())
+        return nuevo_total
+
+    def facebook_estado_historias(self) -> dict:
+        """Devuelve el estado de historias de hoy para telemetría."""
+        zona_co = dt.timezone(dt.timedelta(hours=-5))
+        ahora = dt.datetime.now(zona_co)
+        hoy = ahora.date().isoformat()
+        contador = int(self.get_meta(f"fb_historias:{hoy}") or 0)
+        ultimo_ts = self.get_meta("fb_historia_ultimo_ts")
+        return {
+            "fecha": hoy,
+            "historias_hoy": contador,
+            "cupo_disponible": contador < 2,
+            "ultimo_ts": ultimo_ts,
+        }
+
     def prune(self, dias: int = 120, dias_alertas: int = 30) -> int:
         corte_obs = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=dias)).isoformat()
         cur_obs = self.conn.execute("DELETE FROM observations WHERE ts < ?", (corte_obs,))

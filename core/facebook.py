@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import random
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from PIL import Image, ImageDraw, ImageFont
 
 import config
 from core.landed import Landed
@@ -295,6 +298,8 @@ _TELEMETRIA: dict = {
     "fallidos": 0,
     "camuflajes": 0,
     "lotes": 0,
+    "historias_publicadas": 0,
+    "ultima_historia": None,
     "ultimo_exito": None,
     "ultimo_error": None,
     "ultima_oferta": None,
@@ -302,16 +307,18 @@ _TELEMETRIA: dict = {
 
 
 def telemetria() -> dict:
-    """Devuelve las métricas de publicaciones en Facebook."""
+    """Devuelve las métricas de publicaciones e historias en Facebook."""
     datos = dict(_TELEMETRIA)
     try:
         with Store() as store:
             cola = store.obtener_cola_facebook(limite=100)
             datos["cola_pendientes"] = len(cola)
             datos["promos_desde_camuflaje"] = store.facebook_contador_promos()
+            datos["historias"] = store.facebook_estado_historias()
     except Exception:
         datos["cola_pendientes"] = 0
         datos["promos_desde_camuflaje"] = 0
+        datos["historias"] = {}
     return datos
 
 
@@ -537,3 +544,273 @@ def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
         h = store.encolar_facebook(deal)
     res = procesar_cola(limite=1)
     return bool(res.get("ok"))
+
+
+# --- GENERACIÓN Y PUBLICACIÓN DE HISTORIAS (PAGE STORIES 9:16) ------------
+
+def _obtener_fuente_historia(tamano: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
+    """Busca fuentes compatibles en Linux (Render) y Windows con fallback seguro."""
+    rutas = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/segoeuib.ttf",
+        "arial.ttf",
+    ]
+    for r in rutas:
+        try:
+            return ImageFont.truetype(r, tamano)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=tamano)
+    except Exception:
+        return ImageFont.load_default()
+
+
+def descargar_foto_producto(url_foto: str) -> Image.Image | None:
+    """Descarga la imagen del producto a memoria RAM para procesarla."""
+    if not url_foto or not url_foto.startswith("http"):
+        return None
+    try:
+        req = urllib.request.Request(
+            url_foto,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = resp.read()
+            return Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception as exc:
+        print(f"  [facebook] aviso: error descargando foto para historia ({exc})")
+        return None
+
+
+def es_ganga_para_historia(deal: Deal, verdict: Verdict | None = None) -> bool:
+    """Determina si una oferta reúne los criterios para publicarse como Historia destacada."""
+    # 1. Filtro local: Cero Slickdeals (tiendas gringas sin soporte local)
+    fuente = (deal.source or "").lower().strip()
+    if fuente == "slickdeals":
+        return False
+
+    # 2. Requiere imagen válida
+    if not deal.image or not deal.image.startswith("http"):
+        return False
+
+    # 3. Descuento masivo (>= 50%) o error de precio (glitch)
+    pct = round(deal.discount_pct or 0)
+    es_glitch = bool(verdict and verdict.glitch) or getattr(deal, "es_glitch", False)
+    if not es_glitch and pct < 50:
+        return False
+
+    # 4. Filtro de precio mínimo (evitar baratijas de poco impacto visual)
+    if deal.currency == "COP" and deal.price and deal.price < 25000:
+        return False
+
+    return True
+
+
+def generar_canvas_historia(deal: Deal, verdict: Verdict | None = None) -> bytes:
+    """Genera en memoria un canvas vertical 9:16 (1080x1920) optimizado para Historias."""
+    ancho, alto = 1080, 1920
+    img = Image.new("RGB", (ancho, alto), (12, 18, 28))
+    draw = ImageDraw.Draw(img)
+
+    # 1. Fondo degradado vertical (de azul noche profundo a carbón oscuro)
+    c_top = (15, 23, 42)
+    c_bot = (7, 10, 19)
+    for y in range(alto):
+        r = int(c_top[0] + (c_bot[0] - c_top[0]) * (y / alto))
+        g = int(c_top[1] + (c_bot[1] - c_top[1]) * (y / alto))
+        b = int(c_top[2] + (c_bot[2] - c_top[2]) * (y / alto))
+        draw.line([(0, y), (ancho, y)], fill=(r, g, b))
+
+    # 2. Tipografías
+    font_badge = _obtener_fuente_historia(42)
+    font_tienda = _obtener_fuente_historia(34)
+    font_titulo = _obtener_fuente_historia(40)
+    font_antes = _obtener_fuente_historia(36)
+    font_precio = _obtener_fuente_historia(64)
+    font_cta = _obtener_fuente_historia(30)
+    font_sub_cta = _obtener_fuente_historia(26)
+
+    # 3. Cinta de alerta superior
+    es_glitch = bool(verdict and verdict.glitch) or getattr(deal, "es_glitch", False)
+    texto_alerta = "¡ERROR DE PRECIO DETECTADO!" if es_glitch else "¡SÚPER GANGA DEL DÍA!"
+    color_alerta = (225, 29, 72) if es_glitch else (234, 88, 12)  # Rojo o Naranja intenso
+    draw.rounded_rectangle([(90, 100), (990, 190)], radius=20, fill=color_alerta)
+    draw.text((540, 145), texto_alerta, font=font_badge, fill=(255, 255, 255), anchor="mm")
+
+    # 4. Tienda oficial
+    tienda_nombre = (deal.store or deal.source or "Tienda").upper()
+    draw.text((540, 240), f"TIENDA OFICIAL: {tienda_nombre}", font=font_tienda, fill=(251, 191, 36), anchor="mm")
+
+    # 5. Tarjeta de producto (Blanca limpia)
+    card_x1, card_y1, card_x2, card_y2 = 90, 310, 990, 1210
+    draw.rounded_rectangle([(card_x1, card_y1), (card_x2, card_y2)], radius=30, fill=(255, 255, 255))
+
+    # Descargar y montar la foto
+    foto = descargar_foto_producto(deal.image)
+    if foto:
+        max_dim = 820
+        ratio = min(max_dim / foto.width, max_dim / foto.height)
+        new_w = max(1, int(foto.width * ratio))
+        new_h = max(1, int(foto.height * ratio))
+        foto_resized = foto.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        pos_x = card_x1 + (card_x2 - card_x1 - new_w) // 2
+        pos_y = card_y1 + (card_y2 - card_y1 - new_h) // 2
+        if foto_resized.mode == "RGBA":
+            img.paste(foto_resized, (pos_x, pos_y), foto_resized)
+        else:
+            img.paste(foto_resized, (pos_x, pos_y))
+    else:
+        draw.text((540, 760), "[ FOTO OFERTA ]", font=font_badge, fill=(100, 116, 139), anchor="mm")
+
+    # 6. Badge de descuento flotante superpuesto en la tarjeta
+    pct = round(deal.discount_pct or 0)
+    badge_texto = f"-{pct}% OFF" if pct > 0 else "GANGA"
+    draw.rounded_rectangle([(700, 330), (970, 430)], radius=25, fill=(234, 179, 8))
+    draw.text((835, 380), badge_texto, font=font_badge, fill=(0, 0, 0), anchor="mm")
+
+    # 7. Título del producto truncado
+    t_trunc = truncar(deal.title, 45)
+    draw.text((540, 1270), t_trunc, font=font_titulo, fill=(255, 255, 255), anchor="mm")
+
+    # 8. Precios
+    if deal.list_price and deal.price and deal.list_price > deal.price:
+        antes_txt = f"Antes: {money(deal.list_price, deal.currency)}"
+        draw.text((540, 1360), antes_txt, font=font_antes, fill=(148, 163, 184), anchor="mm")
+        draw.line([(320, 1360), (760, 1360)], fill=(239, 68, 68), width=4)
+
+    ahora_txt = f"AHORA: {money(deal.price, deal.currency)}" if deal.price else "¡PRECIO ESPECIAL!"
+    draw.text((540, 1460), ahora_txt, font=font_precio, fill=(34, 197, 94), anchor="mm")
+
+    # 9. Línea divisoria decorativa
+    draw.line([(140, 1600), (940, 1600)], fill=(51, 65, 85), width=2)
+
+    # 10. Pie de llamado a la acción (CTA)
+    draw.rounded_rectangle([(90, 1650), (990, 1790)], radius=25, fill=(30, 41, 59))
+    draw.text((540, 1700), "LINK DE COMPRA EN NUESTRO ÚLTIMO POST", font=font_cta, fill=(255, 255, 255), anchor="mm")
+    draw.text((540, 1745), "O toca nuestra foto de perfil para ver la ganga", font=font_sub_cta, fill=(203, 213, 225), anchor="mm")
+
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
+def subir_foto_historia_binario(imagen_bytes: bytes) -> str | None:
+    """Sube el binario JPEG a /{page_id}/photos como published=false para obtener el photo_id."""
+    if not configurado() or not imagen_bytes:
+        return None
+    page_id = config.FB_PAGE_ID
+    token = _obtener_page_token()
+
+    boundary = f"----WebKitFormBoundary{hashlib.md5(os.urandom(16)).hexdigest()}"
+    cuerpo = bytearray()
+    
+    # Campo access_token
+    cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
+    cuerpo.extend(b'Content-Disposition: form-data; name="access_token"\r\n\r\n')
+    cuerpo.extend(token.encode("utf-8") + b"\r\n")
+    
+    # Campo published=false
+    cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
+    cuerpo.extend(b'Content-Disposition: form-data; name="published"\r\n\r\n')
+    cuerpo.extend(b"false\r\n")
+    
+    # Campo temporary=true
+    cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
+    cuerpo.extend(b'Content-Disposition: form-data; name="temporary"\r\n\r\n')
+    cuerpo.extend(b"true\r\n")
+    
+    # Campo source (binario de la foto)
+    cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
+    cuerpo.extend(b'Content-Disposition: form-data; name="source"; filename="historia.jpg"\r\n')
+    cuerpo.extend(b"Content-Type: image/jpeg\r\n\r\n")
+    cuerpo.extend(imagen_bytes)
+    cuerpo.extend(b"\r\n")
+    cuerpo.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+    headers = {
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Length": str(len(cuerpo)),
+    }
+    url = f"https://graph.facebook.com/v20.0/{page_id}/photos"
+    req = urllib.request.Request(url, data=bytes(cuerpo), headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+            return res.get("id")
+    except Exception as exc:
+        print(f"  [facebook] error subiendo binario para historia: {exc}")
+        return None
+
+
+def publicar_historia_meta(photo_id: str) -> str | None:
+    """Publica en las historias de la página de Facebook a partir del photo_id."""
+    if not configurado() or not photo_id:
+        return None
+    page_id = config.FB_PAGE_ID
+    token = _obtener_page_token()
+    url = f"https://graph.facebook.com/v20.0/{page_id}/photo_stories"
+    data = urllib.parse.urlencode({
+        "photo_id": photo_id,
+        "access_token": token,
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=data)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+            return res.get("id") or res.get("post_id")
+    except Exception as exc:
+        print(f"  [facebook] error publicando historia en Meta: {exc}")
+        return None
+
+
+def publicar_historia(deal: Deal, verdict: Verdict | None = None,
+                      store: Store | None = None,
+                      forzar: bool = False) -> dict:
+    """Publica una Historia de Facebook con plantilla 9:16 verificando cupo y criterios."""
+    if not configurado():
+        return {"ok": False, "motivo": "facebook no configurado"}
+
+    # 1. Filtro de ganga
+    if not forzar and not es_ganga_para_historia(deal, verdict):
+        return {"ok": False, "motivo": "no_califica_ganga"}
+
+    # 2. Control de cupo diario (máximo 2 por día, mínimo 4h de espaciado)
+    propio_store = False
+    if store is None:
+        store = Store()
+        propio_store = True
+
+    try:
+        if not forzar and not store.facebook_puede_publicar_historia():
+            return {"ok": False, "motivo": "cupo_diario_o_espaciado"}
+
+        # 3. Generar canvas
+        img_bytes = generar_canvas_historia(deal, verdict)
+
+        # 4. Subir foto binaria a Meta
+        photo_id = subir_foto_historia_binario(img_bytes)
+        if not photo_id:
+            return {"ok": False, "motivo": "error_subida_foto"}
+
+        # 5. Publicar en photo_stories
+        story_id = publicar_historia_meta(photo_id)
+        if not story_id:
+            return {"ok": False, "motivo": "error_publicar_historia"}
+
+        # 6. Registrar en BD y actualizar telemetría
+        store.facebook_registrar_historia()
+        _TELEMETRIA["historias_publicadas"] = _TELEMETRIA.get("historias_publicadas", 0) + 1
+        _TELEMETRIA["ultima_historia"] = deal.title[:40]
+        _TELEMETRIA["ultimo_exito"] = dt.datetime.now(dt.timezone.utc).isoformat()
+
+        print(f"  [facebook] HISTORIA publicada con éxito (story_id={story_id}, oferta='{deal.title[:30]}...')")
+        return {"ok": True, "story_id": story_id, "photo_id": photo_id}
+    finally:
+        if propio_store:
+            store.close()
+

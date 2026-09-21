@@ -2094,6 +2094,12 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 # Difusión en Página de Facebook: se encolan para publicación dosificada (lotes cada 45 min)
                 if facebook.configurado():
                     facebook.encolar_oferta(deal, verdict, landed, veracidad)
+                    # Historias de Facebook: si es ganga de alto impacto y hay cupo diario (máx 2 al día)
+                    if facebook.es_ganga_para_historia(deal, verdict) and store.facebook_puede_publicar_historia():
+                        try:
+                            facebook.publicar_historia(deal, verdict, store=store)
+                        except Exception as exc_hist:
+                            print(f"  [facebook] aviso: error subiendo historia ({exc_hist})")
 
                 # Telegram admite ~20 mensajes por minuto en un grupo. Con 20
                 # tarjetas por ronda, 3.5s de pausa deja margen de sobra.
