@@ -548,6 +548,16 @@ class Manejador(BaseHTTPRequestHandler):
             self._responder(202, {"ok": True, "mensaje": "ronda lanzada en segundo plano"})
             return
 
+        if ruta.path in ("/run_facebook", "/run_fb"):
+            if RUN_TOKEN:
+                enviado = parse_qs(ruta.query).get("token", [""])[0]
+                if enviado != RUN_TOKEN:
+                    self._responder(403, {"error": "token invalido"})
+                    return
+            res = facebook.procesar_cola(limite=4)
+            self._responder(200, {"ok": True, "resultado": res})
+            return
+
         if ruta.path.startswith("/ir/"):
             id_oferta = ruta.path[len("/ir/"):].strip()
             if not id_oferta:
@@ -568,7 +578,7 @@ class Manejador(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/ir/{id}", RUTA_WEBHOOK]})
+        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/run_fb", "/ir/{id}", RUTA_WEBHOOK]})
 
     def do_POST(self) -> None:  # noqa: N802  (lo exige BaseHTTPRequestHandler)
         # El cuerpo se lee SIEMPRE y antes de decidir nada. Responder sin
