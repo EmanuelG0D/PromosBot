@@ -554,7 +554,40 @@ class Manejador(BaseHTTPRequestHandler):
                 if enviado != RUN_TOKEN:
                     self._responder(403, {"error": "token invalido"})
                     return
-            res = facebook.procesar_cola(limite=4)
+            qs = parse_qs(ruta.query)
+            if "muestra" in qs:
+                from core.models import Deal
+                ts_now = int(time.time())
+                d1 = Deal(
+                    source="falabella",
+                    store="Nike",
+                    country="CO",
+                    key=f"sample:nike_{ts_now}",
+                    title="Tenis Deportivos Nike Air Max SC Hombre - Black/White",
+                    price=219900.0,
+                    list_price=449900.0,
+                    currency="COP",
+                    url="https://www.falabella.com.co/falabella-co/product/12345",
+                    image="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
+                    notes=["Envío gratis a toda Colombia", "Oferta por tiempo limitado"],
+                )
+                d2 = Deal(
+                    source="slickdeals",
+                    store="Puma",
+                    country="US",
+                    key=f"sample:puma_{ts_now}",
+                    title="Puma Suede Classic XXI Zapatillas Hombre - Black/White",
+                    price=29.99,
+                    list_price=75.0,
+                    currency="USD",
+                    url="https://slickdeals.net/f/puma-suede-deal",
+                    image="https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&q=80",
+                    notes=["Importación desde Estados Unidos", "Rebaja directa en tienda oficial"],
+                )
+                facebook.encolar_oferta(d1)
+                facebook.encolar_oferta(d2)
+            limite_lote = int(qs.get("limite", [2 if "muestra" in qs else 4])[0])
+            res = facebook.procesar_cola(limite=limite_lote)
             self._responder(200, {"ok": True, "resultado": res})
             return
 
