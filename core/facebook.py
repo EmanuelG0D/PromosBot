@@ -342,8 +342,10 @@ def render_comentario_links(items: list[tuple[str, Deal]], base_url: str | None 
             lineas.append(f"🎟️ Cupón: {d.coupons[0]}")
         lineas.append("")
 
-    bot_user = (getattr(config, "TELEGRAM_BOT_USERNAME", "") or "PromosOn_bot").strip().lstrip("@")
-    lineas.append(f"⚡ ¿Quieres alertas de ofertas en vivo? Búscanos en Telegram: @{bot_user}")
+    canal_url = (getattr(config, "TELEGRAM_CHANNEL_URL", "") or "https://t.me/RadarPromoCol").strip().rstrip("/")
+    canal_nombre = canal_url.split("/")[-1].lstrip("@")
+    canal_handle = f"@{canal_nombre}" if canal_nombre else "@RadarPromoCol"
+    lineas.append(f"⚡ ¿Quieres alertas de ofertas en vivo? Canal en Telegram: {canal_handle}")
     return "\n".join(lineas)
 
 

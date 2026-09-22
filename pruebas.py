@@ -3887,13 +3887,13 @@ class PruebaCuposPorTienda(unittest.TestCase):
         self.assertIn("EXITO10", cap2)
         self.assertIn(d2.url, cap2)
 
-        # Primer comentario con links directos y @ del bot de Telegram
+        # Primer comentario con links directos y @ del canal de Telegram
         items = [("hash1", d1), ("hash2", d2)]
         comentario = facebook.render_comentario_links(items, base_url="https://promosbot.onrender.com")
         self.assertIn(d1.url, comentario)
         self.assertIn(d2.url, comentario)
         self.assertIn("🎟️ Cupón: EXITO10", comentario)
-        self.assertIn("@PromosOn_bot", comentario)
+        self.assertIn("@RadarPromoCol", comentario)
 
     def test_facebook_encolar_y_procesar_lote_con_comentario(self):
         from unittest.mock import patch, MagicMock
