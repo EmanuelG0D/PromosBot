@@ -203,3 +203,33 @@ def asignar_familia(titulo: str) -> str:
 _asignar_familia = asignar_familia
 
 
+MARCAS_MODA = (
+    "nike", "adidas", "puma", "reebok", "under armour", "new balance",
+    "levi's", "levis", "columbia", "tommy hilfiger", "calvin klein",
+    "vans", "converse", "asics", "skechers", "timberland", "champion",
+    "the north face", "crocs", "jordan", "fila", "kappa",
+)
+
+PALABRAS_MODA = (
+    "shoe", "shoes", "sneaker", "sneakers", "boot", "boots", "slide", "slides",
+    "sandal", "sandals", "runner", "runners", "cleat", "cleats", "footwear",
+    "shirt", "shirts", "t-shirt", "t-shirts", "tee", "tees", "polo", "polos",
+    "hoodie", "hoodies", "jacket", "jackets", "fleece", "coat", "coats",
+    "pants", "pant", "jeans", "jean", "sweatshirt", "sweatshirts",
+    "sweatpants", "shorts", "jogger", "joggers", "vest", "pullover",
+    "apparel", "clothing", "tenis", "zapato", "zapatos", "zapatilla", "zapatillas",
+    "calzado", "ropa", "guayo", "guayos", "buzo", "sudadera", "camiseta",
+    "air max", "air force", "dunk", "ultraboost", "stan smith", "cloudfoam",
+    "runfalcon", "daily 4.0", "lite racer", "samba", "gazelle", "superstar",
+)
+
+
+def es_calzado_o_ropa_de_marca(titulo: str, tienda: str = "") -> bool:
+    """True si el producto es calzado o ropa Y pertenece a una marca de moda/deporte reconocida."""
+    texto = f"{titulo} {tienda}".lower()
+    tiene_marca = any(re.search(r"\b" + re.escape(m) + r"\b", texto) for m in MARCAS_MODA)
+    es_prenda = any(re.search(r"\b" + re.escape(p) + r"\b", texto) for p in PALABRAS_MODA)
+    return tiene_marca and es_prenda
+
+
+

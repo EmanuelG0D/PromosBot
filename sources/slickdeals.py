@@ -31,22 +31,10 @@ _TIENDAS = [
 ]
 MARCAS_PERMITIDAS = ("Amazon", "eBay", "Nike", "Adidas", "Puma")
 
-MARCAS_MODA = (
-    "nike", "adidas", "puma", "reebok", "under armour", "new balance",
-    "levi's", "levis", "columbia", "tommy hilfiger", "calvin klein",
-    "vans", "converse", "asics", "skechers", "timberland", "champion",
-    "the north face", "crocs", "jordan",
-)
-
-PALABRAS_MODA = (
-    "shoe", "shoes", "sneaker", "sneakers", "boot", "boots", "slide", "slides",
-    "sandal", "sandals", "runner", "runners", "cleat", "cleats", "footwear",
-    "shirt", "shirts", "t-shirt", "t-shirts", "tee", "tees", "polo", "polos",
-    "hoodie", "hoodies", "jacket", "jackets", "fleece", "coat", "coats",
-    "pants", "pant", "jeans", "jean", "sweatshirt", "sweatshirts",
-    "sweatpants", "shorts", "jogger", "joggers", "vest", "pullover",
-    "apparel", "clothing", "tenis", "zapatos", "zapatillas", "ropa",
-    "air max", "air force", "dunk", "ultraboost", "stan smith",
+from core.filtros import (
+    MARCAS_MODA,
+    PALABRAS_MODA,
+    es_calzado_o_ropa_de_marca,
 )
 
 
@@ -54,13 +42,6 @@ def es_tienda_permitida(nombre_tienda: str) -> bool:
     """True si la tienda identificada es una de las 5 marcas autorizadas para Colombia."""
     return any(p.lower() in (nombre_tienda or "").lower() for p in MARCAS_PERMITIDAS)
 
-
-def es_calzado_o_ropa_de_marca(titulo: str, tienda: str = "") -> bool:
-    """True únicamente si el producto es calzado o ropa Y pertenece a una marca de moda reconocida."""
-    texto = f"{titulo} {tienda}".lower()
-    tiene_marca = any(re.search(r"\b" + re.escape(m) + r"\b", texto) for m in MARCAS_MODA)
-    es_prenda = any(re.search(r"\b" + re.escape(p) + r"\b", texto) for p in PALABRAS_MODA)
-    return tiene_marca and es_prenda
 
 
 def _texto_plano(html: str | None) -> str:

@@ -4301,6 +4301,80 @@ class PruebaBrandingMotor(unittest.TestCase):
             self.assertIsNone(bytes_res)
 
 
+class PruebaFastTrackModaYCalzado(unittest.TestCase):
+    def test_deteccion_moda_y_calzado_marcas(self):
+        from core import filtros
+        self.assertTrue(filtros.es_calzado_o_ropa_de_marca("Adidas Runfalcon 6 Running Shoes", "Adidas"))
+        self.assertTrue(filtros.es_calzado_o_ropa_de_marca("Tenis Nike Air Max 90", "Nike"))
+        self.assertTrue(filtros.es_calzado_o_ropa_de_marca("Puma Suede Classic Sneakers", "Puma"))
+        self.assertTrue(filtros.es_calzado_o_ropa_de_marca("Reebok Club C 85 Shoes", "Reebok"))
+        self.assertTrue(filtros.es_calzado_o_ropa_de_marca("Sudadera con capucha Under Armour Fleece Hoodie", "Under Armour"))
+        # No es calzado ni ropa aunque mencione la marca:
+        self.assertFalse(filtros.es_calzado_o_ropa_de_marca("Perfume Adidas Ice Dive 100ml", "Adidas"))
+        self.assertFalse(filtros.es_calzado_o_ropa_de_marca("Reloj Inteligente Apple Watch Series 9", "Apple"))
+
+    def test_descuentostech_extrae_marca_y_limpia_titulo(self):
+        from sources import descuentostech
+        html = """
+        <div data-post="DescuentosTech/50387">
+            <div class="js-message_text">
+                <a href="?q=%23Calzado">#Calzado</a> <a href="?q=%23Adidas">#Adidas</a> ✨Por solo✨ USD$24<br/>
+                Código: <code>FRESH</code><br/><br/>
+                Runfalcon 6 CLOUDFOAM Running Shoes<br/><br/>
+                *Casillero <br/><br/>
+                Ver oferta: <a href="https://www.facebook.com/permalink.php?id=123&story_fbid=456">https://facebook.com</a>
+            </div>
+        </div>
+        """
+        deals = descuentostech.extraer_deals_html(html)
+        self.assertEqual(len(deals), 1)
+        d = deals[0]
+        self.assertEqual(d.store, "Adidas")
+        self.assertEqual(d.price, 24.0)
+        self.assertEqual(d.currency, "USD")
+        self.assertEqual(d.coupons, ["FRESH"])
+        self.assertIn("📦 Requiere casillero", d.notes)
+        self.assertIn("Cupón: FRESH", d.notes)
+        self.assertIn("Runfalcon 6 CLOUDFOAM Running Shoes", d.title)
+        self.assertNotIn("FRESH", d.title)
+        self.assertNotIn("*Casillero", d.title)
+
+    def test_radar_fasttrack_moda_vip_sin_limite_de_tienda(self):
+        import radar
+        from core.models import Deal
+        from core.scoring import Verdict
+
+        d1 = Deal(source="descuentostech", store="Adidas", country="US",
+                  key="dt:1", title="Adidas Runfalcon 6 Shoes", url="http://link1", price=24.0, currency="USD")
+        d2 = Deal(source="descuentostech", store="Adidas", country="US",
+                  key="dt:2", title="Adidas Daily 4.0 Shoes", url="http://link2", price=23.0, currency="USD")
+        d3 = Deal(source="descuentostech", store="Adidas", country="US",
+                  key="dt:3", title="Adidas Lite Racer Shoes", url="http://link3", price=27.0, currency="USD")
+
+        v1 = Verdict(alertar=True, confianza="alta", inmediata=True, motivo="calzado")
+        v2 = Verdict(alertar=True, confianza="alta", inmediata=True, motivo="calzado")
+        v3 = Verdict(alertar=True, confianza="alta", inmediata=True, motivo="calzado")
+
+        candidatas = [(d1, v1), (d2, v2), (d3, v3)]
+
+        # Simular Fase 0 y Fase 2 del radar
+        fasttrack_glitches = []
+        fasttrack_moda_vip = []
+        candidatas_ordinarias = []
+
+        from core import filtros
+        for par in candidatas:
+            if filtros.es_calzado_o_ropa_de_marca(par[0].title, par[0].store):
+                par[1].inmediata = True
+                fasttrack_moda_vip.append(par)
+            else:
+                candidatas_ordinarias.append(par)
+
+        seleccion = fasttrack_glitches + fasttrack_moda_vip
+        # Todas las 3 ofertas de Adidas deben pasar sin ser recortadas por el cupo de tienda (max 1)
+        self.assertEqual(len(seleccion), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -68,39 +68,64 @@ def extraer_deals_html(html_str: str, canal_nombre: str = "DescuentosTech", por_
         desc_m = re.search(r'([0-9]{1,2})%\s*Descuento', texto_plano, re.IGNORECASE)
         porcentaje_anunciado = float(desc_m.group(1)) if desc_m else None
 
-        # 5. Título limpio
+        # 5. Detección de tienda / marca real
+        tienda_detectada = canal_nombre
+        hashtags = re.findall(r'#([A-Za-z0-9_]+)', texto_plano)
+        for ht in hashtags:
+            ht_lower = ht.lower()
+            if ht_lower in filtros.MARCAS_MODA:
+                tienda_detectada = ht.capitalize() if ht_lower != "the north face" else "The North Face"
+                break
+        if tienda_detectada == canal_nombre:
+            for m in filtros.MARCAS_MODA:
+                if re.search(r'\b' + re.escape(m) + r'\b', texto_plano, re.IGNORECASE):
+                    tienda_detectada = m.capitalize() if m != "the north face" else "The North Face"
+                    break
+
+        # 6. Título limpio
         corte_final = re.search(r'(?:👉|Ver oferta|https?://|¿Viste|\?Viste)', texto_plano, re.IGNORECASE)
         texto_util = texto_plano[:corte_final.start()] if corte_final else texto_plano
+
+        limpio = re.sub(r'#[A-Za-z0-9_]+\s*', '', texto_util)
+        limpio = re.sub(r'C[oó]digo:\s*[A-Z0-9_-]+\s*', '', limpio, flags=re.IGNORECASE)
+        limpio = re.sub(r'\*Casillero\s*', '', limpio, flags=re.IGNORECASE)
+        limpio = re.sub(r'(?:Por solo|Oferta flash|Oferta Prime|USD\s*\$?[0-9.]+)\s*', '', limpio, flags=re.IGNORECASE)
 
         separadores = ["🏷️", "✅", "% Descuento", "% descuento", "Envío gratis", "Envio gratis"]
         idx_inicio = -1
         for sep in separadores:
-            pos = texto_util.rfind(sep)
+            pos = limpio.rfind(sep)
             if pos != -1:
                 idx_inicio = max(idx_inicio, pos + len(sep))
 
-        if idx_inicio != -1 and idx_inicio < len(texto_util):
-            titulo = texto_util[idx_inicio:].strip(" -:·🚚🏷️✅")
+        if idx_inicio != -1 and idx_inicio < len(limpio):
+            titulo = limpio[idx_inicio:].strip(" -:·🚚🏷️✅✨")
         else:
-            limpio = re.sub(r'#[A-Za-z0-9_]+\s*', '', texto_util)
-            limpio = re.sub(r'(?:Por solo|Oferta flash|Oferta Prime|USD\s*\$?[0-9.]+)\s*', '', limpio, flags=re.IGNORECASE)
-            titulo = limpio.strip(" -:·🚚🏷️✅")
+            titulo = limpio.strip(" -:·🚚🏷️✅✨")
 
-        titulo = " ".join(titulo.split())
+        titulo = re.sub(r'C[oó]digo:\s*[A-Z0-9_-]+', '', titulo, flags=re.IGNORECASE)
+        titulo = re.sub(r'\*Casillero', '', titulo, flags=re.IGNORECASE)
+        titulo = " ".join(titulo.split()).strip(" -:·🚚🏷️✅✨*")
+
+        if tienda_detectada != canal_nombre and tienda_detectada.lower() not in titulo.lower():
+            titulo = f"{tienda_detectada} {titulo}"
+
         if len(titulo) < 6:
             continue
 
-        # 6. Fotografía servida por Telegram
+        # 7. Fotografía servida por Telegram
         foto_m = re.search(r"background-image:\s*url\(['\"]?(https://[^)'\"]+)", bloque)
         foto = foto_m.group(1) if foto_m else None
 
-        # 7. Notas y etiquetas informativas
+        # 8. Notas y etiquetas informativas
         notas: list[str] = []
         es_gratis = "envío gratis" in texto_plano.lower() or "envio gratis" in texto_plano.lower()
         if es_gratis:
             notas.append("✈️🇨🇴 Envío gratis")
         if re.search(r'\bprime\b', texto_plano, re.IGNORECASE):
             notas.append("🅿️ Amazon Prime")
+        if "*casillero" in texto_plano.lower():
+            notas.append("📦 Requiere casillero")
         if cupones:
             notas.append(f"Cupón: {cupones[0]}")
         if porcentaje_anunciado:
@@ -108,7 +133,7 @@ def extraer_deals_html(html_str: str, canal_nombre: str = "DescuentosTech", por_
 
         deal = Deal(
             source="descuentostech",
-            store="DescuentosTech",
+            store=tienda_detectada,
             country="US" if moneda == "USD" else "CO",
             key=f"descuentostech:{post_id}",
             title=titulo[:180],

@@ -1979,8 +1979,9 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
             # Sin resumen: todo lo que vale la pena va como tarjeta propia.
             inmediatas, para_resumen = candidatas, []
 
-        # FASE 0: Válvula de Escape / Fast-Track para Errores de Precio
+        # FASE 0: Válvula de Escape / Fast-Track para Errores de Precio y Calzado/Ropa VIP
         fasttrack_glitches: list[tuple[Deal, Verdict]] = []
+        fasttrack_moda_vip: list[tuple[Deal, Verdict]] = []
         candidatas_ordinarias: list[tuple[Deal, Verdict]] = []
 
         for par in candidatas:
@@ -1989,6 +1990,9 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 deal.es_glitch = True
                 verdict.glitch = True
                 fasttrack_glitches.append(par)
+            elif filtros.es_calzado_o_ropa_de_marca(deal.title, deal.store):
+                verdict.inmediata = True
+                fasttrack_moda_vip.append(par)
             else:
                 candidatas_ordinarias.append(par)
 
@@ -2022,8 +2026,8 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
 
         menciones = []
 
-        # Las de Fast-Track se anteponen para enviarse sin topes ni límites
-        seleccion = fasttrack_glitches + seleccion
+        # Las de Fast-Track (glitches y calzado/moda VIP) se anteponen para enviarse sin topes ni límites
+        seleccion = fasttrack_glitches + fasttrack_moda_vip + seleccion
 
         print(f"{len(candidatas)} candidatas ({colapsadas} variantes colapsadas): "
               f"{len(inmediatas)} inmediatas (envio {len(seleccion)}), "
@@ -2037,10 +2041,11 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
         for deal, verdict in seleccion:
             veracidad = veracidades.get(deal.key)
 
-            # Oferta 'intocable' (error de precio / super ganga / objetivo de precio cumplido):
+            # Oferta 'intocable' (error de precio / super ganga / objetivo de precio / moda VIP):
             # Se salta los limites ordinarios para nunca perder un oferton real
             es_objetivo = bool(any("objetivo" in str(et).lower() for et in verdict.etiquetas))
             es_glitch = bool(verdict.glitch)
+            es_moda_vip = filtros.es_calzado_o_ropa_de_marca(deal.title, deal.store)
             es_super_ganga = (
                 (deal.discount_verificable >= getattr(config, "SUPER_DEAL_DISCOUNT_PCT", 60.0) and verdict.confianza != "baja")
                 or (veracidad is not None and getattr(veracidad, "es_real", False) and getattr(veracidad, "descuento_real", 0.0) >= 25.0)
@@ -2048,7 +2053,7 @@ def ejecutar_ronda(fuentes=None, dry_run: bool = False, limite: int | None = Non
                 or (bool(deal.coupons) and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals", "republica", "descuentostech"})
                 or (deal.discount_verificable >= 50.0 and deal.source in {"promohunter", "miloderrocha", "promocajita", "slickdeals", "republica", "descuentostech"})
             )
-            es_intocable = es_glitch or es_objetivo or es_super_ganga
+            es_intocable = es_glitch or es_objetivo or es_super_ganga or es_moda_vip
 
             if not dry_run and not top and not es_intocable:
                 # 1. Tope diario global
