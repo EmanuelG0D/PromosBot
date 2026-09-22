@@ -341,9 +341,17 @@ class Store:
         except Exception:
             return None
 
-    def encolar_facebook(self, deal: Deal) -> str:
-        """Guarda la oferta para deep links y la encola para publicación dosificada en Facebook."""
+    def encolar_facebook(self, deal: Deal, max_cola: int = 4) -> str | None:
+        """Guarda la oferta para deep links y la encola para publicación en Facebook si hay cupo (máx 4)."""
         h = self.guardar_deal_reciente(deal)
+
+        # Si no está previamente en la cola, verificar si ya se alcanzó el tope de ofertas pendientes
+        ya_en_cola = self.conn.execute("SELECT 1 FROM facebook_cola WHERE hash_id = ?", (h,)).fetchone()
+        if not ya_en_cola:
+            total_en_cola = self.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0]
+            if total_en_cola >= max_cola:
+                return None
+
         datos = {
             "source": deal.source,
             "store": deal.store,

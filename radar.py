@@ -15,6 +15,7 @@ import re
 import sys
 import time
 import unicodedata
+from typing import Any
 
 import config
 from core import facebook, filtros, fx, respaldo, telegram, whitelist

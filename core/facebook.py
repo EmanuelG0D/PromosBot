@@ -262,8 +262,8 @@ def render_individual(deal: Deal, verdict: Verdict | None = None,
 
     lineas.append("")
     if hash_id:
-        dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
-        lineas.append(f"👉 Ver oferta y comprar: {dominio}/ir/{hash_id}")
+        url_dest = deal.url or f"{(base_url or DOMINIO_DEFAULT).rstrip('/')}/ir/{hash_id}"
+        lineas.append(f"👉 Ver oferta y comprar: {url_dest}")
     else:
         lineas.append(spintax_aviso_comentario())
     return "\n".join(lineas)
@@ -308,11 +308,10 @@ def render_caption_foto(deal: Deal, hash_id: str | None = None, base_url: str | 
             continue
         lineas.append(f"• {nota}")
 
-    if hash_id:
-        dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
+    if deal.url:
         cta = random.choice(SPINTAX_CTA_FOTO)
         lineas.append("")
-        lineas.append(f"{cta} {dominio}/ir/{hash_id}")
+        lineas.append(f"{cta} {deal.url}")
 
     return "\n".join(lineas)
 
@@ -327,8 +326,7 @@ def render_agrupado(elementos: list[Deal] | list[tuple[str, Deal]], base_url: st
 
 
 def render_comentario_links(items: list[tuple[str, Deal]], base_url: str | None = None) -> str:
-    """Construye el primer comentario con los enlaces protegidos mediante link cloaking (/ir/{id})."""
-    dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
+    """Construye el primer comentario con los enlaces oficiales directos a las tiendas."""
     emojis_num = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
     lineas = ["🛍️ ENLACES DIRECTOS A LAS TIENDAS OFICIALES:", ""]
 
@@ -337,13 +335,15 @@ def render_comentario_links(items: list[tuple[str, Deal]], base_url: str | None 
         pct = round(d.discount_pct or 0)
         dcto = f" (-{pct}%)" if pct > 0 else ""
         tienda = d.store or d.source or "Tienda"
+        url_tienda = d.url or f"{(base_url or DOMINIO_DEFAULT).rstrip('/')}/ir/{hash_id}"
         lineas.append(f"{num} {tienda}{dcto}:")
-        lineas.append(f"👉 {dominio}/ir/{hash_id}")
+        lineas.append(f"👉 {url_tienda}")
         if d.coupons:
             lineas.append(f"🎟️ Cupón: {d.coupons[0]}")
         lineas.append("")
 
-    lineas.append("⚡ Tócalos para ver fotos, cupón y comprar directo en la tienda oficial.")
+    bot_user = (getattr(config, "TELEGRAM_BOT_USERNAME", "") or "PromosOn_bot").strip().lstrip("@")
+    lineas.append(f"⚡ ¿Quieres alertas de ofertas en vivo? Búscanos en Telegram: @{bot_user}")
     return "\n".join(lineas)
 
 
@@ -537,7 +537,10 @@ def encolar_oferta(deal: Deal, verdict: Verdict | None = None,
         return None
     with Store() as store:
         h = store.encolar_facebook(deal)
-        print(f"  [facebook] oferta '{deal.title[:30]}...' encolada (hash={h})")
+        if h:
+            print(f"  [facebook] oferta '{deal.title[:30]}...' encolada (hash={h})")
+        else:
+            print(f"  [facebook] cola llena (máx 4 pendientes), omitiendo para Facebook '{deal.title[:30]}...'")
         return h
 
 

@@ -3876,23 +3876,24 @@ class PruebaCuposPorTienda(unittest.TestCase):
         bloques = [b.strip() for b in post_caption.split("\n\n") if b.strip()]
         self.assertEqual(len(bloques), 3)
 
-        # Captions individuales por foto en el carrusel (con links cloaked y detalles)
+        # Captions individuales por foto en el carrusel (con link directo oficial a la tienda)
         cap1 = facebook.render_caption_foto(d1, hash_id="hash1", base_url="https://promosbot.onrender.com")
         self.assertIn("Alkosto (-40%)", cap1)
         self.assertIn("Smart TV 55 Pulgadas 4K UHD", cap1)
-        self.assertIn("https://promosbot.onrender.com/ir/hash1", cap1)
+        self.assertIn(d1.url, cap1)
 
         cap2 = facebook.render_caption_foto(d2, hash_id="hash2", base_url="https://promosbot.onrender.com")
         self.assertIn("Éxito (-35%)", cap2)
         self.assertIn("EXITO10", cap2)
-        self.assertIn("https://promosbot.onrender.com/ir/hash2", cap2)
+        self.assertIn(d2.url, cap2)
 
-        # Primer comentario con links cloaked Render /ir/{hash}
+        # Primer comentario con links directos y @ del bot de Telegram
         items = [("hash1", d1), ("hash2", d2)]
         comentario = facebook.render_comentario_links(items, base_url="https://promosbot.onrender.com")
-        self.assertIn("https://promosbot.onrender.com/ir/hash1", comentario)
-        self.assertIn("https://promosbot.onrender.com/ir/hash2", comentario)
+        self.assertIn(d1.url, comentario)
+        self.assertIn(d2.url, comentario)
         self.assertIn("🎟️ Cupón: EXITO10", comentario)
+        self.assertIn("@PromosOn_bot", comentario)
 
     def test_facebook_encolar_y_procesar_lote_con_comentario(self):
         from unittest.mock import patch, MagicMock
@@ -4002,6 +4003,37 @@ class PruebaCuposPorTienda(unittest.TestCase):
              patch("urllib.request.urlopen", side_effect=Exception("Fallo de red simulado")):
             ok = facebook.publicar_oferta(d, v)
             self.assertFalse(ok)
+
+    def test_facebook_tope_maximo_4_en_cola(self):
+        from unittest.mock import patch
+        from core import facebook
+        from core.store import Store
+
+        with patch("config.FB_ENABLED", True):
+            with Store() as store:
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+
+                hashes = []
+                for i in range(4):
+                    d = oferta(source="amazon", store="Amazon", key=f"k_{i}", title=f"Oferta {i}", price=10000.0 * (i + 1), url=f"https://amazon.com/p{i}")
+                    h = facebook.encolar_oferta(d)
+                    self.assertIsNotNone(h)
+                    hashes.append(h)
+
+                total = store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0]
+                self.assertEqual(total, 4)
+
+                # La 5ta oferta debe retornar None porque la cola está llena
+                d5 = oferta(source="amazon", store="Amazon", key="k_5", title="Oferta 5 Excedente", price=50000.0, url="https://amazon.com/p5")
+                h5 = facebook.encolar_oferta(d5)
+                self.assertIsNone(h5)
+
+                total_despues = store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0]
+                self.assertEqual(total_despues, 4)
+
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
 
 
 class PruebaFacebookHistorias(unittest.TestCase):

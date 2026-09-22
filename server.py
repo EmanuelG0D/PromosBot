@@ -134,6 +134,15 @@ def correr_ronda(motivo: str, fuentes=None, espera_s: float = 0) -> dict:
 
         if respaldo.guardar():
             log("historial respaldado en GitHub")
+
+        try:
+            with Store() as store:
+                borradas = store.prune()
+                if borradas:
+                    log(f"prune: {borradas} registros viejos eliminados")
+        except Exception as exc:
+            log(f"prune fallido (no crítico): {exc}")
+
         return resultado
     except Exception as exc:                      # una ronda rota no tumba el servicio
         _estado["ultimo_error"] = f"{type(exc).__name__}: {exc}"
@@ -480,7 +489,16 @@ def programador_facebook(intervalo_min: float = INTERVALO_FACEBOOK_MIN) -> None:
                             f"{res.get('deals_count', 1)} ofertas, post_id={res.get('post_id')}, "
                             f"comentario_id={res.get('comentario_id')})")
                 elif res.get("tipo") == "error_publicacion":
-                    log(f"Facebook: fallo al publicar lote: {res.get('error')}")
+                    error_fb = res.get("error", "error desconocido")
+                    log(f"Facebook: fallo al publicar lote: {error_fb}")
+                    try:
+                        if config.TELEGRAM_ADMIN_ID:
+                            telegram.send(
+                                f"⚠️ <b>Facebook: fallo al publicar</b>\n\n<code>{telegram.esc(str(error_fb))}</code>",
+                                chat_id=config.TELEGRAM_ADMIN_ID,
+                            )
+                    except Exception as err_notif:
+                        log(f"Facebook: no se pudo notificar al admin del fallo: {err_notif}")
             else:
                 log("Facebook: lote omitido (fuera de horario)")
         except Exception as exc:
