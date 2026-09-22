@@ -122,11 +122,72 @@ def descargar_foto_producto(url_foto: str, timeout: float = 4.0) -> Image.Image 
         return None
 
 
+MAPA_LOGOS = {
+    "amazon": "assets/logos/amazon.png",
+    "falabella": "assets/logos/falabella.png",
+    "alkosto": "assets/logos/alkosto.png",
+    "exito": "assets/logos/exito.png",
+    "éxito": "assets/logos/exito.png",
+    "mercadolibre": "assets/logos/mercadolibre.png",
+    "mercado libre": "assets/logos/mercadolibre.png",
+    "promocajita": "assets/logos/promocajita.png",
+}
+
+
+def _superponer_logo_tienda(canvas: Image.Image, tienda_str: str | None, color_acento: tuple[int, int, int]) -> None:
+    """Superpone el logotipo gráfico oficial de la tienda dentro de una cápsula premium en la esquina superior derecha."""
+    if not tienda_str:
+        return
+    tienda_norm = tienda_str.lower().strip()
+    ruta_logo = None
+    for k, ruta in MAPA_LOGOS.items():
+        if k in tienda_norm:
+            if os.path.exists(ruta):
+                ruta_logo = ruta
+                break
+    if not ruta_logo:
+        return
+
+    try:
+        logo_img = Image.open(ruta_logo).convert("RGBA")
+
+        # Contenedor / Cápsula en esquina superior derecha
+        box_w, box_h = 260, 96
+        box_x = 1080 - box_w - 30
+        box_y = 28
+
+        card = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
+        card_draw = ImageDraw.Draw(card)
+        card_draw.rounded_rectangle(
+            [(0, 0), (box_w - 1, box_h - 1)],
+            radius=18,
+            fill=(255, 255, 255, 252),
+            outline=color_acento,
+            width=3,
+        )
+
+        max_logo_w = box_w - 36
+        max_logo_h = box_h - 24
+        ratio = min(max_logo_w / logo_img.width, max_logo_h / logo_img.height)
+        lw = max(1, int(logo_img.width * ratio))
+        lh = max(1, int(logo_img.height * ratio))
+        logo_resized = logo_img.resize((lw, lh), Image.Resampling.LANCZOS)
+
+        lx = (box_w - lw) // 2
+        ly = (box_h - lh) // 2
+        card.paste(logo_resized, (lx, ly), logo_resized)
+
+        canvas.paste(card, (box_x, box_y), card)
+    except Exception as exc:
+        print(f"  [branding] aviso: no se pudo superponer logo de tienda ({exc})")
+
+
 def componer_canvas_branding(
     img_producto: Image.Image,
     precio_str: str,
     nota_sub_precio: str = "*OFERTA VERIFICADA",
     paleta_nombre: str = "verde",
+    tienda_str: str | None = None,
 ) -> Image.Image:
     """Compone la imagen final cuadrada 1080x1080 con marco, badges y logotipo compacto."""
     W, H = 1080, 1080
@@ -203,6 +264,10 @@ def componer_canvas_branding(
     f_sub = _obtener_fuente(22, bold=True)
     draw.text((800, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="mm")
 
+    # 6. Logotipo oficial de la tienda en esquina superior derecha
+    if tienda_str:
+        _superponer_logo_tienda(canvas, tienda_str, color_acento)
+
     return canvas
 
 
@@ -222,7 +287,14 @@ def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeou
             paleta = NOMBRES_PALETAS[idx]
 
         precio_str, nota_sub = formatear_precio_branding(deal)
-        canvas = componer_canvas_branding(foto, precio_str, nota_sub, paleta_nombre=paleta)
+        tienda_val = getattr(deal, "store", None) or getattr(deal, "source", None)
+        canvas = componer_canvas_branding(
+            foto,
+            precio_str,
+            nota_sub,
+            paleta_nombre=paleta,
+            tienda_str=tienda_val,
+        )
 
         buf = io.BytesIO()
         canvas.save(buf, format="JPEG", quality=95)
@@ -230,3 +302,4 @@ def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeou
     except Exception as exc:
         print(f"  [branding] aviso: no se pudo generar tarjeta con marco ({exc})")
         return None
+
