@@ -58,12 +58,13 @@ A diferencia de bots convencionales que comparten capturas genéricas o enlaces 
    - 🟢 **Verde Esmeralda Neón:** Acento fresco y tecnológico.
    - 🔵 **Azul Eléctrico / Cyan:** Acento corporativo y moderno.
    - 🟠 **Naranja Fuego:** Acento de urgencia y liquidación.
-3. **Cápsula de Tienda con Logotipo Oficial:**
+3. **Cápsula de Tienda (Doble Blindaje):**
    - Ubicada en la esquina superior derecha (`x=790, y=28`).
    - Fondo blanco puro con bordes redondeados y contorno del color de acento.
-   - **Logos 100% locales en Render:** Almacenados en `assets/logos/` con transparencia RGBA (sin enlaces externos ni riesgo de imágenes caídas).
+   - **Para Telegram:** Logotipos oficiales locales en `assets/logos/` con transparencia RGBA.
+   - **Para Facebook (Blindaje Anti-Falsificación):** Muestra el nombre de la tienda en **texto tipográfico limpio** (`FALABELLA`, `AMAZON`, `ÉXITO`, `ALKOSTO`), evitando logotipos vectoriales de marcas registradas que activan los filtros automatizados de propiedad intelectual de Meta.
 4. **Respeto Estricto de Moneda:** Si la oferta es de Colombia muestra `COP $...`, y si proviene de EE. UU. (Slickdeals, Amazon Global) muestra `US$ ...` sin conversiones forzadas engañosas.
-5. **Detección de Importación 🇺🇸:** Las ofertas internacionales de Slickdeals (como calzado Puma, Adidas o gadgets en USA) son etiquetadas con la bandera de Estados Unidos y la nota de importación.
+5. **Detección de Importación 🇺🇸:** Las ofertas internacionales de Slickdeals (como calzado o gadgets en USA) son etiquetadas con la bandera de Estados Unidos y la nota de importación.
 
 ---
 
@@ -74,8 +75,13 @@ A diferencia de bots convencionales que comparten capturas genéricas o enlaces 
 - **Teclado Interactivo (`/menu`):** Menú de navegación por tiendas y categorías (`Smart TV`, `Portátiles`, `Celulares`, `Zapatos y Tenis`, `Audio`, etc.) con cancelación reactiva en tiempo real.
 - **Auto-aprobación de Usuarios:** Acceso instantáneo para nuevos miembros con invitación automática al canal oficial (`@RadarPromoCol`).
 
-### B. Facebook (Página Oficial e Historias 9:16)
-- **Publicación en Feed con Enlace Profundo:** Publica la imagen limpia/brandeada con enlace de redirección segura a Telegram (`https://t.me/PromosOn_bot?start=deal_<hash>`).
+### B. Facebook (Página Oficial en Carrusel e Historias 9:16)
+- **Modo Carrusel de Alto Engagement (2 a 4 ofertas cada 45 min):**
+  - **Motor Spintax de 3 Niveles:** Combina de forma aleatoria un titular llamativo, una bajada editorial y un llamado a la acción interactivo (+512 combinaciones únicas) para evitar duplicados y shadowban.
+  - **Cero Enlaces en el Feed:** El mensaje principal del muro no contiene URLs salientes, protegiendo el alcance algorítmico de la página.
+  - **Fichas Descriptivas por Foto (`render_caption_foto`):** Al tocar o deslizar cualquier foto en Facebook, el panel lateral muestra el título del producto, tienda, precio, descuento, cupón y enlace cloaked seguro (`https://promosbot.onrender.com/ir/{hash}`).
+  - **Blindaje Anti-Falsificaciones:** En lugar de imágenes de logotipos comerciales, estampa el nombre de la tienda en texto plano para eludir los filtros de derechos de marca de Meta.
+- **Regla del Camuflaje (5 a 1):** Cada 5 publicaciones comerciales, el bot publica automáticamente un post orgánico de interacción/comunidad sin enlaces para mantener una reputación óptima con el algoritmo.
 - **Historias de Facebook (Stories 1080x1920):**
   - Adapta la tarjeta al formato vertical 9:16 con fondo degradado y marco superior/inferior.
   - Genera stickers interactivos nativos (`story_link` y `story_text`) para dirigir tráfico directo hacia la oferta.
@@ -124,7 +130,7 @@ BotPromos/
 │   ├── slickdeals.py        # Ofertas comunitarias de EE. UU. (Puma, Nike, Apple)
 │   ├── koaj.py              # Catálogo de moda Koaj Colombia
 │   └── ebay.py              # eBay Browse API
-└── pruebas.py               # Suite de 232 pruebas unitarias automatizadas
+└── pruebas.py               # Suite de 233 pruebas unitarias automatizadas
 ```
 
 ---
@@ -180,7 +186,7 @@ python radar.py --dry-run
 # Probar la conexión con el bot de Telegram
 python radar.py --test-telegram
 
-# Ejecutar la suite completa de 232 pruebas unitarias
+# Ejecutar la suite completa de 233 pruebas unitarias
 python pruebas.py
 
 # Iniciar el servidor web local con soporte de webhook
