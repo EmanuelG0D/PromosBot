@@ -50,6 +50,49 @@ SPINTAX_AVISOS_COMENTARIO = [
     "🔎 Encuentra los links y cupones abajo en el primer comentario.",
 ]
 
+# --- BANCOS SPINTAX DE CARRUSEL (Estructura de 3 bloques anti-ban) ----------
+SPINTAX_CARRUSEL_ENCABEZADOS = [
+    "💥 ¡OFERTAS ESPECTACULARES DEL DÍA! 💥",
+    "🔥 ¡REBAJAS EXCLUSIVAS DEL RADAR! 🔥",
+    "⚡ ¡SELECCIÓN DE GANGAS VERIFICADAS! ⚡",
+    "🚨 ¡TOP PROMOCIONES ENCONTRADAS HOY! 🚨",
+    "🎯 ¡PRECIOS IMPERDIBLES EN TIENDAS OFICIALES! 🎯",
+    "🛍️ ¡DESCUENTOS DESTACADOS DE HOY! 🛍️",
+    "✨ ¡OPORTUNIDADES DE AHORRO DEL DÍA! ✨",
+    "🏷️ ¡OFERTAS IMPERDIBLES DETECTADAS! 🏷️",
+]
+
+SPINTAX_CARRUSEL_BAJADAS = [
+    "Seleccionamos las mejores rebajas y gangas verificadas en tiendas oficiales.",
+    "Encontramos descuentos reales y precios bajos en tus tiendas favoritas.",
+    "Detectamos promociones destacadas y errores de precio que valen la pena aprovechar.",
+    "Monitoreamos el mercado y reunimos estas oportunidades con descuentos increíbles.",
+    "Reunimos los mejores descuentos activos en este momento para que compres informado.",
+    "Filtramos las mejores ofertas de hoy directamente de comercios autorizados.",
+    "Aquí tienes nuestra selección de artículos con grandes bajas de precio garantizadas.",
+    "Rastreamos las mejores rebajas del momento para ahorrar en tus compras online.",
+]
+
+SPINTAX_CARRUSEL_CTAS = [
+    "👇 Toca cada foto para ver el precio especial, cupones y enlace de compra directa:",
+    "👇 Haz clic en cada foto para ver su cupón, precio final y link directo:",
+    "👉 Toca o desliza cada imagen para consultar los cupones y el enlace oficial 👇",
+    "🔍 Abre la foto del producto que te interese para ver cupón y comprar directo 👇",
+    "👇 Desliza las fotos y toca la que te guste para acceder a la tienda oficial:",
+    "👉 Toca cualquier foto para ver el descuento, cupón activo y enlace oficial 👇",
+    "👇 Haz clic sobre cada producto en la galería para ver toda la info y comprar:",
+    "✨ Toca cada imagen para ver cupón exclusivo y comprar en la tienda oficial 👇",
+]
+
+SPINTAX_CTA_FOTO = [
+    "👉 Comprar directo en tienda oficial:",
+    "👉 Ver oferta y comprar aquí:",
+    "👉 Enlace oficial de compra:",
+    "👉 Toca para comprar directo:",
+    "👉 Accede a la tienda oficial aquí:",
+    "👉 Link verificado de compra:",
+]
+
 SPINTAX_CAMUFLAJE = [
     "☕ Buenos días cazadores de ofertas. ¿Qué producto están esperando que baje de precio esta semana? Cuéntennos en los comentarios 👇",
     "💡 Tip de Ahorro: Antes de comprar en línea, revisa siempre si la tienda tiene cupón de primera compra o descuento adicional por pagar con tarjeta débito o crédito específica.",
@@ -226,43 +269,61 @@ def render_individual(deal: Deal, verdict: Verdict | None = None,
     return "\n".join(lineas)
 
 
-def render_agrupado(elementos: list[Deal] | list[tuple[str, Deal]], base_url: str | None = None) -> str:
-    """Genera el caption para un lote de 2 a 4 ofertas agrupadas con descripciones truncadas a 60 chars."""
-    encabezado = spintax_encabezado()
-    lineas = [encabezado, ""]
-    emojis_num = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
-    dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
+def spintax_post_carrusel() -> str:
+    """Genera el texto editorial de 3 bloques para el post principal en modo carrusel."""
+    enc = random.choice(SPINTAX_CARRUSEL_ENCABEZADOS)
+    baj = random.choice(SPINTAX_CARRUSEL_BAJADAS)
+    cta = random.choice(SPINTAX_CARRUSEL_CTAS)
+    return f"{enc}\n\n{baj}\n\n{cta}"
 
-    # Detectar si vienen tuplas (hash_id, deal) o solo Deals
-    es_tuplas = bool(elementos and isinstance(elementos[0], tuple))
 
-    for i, item in enumerate(elementos[:4]):
-        num = emojis_num[i] if i < len(emojis_num) else f"{i+1}."
-        if es_tuplas:
-            hash_id, d = item
-        else:
-            hash_id, d = "", item
+def render_caption_foto(deal: Deal, hash_id: str | None = None, base_url: str | None = None) -> str:
+    """Construye la ficha descriptiva para la foto individual en Facebook (visible en el visor de fotos)."""
+    lineas = []
+    pct = round(deal.discount_pct or 0)
+    descuento_str = f" (-{pct}%)" if pct > 0 else ""
+    tienda = deal.store or deal.source or "Tienda oficial"
 
-        pct = round(d.discount_pct or 0)
-        dcto = f" (-{pct}%)" if pct > 0 else ""
-        tienda = d.store or d.source or "Tienda"
-        titulo_corto = truncar(d.title, 60)
-        precio_str = money(d.price, d.currency)
+    lineas.append(f"📦 {deal.title.strip()}")
+    lineas.append("")
+    lineas.append(f"🏷️ Tienda: {tienda}{descuento_str}")
 
-        lineas.append(f"{num} {tienda}{dcto}")
-        lineas.append(f"📦 {titulo_corto}")
-        lineas.append(f"💵 Ahora: {precio_str}")
-        if d.coupons:
-            lineas.append(f"🎟️ Cupón: {d.coupons[0]}")
-        if hash_id:
-            lineas.append(f"👉 {dominio}/ir/{hash_id}")
+    if deal.list_price and deal.price and deal.list_price > deal.price:
+        lineas.append(f"💵 Antes: {money(deal.list_price, deal.currency)} ➡️ Ahora: {money(deal.price, deal.currency)}")
+    elif deal.price:
+        lineas.append(f"💵 Precio: {money(deal.price, deal.currency)}")
+
+    if deal.coupons:
+        cupones = ", ".join(deal.coupons[:2])
+        lineas.append(f"🎟️ Cupón de descuento: {cupones}")
+
+    es_directo = getattr(deal, "free_shipping_co", False) or (
+        deal.country == "US" and "amazon" in (deal.store or "").lower() and (deal.price or 0) >= 35
+    )
+    if es_directo:
+        lineas.append("✈️🇨🇴 Envío GRATIS directo a Colombia")
+
+    for nota in (deal.notes or [])[:2]:
+        if "prime" in nota.lower() and "amazon" not in (deal.store or "").lower():
+            continue
+        lineas.append(f"• {nota}")
+
+    if hash_id:
+        dominio = (base_url or DOMINIO_DEFAULT).rstrip("/")
+        cta = random.choice(SPINTAX_CTA_FOTO)
         lineas.append("")
+        lineas.append(f"{cta} {dominio}/ir/{hash_id}")
 
-    if es_tuplas:
-        lineas.append("⚡ Tócalos para ver fotos, cupón y comprar directo en la tienda oficial.")
-    else:
-        lineas.append(spintax_aviso_comentario())
     return "\n".join(lineas)
+
+
+def render_agrupado(elementos: list[Deal] | list[tuple[str, Deal]], base_url: str | None = None) -> str:
+    """Genera el caption para un lote de ofertas en modo carrusel.
+    
+    Implementa la estructura de 3 bloques (Titular + Bajada + CTA) con rotación
+    Spintax para máxima protección anti-ban y anti-spam en Facebook.
+    """
+    return spintax_post_carrusel()
 
 
 def render_comentario_links(items: list[tuple[str, Deal]], base_url: str | None = None) -> str:
@@ -353,7 +414,7 @@ def verificar_conexion() -> dict:
 
 # --- SUBIDA DE MEDIOS Y PUBLICACIÓN GRAPH API ------------------------------
 
-def subir_foto_oculta(url_imagen: str, deal: Deal | None = None) -> str | None:
+def subir_foto_oculta(url_imagen: str, deal: Deal | None = None, caption: str | None = None) -> str | None:
     """Sube una foto a Meta como 'published=false' para obtener media_fbid y adjuntarla en carrusel."""
     if not configurado():
         return None
@@ -363,7 +424,7 @@ def subir_foto_oculta(url_imagen: str, deal: Deal | None = None) -> str | None:
         try:
             foto_bytes = branding.generar_tarjeta_branding_bytes(deal)
             if foto_bytes:
-                photo_id = subir_foto_historia_binario(foto_bytes)
+                photo_id = subir_foto_historia_binario(foto_bytes, caption=caption)
                 if photo_id:
                     return photo_id
         except Exception as exc:
@@ -374,12 +435,15 @@ def subir_foto_oculta(url_imagen: str, deal: Deal | None = None) -> str | None:
     page_id = config.FB_PAGE_ID
     token = _obtener_page_token()
     url = f"https://graph.facebook.com/v20.0/{page_id}/photos"
-    data = urllib.parse.urlencode({
+    params = {
         "url": url_imagen,
         "published": "false",
         "temporary": "true",
         "access_token": token,
-    }).encode("utf-8")
+    }
+    if caption:
+        params["caption"] = caption
+    data = urllib.parse.urlencode(params).encode("utf-8")
     req = urllib.request.Request(url, data=data)
     try:
         with urllib.request.urlopen(req, timeout=12) as resp:
@@ -502,11 +566,12 @@ def procesar_cola(limite: int = 4, base_url: str | None = None) -> dict:
         hash_ids = [it[0] for it in items]
         deals = [it[1] for it in items]
 
-        # 3. Subir fotos a Meta con published=false
+        # 3. Subir fotos a Meta con published=false y su caption descriptivo individual
         media_ids = []
-        for d in deals:
+        for hash_id, d in items:
             if d.image:
-                m_id = subir_foto_oculta(d.image, deal=d)
+                cap = render_caption_foto(d, hash_id=hash_id, base_url=base_url)
+                m_id = subir_foto_oculta(d.image, deal=d, caption=cap)
                 if m_id:
                     media_ids.append(m_id)
 
@@ -714,7 +779,7 @@ def generar_canvas_historia(deal: Deal, verdict: Verdict | None = None) -> bytes
     return out.getvalue()
 
 
-def subir_foto_historia_binario(imagen_bytes: bytes) -> str | None:
+def subir_foto_historia_binario(imagen_bytes: bytes, caption: str | None = None) -> str | None:
     """Sube el binario JPEG a /{page_id}/photos como published=false para obtener el photo_id."""
     if not configurado() or not imagen_bytes:
         return None
@@ -738,10 +803,16 @@ def subir_foto_historia_binario(imagen_bytes: bytes) -> str | None:
     cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
     cuerpo.extend(b'Content-Disposition: form-data; name="temporary"\r\n\r\n')
     cuerpo.extend(b"true\r\n")
+
+    # Campo caption opcional para descripciones individuales en carrusel
+    if caption:
+        cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
+        cuerpo.extend(b'Content-Disposition: form-data; name="caption"\r\n\r\n')
+        cuerpo.extend(caption.encode("utf-8") + b"\r\n")
     
     # Campo source (binario de la foto)
     cuerpo.extend(f"--{boundary}\r\n".encode("utf-8"))
-    cuerpo.extend(b'Content-Disposition: form-data; name="source"; filename="historia.jpg"\r\n')
+    cuerpo.extend(b'Content-Disposition: form-data; name="source"; filename="foto.jpg"\r\n')
     cuerpo.extend(b"Content-Type: image/jpeg\r\n\r\n")
     cuerpo.extend(imagen_bytes)
     cuerpo.extend(b"\r\n")

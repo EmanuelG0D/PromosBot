@@ -3854,6 +3854,15 @@ class PruebaCuposPorTienda(unittest.TestCase):
         self.assertIn(facebook.spintax_aviso_comentario(), facebook.SPINTAX_AVISOS_COMENTARIO)
         self.assertIn(facebook.spintax_camuflaje(), facebook.SPINTAX_CAMUFLAJE)
 
+    def test_facebook_spintax_carrusel_3_bloques(self):
+        from core import facebook
+        post = facebook.spintax_post_carrusel()
+        bloques = [b.strip() for b in post.split("\n\n") if b.strip()]
+        self.assertEqual(len(bloques), 3)
+        self.assertIn(bloques[0], facebook.SPINTAX_CARRUSEL_ENCABEZADOS)
+        self.assertIn(bloques[1], facebook.SPINTAX_CARRUSEL_BAJADAS)
+        self.assertIn(bloques[2], facebook.SPINTAX_CARRUSEL_CTAS)
+
     def test_facebook_render_agrupado_y_comentario(self):
         from core import facebook
 
@@ -3861,12 +3870,22 @@ class PruebaCuposPorTienda(unittest.TestCase):
         d2 = oferta(source="exito", store="Éxito", title="Lavadora Carga Frontal 18kg Inverter", price=1300000.0, list_price=2000000.0, coupons=["EXITO10"])
 
         post_caption = facebook.render_agrupado([d1, d2])
-        # Caption sin URLs
+        # Caption principal sin URLs (anti-ban Meta)
         self.assertNotIn("http://", post_caption)
         self.assertNotIn("https://", post_caption)
-        self.assertIn("Alkosto (-40%)", post_caption)
-        self.assertIn("Éxito (-35%)", post_caption)
-        self.assertIn("primer comentario", post_caption.lower())
+        bloques = [b.strip() for b in post_caption.split("\n\n") if b.strip()]
+        self.assertEqual(len(bloques), 3)
+
+        # Captions individuales por foto en el carrusel (con links cloaked y detalles)
+        cap1 = facebook.render_caption_foto(d1, hash_id="hash1", base_url="https://promosbot.onrender.com")
+        self.assertIn("Alkosto (-40%)", cap1)
+        self.assertIn("Smart TV 55 Pulgadas 4K UHD", cap1)
+        self.assertIn("https://promosbot.onrender.com/ir/hash1", cap1)
+
+        cap2 = facebook.render_caption_foto(d2, hash_id="hash2", base_url="https://promosbot.onrender.com")
+        self.assertIn("Éxito (-35%)", cap2)
+        self.assertIn("EXITO10", cap2)
+        self.assertIn("https://promosbot.onrender.com/ir/hash2", cap2)
 
         # Primer comentario con links cloaked Render /ir/{hash}
         items = [("hash1", d1), ("hash2", d2)]
