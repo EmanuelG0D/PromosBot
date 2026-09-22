@@ -180,6 +180,34 @@ def parse_deal(item: dict, max_horas: float = 3.0) -> Deal | None:
     )
 
 
+def obtener_foto_limpia_amazon(asin: str, timeout: float = 2.5) -> str | None:
+    """Extrae la imagen original en alta resolución de Amazon sin logos ni marcas de agua."""
+    if not asin:
+        return None
+    url = f"https://www.amazon.com/dp/{asin}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-CO,es;q=0.9,en;q=0.8",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            html_text = resp.read().decode("utf-8", errors="ignore")
+            m = re.search(r'data-old-hires="([^"]+)"', html_text)
+            if m and m.group(1).startswith("http"):
+                return m.group(1).replace("\\/", "/")
+            m2 = re.search(r'"hiRes"\s*:\s*"([^"]+)"', html_text)
+            if m2 and m2.group(1).startswith("http"):
+                return m2.group(1).replace("\\/", "/")
+            m3 = re.search(r'"large"\s*:\s*"([^"]+)"', html_text)
+            if m3 and m3.group(1).startswith("http"):
+                return m3.group(1).replace("\\/", "/")
+    except Exception:
+        pass
+    return None
+
+
 def fetch(
     paginas: int = 1,
     incluir: list[str] | None = None,
@@ -212,6 +240,15 @@ def fetch(
             if deal.key in vistos:
                 continue
             vistos.add(deal.key)
+
+            # Intentar obtener la imagen original sin marcas de agua de Amazon
+            m_asin = _ASIN_RE.search(deal.url)
+            asin_val = m_asin.group(1).upper() if m_asin else (deal.key.replace("amazon:", "") if deal.key.startswith("amazon:") else "")
+            if asin_val:
+                foto_limpia = obtener_foto_limpia_amazon(asin_val)
+                if foto_limpia:
+                    deal.image = foto_limpia
+
             ofertas.append(deal)
 
     return ofertas

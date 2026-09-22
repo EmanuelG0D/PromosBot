@@ -4115,6 +4115,48 @@ class PruebaFacebookHistorias(unittest.TestCase):
             self.assertEqual(res.get("photo_id"), "photo_mock_123")
 
 
+class PruebaFotosLimpiasCatalogo(unittest.TestCase):
+    """Pruebas de extracción de imágenes de catálogo limpias sin marcas de agua."""
+
+    def test_promohunter_obtiene_foto_limpia_amazon_hires(self):
+        from unittest.mock import MagicMock, patch
+        from sources import promohunter
+        html_mock = '<div id="imgTagWrapperId"><img data-old-hires="https://m.media-amazon.com/images/I/71abc_SL1500_.jpg" /></div>'
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = html_mock.encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            foto = promohunter.obtener_foto_limpia_amazon("B0TEST1234")
+            self.assertEqual(foto, "https://m.media-amazon.com/images/I/71abc_SL1500_.jpg")
+
+    def test_promohunter_fallback_ante_error_red(self):
+        from unittest.mock import patch
+        from sources import promohunter
+        with patch("urllib.request.urlopen", side_effect=Exception("Timeout simulado")):
+            foto = promohunter.obtener_foto_limpia_amazon("B0TEST1234")
+            self.assertIsNone(foto)
+
+    def test_promocajita_obtiene_foto_limpia_s3(self):
+        from unittest.mock import MagicMock, patch
+        from sources import promocajita
+        html_mock = '<meta property="og:image" content="https://pccajita.s3.us-east-2.amazonaws.com/images/offers/celular.webp" />'
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = html_mock.encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            foto = promocajita.obtener_foto_limpia_promocajita("https://promocajita.com/deal/12345")
+            self.assertEqual(foto, "https://pccajita.s3.us-east-2.amazonaws.com/images/offers/celular.webp")
+
+    def test_promocajita_fallback_ante_error_red(self):
+        from unittest.mock import patch
+        from sources import promocajita
+        with patch("urllib.request.urlopen", side_effect=Exception("Error HTTP simulado")):
+            foto = promocajita.obtener_foto_limpia_promocajita("https://promocajita.com/deal/12345")
+            self.assertIsNone(foto)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

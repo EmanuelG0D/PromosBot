@@ -25,6 +25,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 import re
+import urllib.request
 
 from core import filtros
 from core.coupons import extract_coupons
@@ -127,6 +128,29 @@ def _una_publicacion(identificador: str, bloque: str,
     )
 
 
+def obtener_foto_limpia_promocajita(url_link: str, timeout: float = 2.5) -> str | None:
+    """Extrae la imagen original sin marcas ni marcos amarillos desde la ficha de promocajita."""
+    if not url_link or not url_link.startswith("http"):
+        return None
+    try:
+        req = urllib.request.Request(
+            url_link,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            html_web = resp.read().decode("utf-8", errors="ignore")
+            m = re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']', html_web, re.IGNORECASE)
+            if not m:
+                m = re.search(r'<meta\s+content=["\']([^"\']+)["\']\s+property=["\']og:image["\']', html_web, re.IGNORECASE)
+            if m:
+                img = m.group(1).strip()
+                if img.startswith("http"):
+                    return img
+    except Exception:
+        pass
+    return None
+
+
 def fetch(canales: list[str] | None = None, por_canal: int = 20,
           incluir=None, vetadas=None) -> list[Deal]:
     """Las publicaciones recientes del canal, ya convertidas en ofertas.
@@ -152,6 +176,12 @@ def fetch(canales: list[str] | None = None, por_canal: int = 20,
             if not deal or deal.key in vistos:
                 continue
             vistos.add(deal.key)
+
+            # Intentar obtener la imagen original sin marcas de agua ni marcos amarillos
+            foto_limpia = obtener_foto_limpia_promocajita(deal.url)
+            if foto_limpia:
+                deal.image = foto_limpia
+
             ofertas.append(deal)
             encontradas += 1
     return ofertas
