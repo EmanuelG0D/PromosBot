@@ -419,10 +419,10 @@ def subir_foto_oculta(url_imagen: str, deal: Deal | None = None, caption: str | 
     if not configurado():
         return None
 
-    # Intentar subir la versión con branding si la oferta califica
+    # Intentar subir la versión con branding si la oferta califica (modo solo texto para blindar Facebook)
     if deal is not None and branding.debe_aplicar_branding(deal):
         try:
-            foto_bytes = branding.generar_tarjeta_branding_bytes(deal)
+            foto_bytes = branding.generar_tarjeta_branding_bytes(deal, solo_texto_tienda=True)
             if foto_bytes:
                 photo_id = subir_foto_historia_binario(foto_bytes, caption=caption)
                 if photo_id:

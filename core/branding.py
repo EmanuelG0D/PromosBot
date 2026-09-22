@@ -221,6 +221,42 @@ def _superponer_logo_tienda(canvas: Image.Image, tienda_str: str | None, color_a
         print(f"  [branding] aviso: no se pudo superponer logo de tienda ({exc})")
 
 
+def _superponer_tienda_texto(canvas: Image.Image, tienda_str: str, color_acento: tuple[int, int, int]) -> None:
+    """Superpone el nombre de la tienda en texto dentro de una cápsula premium (sin logos gráficos, 100% seguro para Facebook)."""
+    texto = tienda_str.strip().upper()
+    if not texto:
+        return
+
+    f_tienda = _obtener_fuente(28, bold=True)
+
+    temp_img = Image.new("RGBA", (10, 10))
+    temp_draw = ImageDraw.Draw(temp_img)
+    try:
+        bbox = temp_draw.textbbox((0, 0), texto, font=f_tienda)
+        tw = bbox[2] - bbox[0]
+    except Exception:
+        tw = len(texto) * 16
+
+    pad_x = 24
+    box_w = max(200, tw + pad_x * 2)
+    box_h = 76
+    box_x = 1080 - box_w - 30
+    box_y = 28
+
+    card = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
+    card_draw = ImageDraw.Draw(card)
+    card_draw.rounded_rectangle(
+        [(0, 0), (box_w - 1, box_h - 1)],
+        radius=16,
+        fill=(255, 255, 255, 252),
+        outline=color_acento,
+        width=3,
+    )
+
+    card_draw.text((box_w // 2, box_h // 2), texto, font=f_tienda, fill=(15, 23, 42), anchor="mm")
+    canvas.paste(card, (box_x, box_y), card)
+
+
 def componer_canvas_branding(
     img_producto: Image.Image,
     precio_str: str,
@@ -228,6 +264,7 @@ def componer_canvas_branding(
     paleta_nombre: str = "verde",
     tienda_str: str | None = None,
     es_importacion_usa: bool = False,
+    solo_texto_tienda: bool = False,
 ) -> Image.Image:
     """Compone la imagen final cuadrada 1080x1080 con marco, badges y logotipo compacto."""
     W, H = 1080, 1080
@@ -249,7 +286,10 @@ def componer_canvas_branding(
     pos_x = (W - new_w) // 2
     pos_y = 170 + (max_h - new_h) // 2
 
-    canvas.paste(prod_resized, (pos_x, pos_y), prod_resized)
+    if prod_resized.mode == "RGBA":
+        canvas.paste(prod_resized, (pos_x, pos_y), prod_resized)
+    else:
+        canvas.paste(prod_resized, (pos_x, pos_y))
 
     # 2. Marco perimetral decorativo
     b_th = 12
@@ -316,14 +356,22 @@ def componer_canvas_branding(
     else:
         draw.text((800, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="mm")
 
-    # 6. Logotipo oficial de la tienda en esquina superior derecha
+    # 6. Identificación de la tienda en esquina superior derecha
     if tienda_str:
-        _superponer_logo_tienda(canvas, tienda_str, color_acento)
+        if solo_texto_tienda:
+            _superponer_tienda_texto(canvas, tienda_str, color_acento)
+        else:
+            _superponer_logo_tienda(canvas, tienda_str, color_acento)
 
     return canvas
 
 
-def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeout: float = 4.0) -> bytes | None:
+def generar_tarjeta_branding_bytes(
+    deal: Deal,
+    paleta: str | None = None,
+    timeout: float = 4.0,
+    solo_texto_tienda: bool = False,
+) -> bytes | None:
     """Genera la imagen JPEG en memoria RAM con marco, precio y branding. Devuelve bytes o None."""
     if not debe_aplicar_branding(deal):
         return None
@@ -348,6 +396,7 @@ def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeou
             paleta_nombre=paleta,
             tienda_str=tienda_val,
             es_importacion_usa=es_usa,
+            solo_texto_tienda=solo_texto_tienda,
         )
 
         buf = io.BytesIO()
