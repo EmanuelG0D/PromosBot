@@ -84,26 +84,45 @@ def debe_aplicar_branding(deal: Deal) -> bool:
     return True
 
 
+def es_importacion_usa(deal: Deal) -> bool:
+    """Determina si la oferta proviene de tiendas de Estados Unidos o Slickdeals."""
+    if not deal:
+        return False
+    fuente = (deal.source or "").strip().lower()
+    pais = (deal.country or "").strip().upper()
+    return fuente == "slickdeals" or pais == "US"
+
+
 def formatear_precio_branding(deal: Deal) -> tuple[str, str]:
-    """Formatea el precio respetando estrictamente la moneda original (USD o COP)."""
+    """Formatea el precio respetando la moneda original (USD o COP) y la etiqueta de importación."""
     moneda = (deal.currency or "COP").upper()
     precio = deal.price or 0.0
+    es_usa = es_importacion_usa(deal)
 
     if moneda == "USD":
         if precio == int(precio):
             txt_precio = f"US$ {precio:,.0f}"
         else:
             txt_precio = f"US$ {precio:,.2f}"
-        sub_nota = "*OFERTA VERIFICADA"
+
+        if es_usa:
+            sub_nota = "*IMPORTACIÓN USA"
+        elif getattr(deal, "free_shipping_co", False):
+            sub_nota = "*ENVÍO GRATIS A COLOMBIA"
+        else:
+            sub_nota = "*OFERTA VERIFICADA"
     else:
         cop_val = round(precio)
         txt_precio = f"COP ${cop_val:,.0f}".replace(",", ".")
-        if getattr(deal, "free_shipping_co", False):
+        if es_usa:
+            sub_nota = "*IMPORTACIÓN USA"
+        elif getattr(deal, "free_shipping_co", False):
             sub_nota = "*ENVÍO GRATIS DIRECTO"
         else:
             sub_nota = "*OFERTA VERIFICADA"
 
     return txt_precio, sub_nota
+
 
 
 def descargar_foto_producto(url_foto: str, timeout: float = 4.0) -> Image.Image | None:
@@ -123,6 +142,7 @@ def descargar_foto_producto(url_foto: str, timeout: float = 4.0) -> Image.Image 
 
 
 MAPA_LOGOS = {
+    # Cadenas y Tiendas Principales
     "amazon": "assets/logos/amazon.png",
     "falabella": "assets/logos/falabella.png",
     "alkosto": "assets/logos/alkosto.png",
@@ -131,6 +151,25 @@ MAPA_LOGOS = {
     "mercadolibre": "assets/logos/mercadolibre.png",
     "mercado libre": "assets/logos/mercadolibre.png",
     "promocajita": "assets/logos/promocajita.png",
+    "ktronix": "assets/logos/ktronix.png",
+    "k-tronix": "assets/logos/ktronix.png",
+    "alkomprar": "assets/logos/alkomprar.png",
+    "homecenter": "assets/logos/homecenter.png",
+    "jumbo": "assets/logos/jumbo.png",
+    "carulla": "assets/logos/carulla.png",
+    "olimpica": "assets/logos/olimpica.png",
+    "olímpica": "assets/logos/olimpica.png",
+    "ebay": "assets/logos/ebay.png",
+    # Marcas Deportivas y Moda
+    "puma": "assets/logos/puma.png",
+    "adidas": "assets/logos/adidas.png",
+    "nike": "assets/logos/nike.png",
+    "koaj": "assets/logos/koaj.png",
+    "totto": "assets/logos/totto.png",
+    "arturocalle": "assets/logos/arturocalle.png",
+    "arturo calle": "assets/logos/arturocalle.png",
+    # Electrohogar
+    "imusa": "assets/logos/imusa.png",
 }
 
 
@@ -188,6 +227,7 @@ def componer_canvas_branding(
     nota_sub_precio: str = "*OFERTA VERIFICADA",
     paleta_nombre: str = "verde",
     tienda_str: str | None = None,
+    es_importacion_usa: bool = False,
 ) -> Image.Image:
     """Compone la imagen final cuadrada 1080x1080 con marco, badges y logotipo compacto."""
     W, H = 1080, 1080
@@ -256,13 +296,25 @@ def componer_canvas_branding(
     f_precio = _obtener_fuente(64, bold=True)
     draw.text((690, 870), precio_str, font=f_precio, fill=(255, 255, 255), anchor="mm")
 
-    # Sub-badge debajo del precio
-    pts_sub = [(630, 940), (990, 940), (975, 1000), (615, 1000)]
+    # Sub-badge debajo del precio (con soporte para bandera USA en importaciones)
+    pts_sub = [(610, 940), (990, 940), (975, 1000), (595, 1000)]
     draw.polygon(pts_sub, fill=(15, 15, 15))
     draw.line(pts_sub + [pts_sub[0]], fill=color_acento, width=3)
 
     f_sub = _obtener_fuente(22, bold=True)
-    draw.text((800, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="mm")
+    ruta_bandera = "assets/logos/bandera_usa.png"
+    if es_importacion_usa and os.path.exists(ruta_bandera):
+        try:
+            bandera = Image.open(ruta_bandera).convert("RGBA")
+            bw, bh = 32, 20
+            bandera_res = bandera.resize((bw, bh), Image.Resampling.LANCZOS)
+            canvas.paste(bandera_res, (640, 960), bandera_res)
+            draw.rectangle([(640, 960), (640 + bw - 1, 960 + bh - 1)], outline=(200, 200, 200), width=1)
+            draw.text((682, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="lm")
+        except Exception:
+            draw.text((795, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="mm")
+    else:
+        draw.text((800, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="mm")
 
     # 6. Logotipo oficial de la tienda en esquina superior derecha
     if tienda_str:
@@ -287,6 +339,7 @@ def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeou
             paleta = NOMBRES_PALETAS[idx]
 
         precio_str, nota_sub = formatear_precio_branding(deal)
+        es_usa = es_importacion_usa(deal)
         tienda_val = getattr(deal, "store", None) or getattr(deal, "source", None)
         canvas = componer_canvas_branding(
             foto,
@@ -294,6 +347,7 @@ def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeou
             nota_sub,
             paleta_nombre=paleta,
             tienda_str=tienda_val,
+            es_importacion_usa=es_usa,
         )
 
         buf = io.BytesIO()
@@ -302,4 +356,5 @@ def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeou
     except Exception as exc:
         print(f"  [branding] aviso: no se pudo generar tarjeta con marco ({exc})")
         return None
+
 
