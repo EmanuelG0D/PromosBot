@@ -4157,6 +4157,99 @@ class PruebaFotosLimpiasCatalogo(unittest.TestCase):
             self.assertIsNone(foto)
 
 
+class PruebaBrandingMotor(unittest.TestCase):
+    """Pruebas del generador de marcos, branding e identidad visual para ofertas."""
+
+    def test_debe_aplicar_branding_reglas(self):
+        from core import branding
+        from core.models import Deal
+
+        # 1. DescuentosTech DEBE ser excluido
+        dt = Deal(source="descuentostech", store="DescuentosTech", country="CO",
+                  key="dt:1", title="RAM", url="http://link", price=100000.0,
+                  currency="COP", image="http://img.com/foto.jpg")
+        self.assertFalse(branding.debe_aplicar_branding(dt))
+
+        # 2. PromoHunter con imagen y precio -> SÍ aplica
+        ph = Deal(source="promohunter", store="Amazon", country="CO",
+                  key="ph:1", title="Audífonos", url="http://link", price=50000.0,
+                  currency="COP", image="http://img.com/foto.jpg")
+        self.assertTrue(branding.debe_aplicar_branding(ph))
+
+        # 3. Promocajita con imagen y precio -> SÍ aplica
+        pc = Deal(source="promocajita", store="PROMOCAJITA", country="CO",
+                  key="pc:1", title="Smart TV", url="http://link", price=1200000.0,
+                  currency="COP", image="http://img.com/tv.webp")
+        self.assertTrue(branding.debe_aplicar_branding(pc))
+
+        # 4. Tiendas nacionales (Alkosto, Falabella) -> SÍ aplica
+        ak = Deal(source="alkosto", store="Alkosto", country="CO",
+                  key="ak:1", title="Nevera", url="http://link", price=1500000.0,
+                  currency="COP", image="http://img.com/nevera.jpg")
+        self.assertTrue(branding.debe_aplicar_branding(ak))
+
+        # 5. Sin imagen o sin precio -> NO aplica
+        sin_img = Deal(source="alkosto", store="Alkosto", country="CO",
+                       key="ak:2", title="Nevera", url="http://link", price=1500000.0,
+                       currency="COP", image=None)
+        self.assertFalse(branding.debe_aplicar_branding(sin_img))
+
+        sin_precio = Deal(source="alkosto", store="Alkosto", country="CO",
+                          key="ak:3", title="Nevera", url="http://link", price=0.0,
+                          currency="COP", image="http://img.com/nevera.jpg")
+        self.assertFalse(branding.debe_aplicar_branding(sin_precio))
+
+    def test_formatear_precio_branding_respeta_moneda(self):
+        from core import branding
+        from core.models import Deal
+
+        # Caso USD: debe mostrarse en dólares sin convertir a pesos
+        d_usd = Deal(source="promohunter", store="Amazon", country="US",
+                     key="u:1", title="Item", url="http://link", price=12.0,
+                     currency="USD", image="http://img.com/foto.jpg")
+        precio_txt, _ = branding.formatear_precio_branding(d_usd)
+        self.assertIn("US$", precio_txt)
+        self.assertIn("12", precio_txt)
+        self.assertNotIn("COP", precio_txt)
+
+        # Caso COP: debe mostrarse en pesos colombianos formateados
+        d_cop = Deal(source="alkosto", store="Alkosto", country="CO",
+                     key="c:1", title="Item", url="http://link", price=120088.0,
+                     currency="COP", image="http://img.com/foto.jpg")
+        precio_txt, _ = branding.formatear_precio_branding(d_cop)
+        self.assertIn("COP", precio_txt)
+        self.assertIn("120.088", precio_txt)
+
+    def test_generar_tarjeta_branding_bytes_exito(self):
+        from unittest.mock import MagicMock, patch
+        from core import branding
+        from core.models import Deal
+        from PIL import Image
+
+        deal = Deal(source="promohunter", store="Amazon", country="CO",
+                    key="ph:10", title="Mouse Gamer", url="http://link", price=89900.0,
+                    currency="COP", image="http://img.com/mouse.jpg")
+
+        img_mock = Image.new("RGBA", (500, 500), (255, 255, 255, 255))
+        with patch("core.branding.descargar_foto_producto", return_value=img_mock):
+            bytes_res = branding.generar_tarjeta_branding_bytes(deal)
+            self.assertIsNotNone(bytes_res)
+            self.assertTrue(bytes_res.startswith(b"\xff\xd8\xff"))  # Encabezado JPEG
+
+    def test_generar_tarjeta_branding_bytes_fallback_none(self):
+        from unittest.mock import patch
+        from core import branding
+        from core.models import Deal
+
+        deal = Deal(source="promohunter", store="Amazon", country="CO",
+                    key="ph:11", title="Mouse Gamer", url="http://link", price=89900.0,
+                    currency="COP", image="http://img.com/mouse.jpg")
+
+        with patch("core.branding.descargar_foto_producto", return_value=None):
+            bytes_res = branding.generar_tarjeta_branding_bytes(deal)
+            self.assertIsNone(bytes_res)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

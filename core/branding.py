@@ -1,0 +1,232 @@
+"""Motor de generación de plantillas gráficas de marca (1080x1080) para ofertas.
+
+Aplica a todas las ofertas con imagen limpia (tiendas nacionales, PromoHunter y Promocajita).
+Excluye automáticamente a DescuentosTech para preservar su formato nativo.
+Respeta la moneda original de la oferta (USD o COP) sin conversiones forzadas.
+Rota los colores dinámicamente entre Verde Neón, Azul Eléctrico y Naranja Fuego.
+"""
+from __future__ import annotations
+
+import hashlib
+import io
+import math
+import os
+import urllib.request
+from PIL import Image, ImageDraw, ImageFont
+
+from core.models import Deal
+
+PALETAS = {
+    "verde": {
+        "acento": (34, 197, 94),      # Verde neón esmeralda
+        "badge": (15, 23, 20),        # Negro verdoso
+        "estrella": (250, 204, 21),   # Dorado
+    },
+    "azul": {
+        "acento": (14, 165, 233),     # Azul eléctrico / Cyan
+        "badge": (11, 19, 36),        # Negro azulado profundo
+        "estrella": (56, 189, 248),   # Celeste brillante
+    },
+    "naranja": {
+        "acento": (249, 115, 22),     # Naranja fuego
+        "badge": (24, 15, 12),        # Negro carbón cálido
+        "estrella": (251, 191, 36),   # Amarillo ámbar
+    },
+}
+
+NOMBRES_PALETAS = ("verde", "azul", "naranja")
+
+
+def _obtener_fuente(tamano: int, bold: bool = True) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
+    """Busca fuentes robustas compatibles en Windows y Linux (Render)."""
+    candidatas = [
+        "C:/Windows/Fonts/seguibl.ttf",
+        "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "arialbd.ttf" if bold else "arial.ttf",
+    ]
+    for ruta in candidatas:
+        if os.path.exists(ruta):
+            try:
+                return ImageFont.truetype(ruta, tamano)
+            except Exception:
+                continue
+    try:
+        return ImageFont.load_default(size=tamano)
+    except Exception:
+        return ImageFont.load_default()
+
+
+def _dibujar_estrella(draw: ImageDraw.ImageDraw, cx: float, cy: float, radio: float, color: tuple[int, int, int]) -> None:
+    """Dibuja una estrella estilizada de 4 puntas idéntica a la referencia de diseño."""
+    puntos = []
+    for i in range(8):
+        ang = i * math.pi / 4.0 - math.pi / 2.0
+        r = radio if i % 2 == 0 else radio * 0.28
+        puntos.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
+    draw.polygon(puntos, fill=color)
+
+
+def debe_aplicar_branding(deal: Deal) -> bool:
+    """Determina si la oferta califica para generar la tarjeta gráfica con marco."""
+    if not deal or not getattr(deal, "image", None) or not deal.image.startswith("http"):
+        return False
+    if not getattr(deal, "price", None) or deal.price <= 0:
+        return False
+    # Exclusión estricta de DescuentosTech (ya traen su propio marco nativo)
+    fuente = (deal.source or "").strip().lower()
+    tienda = (deal.store or "").strip().lower()
+    if "descuentostech" in fuente or "descuentostech" in tienda:
+        return False
+    return True
+
+
+def formatear_precio_branding(deal: Deal) -> tuple[str, str]:
+    """Formatea el precio respetando estrictamente la moneda original (USD o COP)."""
+    moneda = (deal.currency or "COP").upper()
+    precio = deal.price or 0.0
+
+    if moneda == "USD":
+        if precio == int(precio):
+            txt_precio = f"US$ {precio:,.0f}"
+        else:
+            txt_precio = f"US$ {precio:,.2f}"
+        sub_nota = "*OFERTA VERIFICADA"
+    else:
+        cop_val = round(precio)
+        txt_precio = f"COP ${cop_val:,.0f}".replace(",", ".")
+        if getattr(deal, "free_shipping_co", False):
+            sub_nota = "*ENVÍO GRATIS DIRECTO"
+        else:
+            sub_nota = "*OFERTA VERIFICADA"
+
+    return txt_precio, sub_nota
+
+
+def descargar_foto_producto(url_foto: str, timeout: float = 4.0) -> Image.Image | None:
+    """Descarga la imagen del producto a memoria RAM para procesarla."""
+    if not url_foto or not url_foto.startswith("http"):
+        return None
+    try:
+        req = urllib.request.Request(
+            url_foto,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+            return Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception:
+        return None
+
+
+def componer_canvas_branding(
+    img_producto: Image.Image,
+    precio_str: str,
+    nota_sub_precio: str = "*OFERTA VERIFICADA",
+    paleta_nombre: str = "verde",
+) -> Image.Image:
+    """Compone la imagen final cuadrada 1080x1080 con marco, badges y logotipo compacto."""
+    W, H = 1080, 1080
+    canvas = Image.new("RGB", (W, H), (255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    colores = PALETAS.get(paleta_nombre, PALETAS["verde"])
+    color_acento = colores["acento"]
+    color_badge = colores["badge"]
+    color_estrella = colores["estrella"]
+
+    # 1. Centrar producto sobre fondo blanco (área útil: 800x620)
+    max_w, max_h = 800, 620
+    ratio = min(max_w / img_producto.width, max_h / img_producto.height)
+    new_w = max(1, int(img_producto.width * ratio))
+    new_h = max(1, int(img_producto.height * ratio))
+    prod_resized = img_producto.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    pos_x = (W - new_w) // 2
+    pos_y = 170 + (max_h - new_h) // 2
+
+    canvas.paste(prod_resized, (pos_x, pos_y), prod_resized)
+
+    # 2. Marco perimetral decorativo
+    b_th = 12
+    draw.line([(0, b_th // 2), (W, b_th // 2)], fill=color_acento, width=b_th)
+    draw.line([(0, H - b_th // 2), (W, H - b_th // 2)], fill=color_acento, width=b_th)
+    draw.line([(b_th // 2, 0), (b_th // 2, H)], fill=color_acento, width=b_th)
+    draw.line([(W - b_th // 2, 0), (W - b_th // 2, H)], fill=color_acento, width=b_th)
+
+    # 3. Badge Superior Izquierdo: "POR SÓLO"
+    pts_top = [(0, 0), (330, 0), (280, 150), (0, 180)]
+    draw.polygon(pts_top, fill=color_badge)
+    draw.line(pts_top + [pts_top[0]], fill=color_acento, width=7)
+
+    _dibujar_estrella(draw, 45, 120, 24, color_estrella)
+    _dibujar_estrella(draw, 275, 45, 24, color_estrella)
+
+    f_porsolo = _obtener_fuente(36, bold=True)
+    draw.text((155, 80), "POR SÓLO", font=f_porsolo, fill=(255, 255, 255), anchor="mm")
+
+    # 4. Badge Inferior Izquierdo: Branding "RADAR PROMOS" (compacto y sin enlace)
+    pts_brand = [(0, 930), (280, 930), (320, 1080), (0, 1080)]
+    draw.polygon(pts_brand, fill=color_badge)
+    draw.line(pts_brand + [pts_brand[0]], fill=color_acento, width=6)
+
+    f_b1 = _obtener_fuente(26, bold=True)
+    f_b2 = _obtener_fuente(40, bold=True)
+    draw.text((30, 960), "RADAR", font=f_b1, fill=color_acento)
+    draw.text((30, 995), "PROMOS", font=f_b2, fill=(255, 255, 255))
+
+    # 5. Badge Inferior Derecho: PRECIO DESTACADO
+    shadow_offset = 6
+    pts_price_s = [
+        (430 + shadow_offset, 810 + shadow_offset),
+        (990 + shadow_offset, 810 + shadow_offset),
+        (960 + shadow_offset, 930 + shadow_offset),
+        (400 + shadow_offset, 930 + shadow_offset),
+    ]
+    draw.polygon(pts_price_s, fill=(200, 200, 200))
+
+    pts_price = [(430, 810), (990, 810), (960, 930), (400, 930)]
+    draw.polygon(pts_price, fill=color_badge)
+    draw.line(pts_price + [pts_price[0]], fill=(30, 30, 30), width=4)
+
+    f_precio = _obtener_fuente(64, bold=True)
+    draw.text((690, 870), precio_str, font=f_precio, fill=(255, 255, 255), anchor="mm")
+
+    # Sub-badge debajo del precio
+    pts_sub = [(630, 940), (990, 940), (975, 1000), (615, 1000)]
+    draw.polygon(pts_sub, fill=(15, 15, 15))
+    draw.line(pts_sub + [pts_sub[0]], fill=color_acento, width=3)
+
+    f_sub = _obtener_fuente(22, bold=True)
+    draw.text((800, 970), nota_sub_precio, font=f_sub, fill=(255, 255, 255), anchor="mm")
+
+    return canvas
+
+
+def generar_tarjeta_branding_bytes(deal: Deal, paleta: str | None = None, timeout: float = 4.0) -> bytes | None:
+    """Genera la imagen JPEG en memoria RAM con marco, precio y branding. Devuelve bytes o None."""
+    if not debe_aplicar_branding(deal):
+        return None
+
+    try:
+        foto = descargar_foto_producto(deal.image, timeout=timeout)
+        if not foto:
+            return None
+
+        # Selección de color: si no se especifica, se rota de forma determinista mediante el hash de la oferta
+        if not paleta:
+            idx = int(hashlib.md5((deal.key or deal.url or deal.title).encode("utf-8")).hexdigest(), 16) % len(NOMBRES_PALETAS)
+            paleta = NOMBRES_PALETAS[idx]
+
+        precio_str, nota_sub = formatear_precio_branding(deal)
+        canvas = componer_canvas_branding(foto, precio_str, nota_sub, paleta_nombre=paleta)
+
+        buf = io.BytesIO()
+        canvas.save(buf, format="JPEG", quality=95)
+        return buf.getvalue()
+    except Exception as exc:
+        print(f"  [branding] aviso: no se pudo generar tarjeta con marco ({exc})")
+        return None

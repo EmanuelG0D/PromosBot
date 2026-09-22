@@ -8,7 +8,7 @@ import re
 import time
 
 import config
-from core import http
+from core import http, branding
 from core.landed import Landed
 from core.models import Deal
 from core.scoring import Verdict
@@ -190,9 +190,9 @@ def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None,
     return bool(respuesta.get("ok"))
 
 
-def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None,
+def _foto_subida(foto: str | bytes, pie: str, chat_id: int | str | None = None,
                  reply_markup: dict | None = None) -> bool:
-    """Baja la imagen y la sube como archivo.
+    """Baja la imagen (o usa los bytes provistos) y la sube como archivo.
 
     Hay CDN de tienda que no responden a los servidores de Telegram aunque
     desde aqui carguen perfecto: media.falabella.com.co devuelve un JPEG de
@@ -203,7 +203,10 @@ def _foto_subida(foto: str, pie: str, chat_id: int | str | None = None,
     de la pausa de 3.5s que igual hay entre mensajes.
     """
     url = API.format(token=config.TELEGRAM_BOT_TOKEN, method="sendPhoto")
-    imagen = http.descargar(foto, retries=1)
+    if isinstance(foto, (bytes, bytearray)):
+        imagen = bytes(foto)
+    else:
+        imagen = http.descargar(foto, retries=1)
     destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
 
     # Si la imagen no es un formato estandar directo (ej. AVIF de K-tronix),
@@ -276,8 +279,17 @@ def enviar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
 
     es_privado = chat_id is not None and str(chat_id) != str(config.TELEGRAM_CHAT_ID)
     pie = _pie_de_foto(deal, verdict, landed, veracidad, es_privado=es_privado)
-    if deal.image and _enviar_foto(deal.image, pie, chat_id=chat_id, reply_markup=reply_markup):
-        return "foto"
+    if deal.image:
+        if branding.debe_aplicar_branding(deal):
+            try:
+                foto_branding = branding.generar_tarjeta_branding_bytes(deal)
+                if foto_branding and _foto_subida(foto_branding, pie, chat_id=chat_id, reply_markup=reply_markup):
+                    return "foto"
+            except Exception as exc:
+                print(f"  [telegram] aviso: error generando foto brandeada ({exc}), usando original")
+
+        if _enviar_foto(deal.image, pie, chat_id=chat_id, reply_markup=reply_markup):
+            return "foto"
 
     return "texto" if send(render(deal, verdict, landed, veracidad, es_privado=es_privado), preview=True,
                            reply_markup=reply_markup, chat_id=chat_id) else ""

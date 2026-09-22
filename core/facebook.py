@@ -22,6 +22,7 @@ import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 
 import config
+from core import branding
 from core.landed import Landed
 from core.models import Deal
 from core.scoring import Verdict
@@ -352,9 +353,23 @@ def verificar_conexion() -> dict:
 
 # --- SUBIDA DE MEDIOS Y PUBLICACIÓN GRAPH API ------------------------------
 
-def subir_foto_oculta(url_imagen: str) -> str | None:
+def subir_foto_oculta(url_imagen: str, deal: Deal | None = None) -> str | None:
     """Sube una foto a Meta como 'published=false' para obtener media_fbid y adjuntarla en carrusel."""
-    if not configurado() or not url_imagen or not url_imagen.startswith("http"):
+    if not configurado():
+        return None
+
+    # Intentar subir la versión con branding si la oferta califica
+    if deal is not None and branding.debe_aplicar_branding(deal):
+        try:
+            foto_bytes = branding.generar_tarjeta_branding_bytes(deal)
+            if foto_bytes:
+                photo_id = subir_foto_historia_binario(foto_bytes)
+                if photo_id:
+                    return photo_id
+        except Exception as exc:
+            print(f"  [facebook] aviso: error generando foto brandeada ({exc}), usando original")
+
+    if not url_imagen or not url_imagen.startswith("http"):
         return None
     page_id = config.FB_PAGE_ID
     token = _obtener_page_token()
@@ -491,7 +506,7 @@ def procesar_cola(limite: int = 4, base_url: str | None = None) -> dict:
         media_ids = []
         for d in deals:
             if d.image:
-                m_id = subir_foto_oculta(d.image)
+                m_id = subir_foto_oculta(d.image, deal=d)
                 if m_id:
                     media_ids.append(m_id)
 
