@@ -644,6 +644,26 @@ class Manejador(BaseHTTPRequestHandler):
             self._responder(200, {"ok": True, "resultado": res})
             return
 
+        if ruta.path == "/debug_post":
+            token = facebook._obtener_page_token()
+            qs = parse_qs(ruta.query)
+            post_id = qs.get("id", ["234499896420989_122329259648241646"])[0]
+            url = f"https://graph.facebook.com/v20.0/{post_id}?fields=id,is_published,privacy,status_type,message,permalink_url,created_time&access_token={token}"
+            url_posts = f"https://graph.facebook.com/v20.0/{config.FB_PAGE_ID}/posts?fields=id,is_published,message,created_time,permalink_url&limit=5&access_token={token}"
+            res_debug = {}
+            try:
+                with urllib.request.urlopen(url, timeout=10) as resp:
+                    res_debug["post"] = json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                res_debug["post_error"] = str(e)
+            try:
+                with urllib.request.urlopen(url_posts, timeout=10) as resp:
+                    res_debug["ultimos_posts_pagina"] = json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                res_debug["ultimos_posts_error"] = str(e)
+            self._responder(200, res_debug)
+            return
+
         if ruta.path in ("/run_historia", "/run_story"):
             if RUN_TOKEN:
                 enviado = parse_qs(ruta.query).get("token", [""])[0]
