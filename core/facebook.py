@@ -563,13 +563,21 @@ def procesar_cola(limite: int = 4, base_url: str | None = None, forzar: bool = F
                 "contador_previo": contador_promos,
             }
 
-        # 2. Tomar ofertas pendientes con regla estricta: mínimo 2, jamás 3, máximo 4
+        # 2. Tomar ofertas pendientes con regla estricta: 1, 2 o 4 (NUNCA 3 ni más de 4)
         pendientes = store.obtener_cola_facebook(limite=limite)
         total = len(pendientes)
-        if not forzar and total < 2:
-            return {"ok": True, "tipo": "esperando_minimo", "items": total}
+        if not forzar and total == 0:
+            return {"ok": True, "tipo": "cola_vacia", "items": 0}
 
-        tamano_lote = min(limite, total) if forzar else (4 if total >= 4 else 2)
+        if forzar:
+            tamano_lote = min(limite, total)
+        elif total >= 4:
+            tamano_lote = 4
+        elif total == 3:
+            tamano_lote = 2  # Prohibido 3: publicamos 2 y la tercera espera
+        else:
+            tamano_lote = total  # 1 o 2
+
         items = pendientes[:tamano_lote]
         hash_ids = [it[0] for it in items]
         deals = [it[1] for it in items]

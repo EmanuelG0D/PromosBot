@@ -3916,21 +3916,13 @@ class PruebaCuposPorTienda(unittest.TestCase):
                 if pendientes:
                     store.remover_de_cola_facebook([h for h, _ in pendientes])
 
-            # Encolar 1 oferta: debe esperar porque el mínimo es 2
+            # Encolar 1 oferta: se acepta y publica individualmente
             h1 = facebook.encolar_oferta(d)
             self.assertIsNotNone(h1)
             res1 = facebook.procesar_cola(limite=4, base_url="https://test.render.com")
-            self.assertEqual(res1.get("tipo"), "esperando_minimo")
-
-            # Encolar 2da oferta: ahora sí debe despachar el lote de 2
-            d2 = oferta(source="amazon", store="Amazon", key="k_d2", title="Mouse Gamer", price=80000.0, image="https://amazon.com/mouse.jpg")
-            h2 = facebook.encolar_oferta(d2)
-            self.assertIsNotNone(h2)
-
-            res2 = facebook.procesar_cola(limite=4, base_url="https://test.render.com")
-            self.assertTrue(res2.get("ok"))
-            self.assertEqual(res2.get("post_id"), "post_789_123")
-            self.assertEqual(res2.get("deals_count"), 2)
+            self.assertTrue(res1.get("ok"))
+            self.assertEqual(res1.get("post_id"), "post_789_123")
+            self.assertEqual(res1.get("deals_count"), 1)
 
     def test_facebook_regla_camuflaje_5_a_1(self):
         from unittest.mock import patch, MagicMock
@@ -4141,7 +4133,7 @@ class PruebaFacebookHistorias(unittest.TestCase):
             store.set_meta("fb_historia_ultimo_ts", hace_2h.isoformat())
             self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=5, min_horas_espaciado=2.0))
 
-    def test_facebook_regla_lotes_min2_no3_max4(self):
+    def test_facebook_regla_lotes_1_2_o_4_nunca_3_ni_mas_de_4(self):
         from unittest.mock import patch, MagicMock
         from core import facebook
         from core.store import Store
@@ -4158,24 +4150,29 @@ class PruebaFacebookHistorias(unittest.TestCase):
                 store.conn.execute("DELETE FROM facebook_cola")
                 store.conn.commit()
 
-                # Caso 1: 1 oferta en cola -> DEBE esperar (mínimo 2)
+                # Caso 1: 1 oferta en cola -> SÍ se acepta y publica 1
                 d1 = oferta(source="amazon", store="Amazon", key="k_lot_1", title="Oferta 1", price=10000.0, url="http://l1")
                 facebook.encolar_oferta(d1)
                 res1 = facebook.procesar_cola(limite=4)
-                self.assertEqual(res1.get("tipo"), "esperando_minimo")
+                self.assertTrue(res1.get("ok"))
+                self.assertEqual(res1.get("deals_count"), 1)
 
-                # Caso 2: 2 ofertas en cola -> DEBE publicar 2
-                d2 = oferta(source="amazon", store="Amazon", key="k_lot_2", title="Oferta 2", price=20000.0, url="http://l2")
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+
+                # Caso 2: 2 ofertas en cola -> SÍ se acepta y publica 2
+                d1 = oferta(source="amazon", store="Amazon", key="k_lot_1b", title="Oferta 1", price=10000.0, url="http://l1b")
+                d2 = oferta(source="amazon", store="Amazon", key="k_lot_2b", title="Oferta 2", price=20000.0, url="http://l2b")
+                facebook.encolar_oferta(d1)
                 facebook.encolar_oferta(d2)
                 res2 = facebook.procesar_cola(limite=4)
                 self.assertTrue(res2.get("ok"))
                 self.assertEqual(res2.get("deals_count"), 2)
 
-                # Cola quedó vacía
                 store.conn.execute("DELETE FROM facebook_cola")
                 store.conn.commit()
 
-                # Caso 3: 3 ofertas en cola -> DEBE publicar 2 y dejar 1 pendiente (NO acepta 3)
+                # Caso 3: 3 ofertas en cola -> DEBE publicar 2 y dejar 1 pendiente (NUNCA 3)
                 for i in range(1, 4):
                     d = oferta(source="amazon", store="Amazon", key=f"k_lot3_{i}", title=f"Oferta {i}", price=10000.0 * i, url=f"http://l{i}")
                     facebook.encolar_oferta(d)
@@ -4183,7 +4180,7 @@ class PruebaFacebookHistorias(unittest.TestCase):
 
                 res3 = facebook.procesar_cola(limite=4)
                 self.assertTrue(res3.get("ok"))
-                self.assertEqual(res3.get("deals_count"), 2)  # Publicó exactamente 2, NUNCA 3
+                self.assertEqual(res3.get("deals_count"), 2)  # Publicó 2, NUNCA 3
 
                 # Debe quedar exactamente 1 pendiente en la cola
                 pendientes = store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0]
@@ -4192,7 +4189,7 @@ class PruebaFacebookHistorias(unittest.TestCase):
                 store.conn.execute("DELETE FROM facebook_cola")
                 store.conn.commit()
 
-                # Caso 4: 4 ofertas en cola -> DEBE publicar 4
+                # Caso 4: 4 ofertas en cola -> SÍ se acepta y publica 4
                 for i in range(1, 5):
                     d = oferta(source="amazon", store="Amazon", key=f"k_lot4_{i}", title=f"Oferta {i}", price=10000.0 * i, url=f"http://l{i}")
                     facebook.encolar_oferta(d)
@@ -4201,6 +4198,19 @@ class PruebaFacebookHistorias(unittest.TestCase):
                 res4 = facebook.procesar_cola(limite=4)
                 self.assertTrue(res4.get("ok"))
                 self.assertEqual(res4.get("deals_count"), 4)  # Máximo 4
+                self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0], 0)
+
+                # Caso 5: 5 ofertas -> la 5ta se rechaza por tope de cola y se publican 4
+                for i in range(1, 5):
+                    d = oferta(source="amazon", store="Amazon", key=f"k_lot5_{i}", title=f"Oferta {i}", price=10000.0 * i, url=f"http://l5_{i}")
+                    facebook.encolar_oferta(d)
+                d5 = oferta(source="amazon", store="Amazon", key="k_lot5_5", title="Oferta 5", price=50000.0, url="http://l5_5")
+                h5 = facebook.encolar_oferta(d5)
+                self.assertIsNone(h5)  # Cola llena a 4
+
+                res5 = facebook.procesar_cola(limite=4)
+                self.assertTrue(res5.get("ok"))
+                self.assertEqual(res5.get("deals_count"), 4)  # Máximo 4
                 self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0], 0)
 
     def test_publicar_historia_flujo_mock(self):
