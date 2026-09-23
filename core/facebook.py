@@ -15,6 +15,7 @@ import io
 import json
 import os
 import random
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -522,9 +523,11 @@ def publicar_via_make(texto: str, foto_url: str | None = None, enlace: str | Non
     webhook_url = getattr(config, "FB_MAKE_WEBHOOK_URL", "")
     if not webhook_url:
         return None
+    # Si no hay foto_url (ej. post de camuflaje), usar imagen de soporte limpia para no fallar en el módulo de fotos
+    foto_final = (foto_url or "").strip() or "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1080"
     payload = {
         "mensaje": texto,
-        "foto_url": foto_url or "",
+        "foto_url": foto_final,
         "enlace": enlace or "",
         "comentario": comentario or "",
     }
@@ -637,8 +640,11 @@ def procesar_cola(limite: int = 4, base_url: str | None = None, forzar: bool = F
         comentario_texto = render_comentario_links(items, base_url=base_url)
 
         if getattr(config, "FB_MAKE_WEBHOOK_URL", ""):
+            texto_make = texto_post
+            if len(deals) > 1 and comentario_texto:
+                texto_make = f"{texto_post}\n\n{comentario_texto}"
             post_id = publicar_via_make(
-                texto=texto_post,
+                texto=texto_make,
                 foto_url=foto_url,
                 enlace=enlace_url,
                 comentario=comentario_texto,

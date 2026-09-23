@@ -49,6 +49,8 @@ services:
         sync: false
       - key: FB_ENABLED
         value: "true"
+      - key: FB_MAKE_WEBHOOK_URL
+        value: "https://hook.us2.make.com/f8mxw7hhwd36rpupqexok6yeq73qgpin"
 
       - key: PYTHONUNBUFFERED
         value: "1"
