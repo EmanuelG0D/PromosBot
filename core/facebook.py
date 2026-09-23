@@ -632,23 +632,42 @@ def procesar_cola(limite: int = 4, base_url: str | None = None, forzar: bool = F
             texto_post = render_individual(deals[0], hash_id=hash_ids[0], base_url=base_url)
         else:
             texto_post = render_agrupado(items, base_url=base_url)
+        comentario_texto = render_comentario_links(items, base_url=base_url)
 
         # 5. Publicar en feed (Prioridad 1: Make Webhook para visibilidad pública)
         post_id = None
-        foto_url = deals[0].image if deals and deals[0].image else None
-        enlace_url = deals[0].url if deals else None
-        comentario_texto = render_comentario_links(items, base_url=base_url)
+        base_endpoint = (base_url or DOMINIO_DEFAULT).rstrip("/")
 
         if getattr(config, "FB_MAKE_WEBHOOK_URL", ""):
-            texto_make = texto_post
-            if len(deals) > 1 and comentario_texto:
-                texto_make = f"{texto_post}\n\n{comentario_texto}"
-            post_id = publicar_via_make(
-                texto=texto_make,
-                foto_url=foto_url,
-                enlace=enlace_url,
-                comentario=comentario_texto,
-            )
+            publicados_count = 0
+            ultimo_pid = None
+            for hash_id, d in items:
+                texto_indiv = render_individual(d, hash_id=hash_id, base_url=base_url)
+                # URL de la imagen con marco oficial generada por Render:
+                foto_con_marco = f"{base_endpoint}/foto/{hash_id}.jpg" if d.image else None
+                pid = publicar_via_make(
+                    texto=texto_indiv,
+                    foto_url=foto_con_marco or d.image,
+                    enlace=d.url,
+                )
+                if pid:
+                    publicados_count += 1
+                    ultimo_pid = pid
+                    store.remover_de_cola_facebook([hash_id])
+                    store.facebook_incrementar_promos()
+
+            if publicados_count > 0:
+                _TELEMETRIA["publicados"] += publicados_count
+                _TELEMETRIA["lotes"] = _TELEMETRIA.get("lotes", 0) + 1
+                _TELEMETRIA["ultimo_exito"] = dt.datetime.now(dt.timezone.utc).isoformat()
+                _TELEMETRIA["ultima_oferta"] = deals[0].title[:40]
+                return {
+                    "ok": True,
+                    "tipo": "individual" if publicados_count == 1 else "lote",
+                    "post_id": ultimo_pid,
+                    "deals_count": publicados_count,
+                    "promos_desde_camuflaje": store.facebook_contador_promos(),
+                }
 
         # Fallback a Graph API directa si Make no está configurado o falló:
         if not post_id:

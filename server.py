@@ -713,7 +713,49 @@ class Manejador(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/run_fb", "/ir/{id}", RUTA_WEBHOOK]})
+        if ruta.path.startswith("/foto/") or ruta.path.startswith("/card/"):
+            nombre_archivo = ruta.path.split("/")[-1]
+            id_oferta = nombre_archivo.split(".")[0].strip()
+            if not id_oferta:
+                self._responder(400, {"error": "id de oferta requerido"})
+                return
+
+            with Store() as store:
+                deal = store.obtener_deal_reciente(id_oferta)
+
+            if not deal:
+                self._responder(404, {"error": "oferta no encontrada"})
+                return
+
+            from core import branding
+            foto_bytes = None
+            try:
+                if branding.debe_aplicar_branding(deal):
+                    foto_bytes = branding.generar_tarjeta_branding_bytes(deal, solo_texto_tienda=True)
+            except Exception as exc_brand:
+                log(f"error generando tarjeta branding ({id_oferta}): {exc_brand}")
+
+            if not foto_bytes and deal.image:
+                try:
+                    req_img = urllib.request.Request(deal.image, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req_img, timeout=8) as resp_img:
+                        foto_bytes = resp_img.read()
+                except Exception as exc_img:
+                    log(f"error descargando imagen original ({id_oferta}): {exc_img}")
+
+            if not foto_bytes:
+                self._responder(404, {"error": "imagen no disponible"})
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(foto_bytes)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(foto_bytes)
+            return
+
+        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/run_fb", "/ir/{id}", "/foto/{id}.jpg", RUTA_WEBHOOK]})
 
     def do_POST(self) -> None:  # noqa: N802  (lo exige BaseHTTPRequestHandler)
         # El cuerpo se lee SIEMPRE y antes de decidir nada. Responder sin

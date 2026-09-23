@@ -3975,6 +3975,35 @@ class PruebaCuposPorTienda(unittest.TestCase):
         manejador.send_response.assert_called_with(302)
         manejador.send_header.assert_any_call("Location", "https://t.me/PromosOn_bot?start=deal_abc123")
 
+    def test_server_endpoint_foto_branding_200(self):
+        import server
+        from unittest.mock import MagicMock, patch
+        from core.models import Deal
+        from core.store import Store
+
+        d = Deal(
+            key="test_deal_img_1", source="falabella", store="Falabella", country="CO",
+            title="Tenis Deportivos Hombre", price=199900.0, list_price=399900.0,
+            currency="COP", url="https://falabella.com.co",
+            image="https://images.unsplash.com/photo-1542291026-7eec264c27ff",
+        )
+        with Store() as store:
+            h = store.encolar_facebook(d)
+
+        manejador = server.Manejador.__new__(server.Manejador)
+        manejador.send_response = MagicMock()
+        manejador.send_header = MagicMock()
+        manejador.end_headers = MagicMock()
+        manejador.wfile = MagicMock()
+
+        manejador.path = f"/foto/{h}.jpg"
+        with patch("core.branding.generar_tarjeta_branding_bytes", return_value=b"fake_jpeg_bytes"):
+            manejador.do_GET()
+
+        manejador.send_response.assert_called_with(200)
+        manejador.send_header.assert_any_call("Content-Type", "image/jpeg")
+        manejador.wfile.write.assert_called_with(b"fake_jpeg_bytes")
+
     def test_facebook_error_no_lanza_excepcion(self):
         from unittest.mock import patch
         from core import facebook

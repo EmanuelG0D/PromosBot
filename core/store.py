@@ -334,6 +334,10 @@ class Store:
             "SELECT deal_json FROM deals_recientes WHERE hash_id = ?", (hash_id,)
         ).fetchone()
         if not row:
+            row = self.conn.execute(
+                "SELECT deal_json FROM facebook_cola WHERE hash_id = ?", (hash_id,)
+            ).fetchone()
+        if not row:
             return None
         try:
             datos = json.loads(row["deal_json"])
