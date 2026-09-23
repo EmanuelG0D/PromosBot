@@ -25,5 +25,10 @@
     "1006922878",
     "5363281889"
   ],
-  "solicitudes_pendientes": {}
+  "solicitudes_pendientes": {
+    "1920438865": {
+      "nombre": "Jose",
+      "username": ""
+    }
+  }
 }
