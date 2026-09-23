@@ -418,13 +418,15 @@ class Store:
         """Resetea a 0 el contador tras publicar un post de camuflaje limpio."""
         self.set_meta("fb_promos_desde_camuflaje", "0")
 
-    def facebook_puede_publicar_historia(self, max_diarias: int = 2, min_horas_espaciado: float = 4.0) -> bool:
+    def facebook_puede_publicar_historia(self, max_diarias: int | None = None, min_horas_espaciado: float | None = None) -> bool:
         """Indica si hay cupo para publicar una historia en Facebook hoy respetando el espaciado mínimo."""
+        max_d = max_diarias if max_diarias is not None else getattr(config, "FB_HISTORIAS_MAX_DIA", 5)
+        min_h = min_horas_espaciado if min_horas_espaciado is not None else getattr(config, "FB_HISTORIAS_MIN_HORAS", 2.0)
         zona_co = dt.timezone(dt.timedelta(hours=-5))
         ahora = dt.datetime.now(zona_co)
         hoy = ahora.date().isoformat()
         contador = int(self.get_meta(f"fb_historias:{hoy}") or 0)
-        if contador >= max_diarias:
+        if contador >= max_d:
             return False
         if contador == 0:
             return True
@@ -434,7 +436,7 @@ class Store:
         try:
             ultimo_ts = dt.datetime.fromisoformat(ultimo_ts_str)
             horas_pasadas = (ahora - ultimo_ts).total_seconds() / 3600.0
-            return horas_pasadas >= min_horas_espaciado
+            return horas_pasadas >= min_h
         except Exception:
             return True
 

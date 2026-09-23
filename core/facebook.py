@@ -546,7 +546,7 @@ def encolar_oferta(deal: Deal, verdict: Verdict | None = None,
         return h
 
 
-def procesar_cola(limite: int = 4, base_url: str | None = None) -> dict:
+def procesar_cola(limite: int = 4, base_url: str | None = None, forzar: bool = False) -> dict:
     """Procesa la cola de Facebook cumpliendo la regla de camuflaje 5:1, agrupación y primer comentario."""
     if not configurado():
         return {"ok": False, "motivo": "facebook no configurado"}
@@ -555,7 +555,7 @@ def procesar_cola(limite: int = 4, base_url: str | None = None) -> dict:
         contador_promos = store.facebook_contador_promos()
 
         # 1. Regla del Camuflaje (5 a 1):
-        if contador_promos >= 5:
+        if not forzar and contador_promos >= 5:
             ok_cam = publicar_camuflaje()
             return {
                 "ok": ok_cam,
@@ -563,11 +563,14 @@ def procesar_cola(limite: int = 4, base_url: str | None = None) -> dict:
                 "contador_previo": contador_promos,
             }
 
-        # 2. Tomar hasta `limite` ofertas pendientes
-        items = store.obtener_cola_facebook(limite=limite)
-        if not items:
-            return {"ok": True, "tipo": "cola_vacia", "items": 0}
+        # 2. Tomar ofertas pendientes con regla estricta: mínimo 2, jamás 3, máximo 4
+        pendientes = store.obtener_cola_facebook(limite=limite)
+        total = len(pendientes)
+        if not forzar and total < 2:
+            return {"ok": True, "tipo": "esperando_minimo", "items": total}
 
+        tamano_lote = min(limite, total) if forzar else (4 if total >= 4 else 2)
+        items = pendientes[:tamano_lote]
         hash_ids = [it[0] for it in items]
         deals = [it[1] for it in items]
 
@@ -627,7 +630,9 @@ def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
         return False
     with Store() as store:
         h = store.encolar_facebook(deal)
-    res = procesar_cola(limite=1)
+    res = procesar_cola(limite=1, forzar=True)
+    if res.get("tipo") == "error_publicacion":
+        return False
     return bool(res.get("ok"))
 
 
@@ -859,10 +864,36 @@ def publicar_historia_meta(photo_id: str) -> str | None:
         return None
 
 
+def obtener_foto_pagina_bytes(deal: Deal) -> bytes | None:
+    """Devuelve los bytes exactos de la foto que se comparte en la página de Facebook."""
+    # 1. Si califica para branding (tarjeta 1080x1080 con marco estilizado), usarla:
+    if deal is not None and branding.debe_aplicar_branding(deal):
+        try:
+            foto_bytes = branding.generar_tarjeta_branding_bytes(deal, solo_texto_tienda=True)
+            if foto_bytes:
+                return foto_bytes
+        except Exception as exc:
+            print(f"  [facebook] aviso: error generando foto brandeada para historia ({exc})")
+
+    # 2. Si no aplica branding o falla (ej. DescuentosTech con marco nativo o foto limpia):
+    if deal and deal.image and deal.image.startswith("http"):
+        try:
+            req = urllib.request.Request(
+                deal.image,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                return resp.read()
+        except Exception as exc:
+            print(f"  [facebook] aviso: error descargando foto original para historia ({exc})")
+
+    return None
+
+
 def publicar_historia(deal: Deal, verdict: Verdict | None = None,
                       store: Store | None = None,
                       forzar: bool = False) -> dict:
-    """Publica una Historia de Facebook con plantilla 9:16 verificando cupo y criterios."""
+    """Publica una Historia de Facebook con la misma foto y marco del feed verificando cupo y criterios."""
     if not configurado():
         return {"ok": False, "motivo": "facebook no configurado"}
 
@@ -870,7 +901,7 @@ def publicar_historia(deal: Deal, verdict: Verdict | None = None,
     if not forzar and not es_ganga_para_historia(deal, verdict):
         return {"ok": False, "motivo": "no_califica_ganga"}
 
-    # 2. Control de cupo diario (máximo 2 por día, mínimo 4h de espaciado)
+    # 2. Control de cupo diario (máximo 5 por día, mínimo 2h de espaciado)
     propio_store = False
     if store is None:
         store = Store()
@@ -880,8 +911,11 @@ def publicar_historia(deal: Deal, verdict: Verdict | None = None,
         if not forzar and not store.facebook_puede_publicar_historia():
             return {"ok": False, "motivo": "cupo_diario_o_espaciado"}
 
-        # 3. Generar canvas
-        img_bytes = generar_canvas_historia(deal, verdict)
+        # 3. Obtener la misma foto que se comparte en la página (con marco y todo)
+        img_bytes = obtener_foto_pagina_bytes(deal)
+        if not img_bytes:
+            # Fallback de seguridad al canvas si la foto externa falló
+            img_bytes = generar_canvas_historia(deal, verdict)
 
         # 4. Subir foto binaria a Meta
         photo_id = subir_foto_historia_binario(img_bytes)

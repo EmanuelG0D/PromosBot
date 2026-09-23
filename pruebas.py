@@ -3916,14 +3916,21 @@ class PruebaCuposPorTienda(unittest.TestCase):
                 if pendientes:
                     store.remover_de_cola_facebook([h for h, _ in pendientes])
 
-            # Encolar oferta
-            h = facebook.encolar_oferta(d)
-            self.assertIsNotNone(h)
+            # Encolar 1 oferta: debe esperar porque el mínimo es 2
+            h1 = facebook.encolar_oferta(d)
+            self.assertIsNotNone(h1)
+            res1 = facebook.procesar_cola(limite=4, base_url="https://test.render.com")
+            self.assertEqual(res1.get("tipo"), "esperando_minimo")
 
-            # Procesar la cola (1 deal -> post individual + comentario)
-            res = facebook.procesar_cola(limite=4, base_url="https://test.render.com")
-            self.assertTrue(res.get("ok"))
-            self.assertEqual(res.get("post_id"), "post_789_123")
+            # Encolar 2da oferta: ahora sí debe despachar el lote de 2
+            d2 = oferta(source="amazon", store="Amazon", key="k_d2", title="Mouse Gamer", price=80000.0, image="https://amazon.com/mouse.jpg")
+            h2 = facebook.encolar_oferta(d2)
+            self.assertIsNotNone(h2)
+
+            res2 = facebook.procesar_cola(limite=4, base_url="https://test.render.com")
+            self.assertTrue(res2.get("ok"))
+            self.assertEqual(res2.get("post_id"), "post_789_123")
+            self.assertEqual(res2.get("deals_count"), 2)
 
     def test_facebook_regla_camuflaje_5_a_1(self):
         from unittest.mock import patch, MagicMock
@@ -4106,31 +4113,95 @@ class PruebaFacebookHistorias(unittest.TestCase):
         from core.store import Store
 
         with Store() as store:
-            # 1. Al inicio del día debe permitir la 1ra historia
-            self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+            # 1. Al inicio del día debe permitir la 1ra historia con el nuevo tope de 5 al día
+            self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=5, min_horas_espaciado=2.0))
 
             # Registrar la 1ra historia
             n1 = store.facebook_registrar_historia()
             self.assertEqual(n1, 1)
 
-            # 2. De inmediato NO debe permitir otra (no han pasado 4 horas)
-            self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+            # 2. De inmediato NO debe permitir otra (no han pasado 2 horas)
+            self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=5, min_horas_espaciado=2.0))
 
-            # 3. Simular que pasaron 5 horas
+            # 3. Simular que pasaron 2.5 horas
             zona_co = dt.timezone(dt.timedelta(hours=-5))
-            hace_5h = dt.datetime.now(zona_co) - dt.timedelta(hours=5)
-            store.set_meta("fb_historia_ultimo_ts", hace_5h.isoformat())
+            hace_2h = dt.datetime.now(zona_co) - dt.timedelta(hours=2.5)
+            store.set_meta("fb_historia_ultimo_ts", hace_2h.isoformat())
 
             # Ahora sí debe permitir la 2da historia
-            self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+            self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=5, min_horas_espaciado=2.0))
 
-            # Registrar la 2da historia
-            n2 = store.facebook_registrar_historia()
-            self.assertEqual(n2, 2)
+            # Registrar hasta 5 historias
+            for i in range(2, 6):
+                store.set_meta("fb_historia_ultimo_ts", hace_2h.isoformat())
+                self.assertTrue(store.facebook_puede_publicar_historia(max_diarias=5, min_horas_espaciado=2.0))
+                store.facebook_registrar_historia()
 
-            # 4. Con 2 historias registradas, el tope diario está alcanzado incluso tras pasar horas
-            store.set_meta("fb_historia_ultimo_ts", hace_5h.isoformat())
-            self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=2, min_horas_espaciado=4.0))
+            # 4. Con 5 historias registradas, el tope diario está alcanzado incluso tras pasar horas
+            store.set_meta("fb_historia_ultimo_ts", hace_2h.isoformat())
+            self.assertFalse(store.facebook_puede_publicar_historia(max_diarias=5, min_horas_espaciado=2.0))
+
+    def test_facebook_regla_lotes_min2_no3_max4(self):
+        from unittest.mock import patch, MagicMock
+        from core import facebook
+        from core.store import Store
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"id": "post_mock_lot"}'
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("config.FB_PAGE_ID", "12345"), \
+             patch("config.FB_PAGE_ACCESS_TOKEN", "token123"), \
+             patch("config.FB_ENABLED", True), \
+             patch("urllib.request.urlopen", return_value=mock_resp):
+            with Store() as store:
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+
+                # Caso 1: 1 oferta en cola -> DEBE esperar (mínimo 2)
+                d1 = oferta(source="amazon", store="Amazon", key="k_lot_1", title="Oferta 1", price=10000.0, url="http://l1")
+                facebook.encolar_oferta(d1)
+                res1 = facebook.procesar_cola(limite=4)
+                self.assertEqual(res1.get("tipo"), "esperando_minimo")
+
+                # Caso 2: 2 ofertas en cola -> DEBE publicar 2
+                d2 = oferta(source="amazon", store="Amazon", key="k_lot_2", title="Oferta 2", price=20000.0, url="http://l2")
+                facebook.encolar_oferta(d2)
+                res2 = facebook.procesar_cola(limite=4)
+                self.assertTrue(res2.get("ok"))
+                self.assertEqual(res2.get("deals_count"), 2)
+
+                # Cola quedó vacía
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+
+                # Caso 3: 3 ofertas en cola -> DEBE publicar 2 y dejar 1 pendiente (NO acepta 3)
+                for i in range(1, 4):
+                    d = oferta(source="amazon", store="Amazon", key=f"k_lot3_{i}", title=f"Oferta {i}", price=10000.0 * i, url=f"http://l{i}")
+                    facebook.encolar_oferta(d)
+                self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0], 3)
+
+                res3 = facebook.procesar_cola(limite=4)
+                self.assertTrue(res3.get("ok"))
+                self.assertEqual(res3.get("deals_count"), 2)  # Publicó exactamente 2, NUNCA 3
+
+                # Debe quedar exactamente 1 pendiente en la cola
+                pendientes = store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0]
+                self.assertEqual(pendientes, 1)
+
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+
+                # Caso 4: 4 ofertas en cola -> DEBE publicar 4
+                for i in range(1, 5):
+                    d = oferta(source="amazon", store="Amazon", key=f"k_lot4_{i}", title=f"Oferta {i}", price=10000.0 * i, url=f"http://l{i}")
+                    facebook.encolar_oferta(d)
+                self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0], 4)
+
+                res4 = facebook.procesar_cola(limite=4)
+                self.assertTrue(res4.get("ok"))
+                self.assertEqual(res4.get("deals_count"), 4)  # Máximo 4
+                self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM facebook_cola").fetchone()[0], 0)
 
     def test_publicar_historia_flujo_mock(self):
         from unittest.mock import patch, MagicMock
@@ -4158,7 +4229,7 @@ class PruebaFacebookHistorias(unittest.TestCase):
         with patch("config.FB_PAGE_ID", "12345"), \
              patch("config.FB_PAGE_ACCESS_TOKEN", "token_valido"), \
              patch("config.FB_ENABLED", True), \
-             patch("core.facebook.descargar_foto_producto", return_value=None), \
+             patch("core.facebook.obtener_foto_pagina_bytes", return_value=b"\xff\xd8\xff\xe0mock_image_bytes"), \
              patch("urllib.request.urlopen", side_effect=respuestas):
             res = facebook.publicar_historia(d)
             self.assertTrue(res.get("ok"))

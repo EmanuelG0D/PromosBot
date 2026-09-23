@@ -77,6 +77,9 @@ FB_PAGE_ACCESS_TOKEN = (
     or _str("FB_TOKEN")
 )
 FB_ENABLED = _bool("FB_ENABLED", _bool("FACEBOOK_ENABLED", True))
+FB_HISTORIAS_MAX_DIA = _int("FB_HISTORIAS_MAX_DIA", 5)
+FB_HISTORIAS_MIN_HORAS = _float("FB_HISTORIAS_MIN_HORAS", 2.0)
+
 
 # --- Umbrales de alerta -------------------------------------------------
 # Piso para que una oferta exista siquiera. Todo lo que pase de aqui se ve,
