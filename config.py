@@ -79,6 +79,7 @@ FB_PAGE_ACCESS_TOKEN = (
 FB_ENABLED = _bool("FB_ENABLED", _bool("FACEBOOK_ENABLED", True))
 FB_HISTORIAS_MAX_DIA = _int("FB_HISTORIAS_MAX_DIA", 5)
 FB_HISTORIAS_MIN_HORAS = _float("FB_HISTORIAS_MIN_HORAS", 2.0)
+FB_MAKE_WEBHOOK_URL = _str("FB_MAKE_WEBHOOK_URL", "https://hook.us2.make.com/f8mxw7hhwd36rpupqexok6yeq73qgpin")
 
 
 # --- Umbrales de alerta -------------------------------------------------

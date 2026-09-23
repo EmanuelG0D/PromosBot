@@ -161,8 +161,12 @@ def _obtener_page_token() -> str:
 
 
 def configurado() -> bool:
-    """Indica si las credenciales de Facebook están presentes y habilitadas."""
-    return bool(config.FB_PAGE_ID and config.FB_PAGE_ACCESS_TOKEN and config.FB_ENABLED)
+    """Indica si las credenciales o webhooks de Facebook están presentes y habilitados."""
+    if not getattr(config, "FB_ENABLED", True):
+        return False
+    tiene_meta = bool(config.FB_PAGE_ID and config.FB_PAGE_ACCESS_TOKEN)
+    tiene_make = bool(getattr(config, "FB_MAKE_WEBHOOK_URL", ""))
+    return tiene_meta or tiene_make
 
 
 def money(amount: float | int | None, currency: str = "COP") -> str:
@@ -513,12 +517,41 @@ def publicar_comentario(post_id: str, texto: str) -> str | None:
         return None
 
 
+def publicar_via_make(texto: str, foto_url: str | None = None, enlace: str | None = None, comentario: str | None = None) -> str | None:
+    """Publica a través del webhook de Make.com garantizando visibilidad 100% pública."""
+    webhook_url = getattr(config, "FB_MAKE_WEBHOOK_URL", "")
+    if not webhook_url:
+        return None
+    payload = {
+        "mensaje": texto,
+        "foto_url": foto_url or "",
+        "enlace": enlace or "",
+        "comentario": comentario or "",
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            if resp.status in (200, 201, 202, 204):
+                ts = int(time.time())
+                return f"make_post_{ts}"
+    except Exception as exc:
+        mensaje_err = f"Make error: {exc}"
+        print(f"  [facebook] aviso: error publicando via Make ({exc})")
+        _TELEMETRIA["ultimo_error"] = mensaje_err
+    return None
+
+
 def publicar_camuflaje() -> bool:
     """Publica un post orgánico de interacción/comunidad 100% limpio (sin enlaces ni comentarios)."""
     if not configurado():
         return False
     texto = spintax_camuflaje()
-    post_id = publicar_post_con_medios(texto)
+    post_id = None
+    if getattr(config, "FB_MAKE_WEBHOOK_URL", ""):
+        post_id = publicar_via_make(texto=texto)
+    if not post_id:
+        post_id = publicar_post_con_medios(texto)
     if post_id:
         print(f"  [facebook] post de camuflaje publicado ({post_id})")
         with Store() as store:
@@ -597,19 +630,34 @@ def procesar_cola(limite: int = 4, base_url: str | None = None, forzar: bool = F
         else:
             texto_post = render_agrupado(items, base_url=base_url)
 
-        # 5. Publicar en feed con fotos adjuntas
-        post_id = publicar_post_con_medios(texto_post, media_ids=media_ids)
-        if not post_id:
-            _TELEMETRIA["fallidos"] += 1
-            return {
-                "ok": False,
-                "tipo": "error_publicacion",
-                "error": _TELEMETRIA.get("ultimo_error"),
-            }
-
-        # 6. Inyectar inmediatamente el primer comentario con los links cloaked
+        # 5. Publicar en feed (Prioridad 1: Make Webhook para visibilidad pública)
+        post_id = None
+        foto_url = deals[0].image if deals and deals[0].image else None
+        enlace_url = deals[0].url if deals else None
         comentario_texto = render_comentario_links(items, base_url=base_url)
-        com_id = publicar_comentario(post_id, comentario_texto)
+
+        if getattr(config, "FB_MAKE_WEBHOOK_URL", ""):
+            post_id = publicar_via_make(
+                texto=texto_post,
+                foto_url=foto_url,
+                enlace=enlace_url,
+                comentario=comentario_texto,
+            )
+
+        # Fallback a Graph API directa si Make no está configurado o falló:
+        if not post_id:
+            post_id = publicar_post_con_medios(texto_post, media_ids=media_ids)
+            if not post_id:
+                _TELEMETRIA["fallidos"] += 1
+                return {
+                    "ok": False,
+                    "tipo": "error_publicacion",
+                    "error": _TELEMETRIA.get("ultimo_error"),
+                }
+            # 6. Inyectar inmediatamente el primer comentario con los links cloaked
+            com_id = publicar_comentario(post_id, comentario_texto)
+        else:
+            com_id = f"make_com_{int(time.time())}"
 
         # 7. Actualizar la cola y el contador de camuflaje
         store.remover_de_cola_facebook(hash_ids)
