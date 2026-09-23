@@ -549,6 +549,41 @@ class Manejador(BaseHTTPRequestHandler):
             })
             return
 
+        if ruta.path in ("/privacidad", "/privacy", "/politica-de-privacidad"):
+            html = """<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de Privacidad - Radar Promos Colombia</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #2d3748; background: #f7fafc; }
+    .card { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    h1 { color: #1877f2; margin-top: 0; font-size: 24px; }
+    h2 { color: #2d3748; font-size: 18px; margin-top: 24px; border-bottom: 2px solid #edf2f7; padding-bottom: 6px; }
+    p, li { color: #4a5568; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Política de Privacidad - Radar Promos Colombia</h1>
+    <p><em>Última actualización: Septiembre 2026</em></p>
+    
+    <h2>1. Identificación y Finalidad</h2>
+    <p><strong>Radar Promos Colombia</strong> es un canal y página de difusión informativa dedicada a la recopilación, análisis y publicación de ofertas, rebajas y cupones de descuento públicos disponibles en tiendas de comercio electrónico oficiales.</p>
+    
+    <h2>2. Datos de Usuario y Privacidad</h2>
+    <p>Nuestra aplicación no recopila, no comercializa ni almacena información personal privada de los usuarios de Facebook (como contraseñas, mensajes privados o listas de amigos).</p>
+    <p>La integración con Meta/Facebook se limita exclusivamente a la administración y publicación automática de contenido público (imágenes de productos, textos informativos y enlaces de tiendas) en la página oficial de Radar Promos Colombia.</p>
+    
+    <h2>3. Solicitud de Eliminación de Datos</h2>
+    <p>Dado que nuestra aplicación no recopila ni almacena datos personales de los usuarios ni perfiles individuales, no retenemos registros de identidad. Cualquier consulta o solicitud relacionada con privacidad puede realizarse a través de los mensajes de nuestra página oficial de Facebook o en nuestro canal de Telegram.</p>
+  </div>
+</body>
+</html>"""
+            self._responder(200, html, tipo="text/html")
+            return
+
         if ruta.path == "/healthz":
             self._responder(200, "ok", tipo="text/plain")
             return
