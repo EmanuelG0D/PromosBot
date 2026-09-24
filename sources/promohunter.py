@@ -127,7 +127,9 @@ def parse_deal(item: dict, max_horas: float = 3.0) -> Deal | None:
             m2 = _ASIN_RE.search(enlace_expandido)
             if m2:
                 asin = m2.group(1).upper()
-                enlace = f"https://www.amazon.com/dp/{asin}"
+
+    if asin:
+        enlace = f"https://www.amazon.com/dp/{asin}"
 
     key = f"amazon:{asin}" if asin else f"promohunter:{deal_id}"
 

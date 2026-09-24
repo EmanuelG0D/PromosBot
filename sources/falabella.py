@@ -29,6 +29,7 @@ TIENDAS = {
         "nombre": "Falabella",
         "base": "https://www.falabella.com.co",
         "buscar": "/falabella-co/search?Ntt={q}",
+        "producto": "/falabella-co/product/{pid}/",
     },
     "homecenter": {
         "nombre": "Homecenter",
@@ -169,7 +170,9 @@ def _una_consulta(clave: str, tienda: dict, consulta: str,
             continue
 
         enlace = producto.get("url")
-        if not enlace and tienda.get("producto"):
+        if enlace and enlace.startswith("/"):
+            enlace = tienda["base"] + enlace
+        elif not enlace and tienda.get("producto"):
             enlace = tienda["base"] + tienda["producto"].format(pid=pid)
 
         fotos = producto.get("mediaUrls") or []

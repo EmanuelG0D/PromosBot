@@ -621,7 +621,7 @@ class Manejador(BaseHTTPRequestHandler):
                     price=219900.0,
                     list_price=449900.0,
                     currency="COP",
-                    url="https://www.falabella.com.co",
+                    url="https://www.falabella.com.co/falabella-co/product/123769186/Tenis-Hombre-Deportivos/123769186",
                     image="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
                     notes=["Envío gratis a toda Colombia", "Oferta en tienda oficial"],
                 )
@@ -634,7 +634,7 @@ class Manejador(BaseHTTPRequestHandler):
                     price=29.99,
                     list_price=75.0,
                     currency="USD",
-                    url="https://www.amazon.com",
+                    url="https://www.amazon.com/dp/B08N5WRWNW",
                     image="https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&q=80",
                     notes=["Importación desde Estados Unidos", "Rebaja directa en tienda oficial"],
                 )
