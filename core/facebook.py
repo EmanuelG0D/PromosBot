@@ -643,6 +643,16 @@ def procesar_cola(limite: int = 4, base_url: str | None = None, forzar: bool = F
             ultimo_pid = None
             for hash_id, d in items:
                 texto_indiv = render_individual(d, hash_id=hash_id, base_url=base_url)
+
+                # Pre-calentamiento y almacenamiento en RAM para entrega ultra rápida a Facebook (< 5ms):
+                if d.image and branding.debe_aplicar_branding(d):
+                    try:
+                        foto_bytes = branding.generar_tarjeta_branding_bytes(d, solo_texto_tienda=True)
+                        if foto_bytes:
+                            branding.guardar_foto_cache(hash_id, foto_bytes)
+                    except Exception as exc_pre:
+                        print(f"  [facebook] aviso: pre-calentamiento de imagen omitido ({exc_pre})")
+
                 # URL de la imagen con marco oficial generada por Render:
                 foto_con_marco = f"{base_endpoint}/foto/{hash_id}.jpg" if d.image else None
                 pid = publicar_via_make(

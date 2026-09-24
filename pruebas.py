@@ -4004,6 +4004,48 @@ class PruebaCuposPorTienda(unittest.TestCase):
         manejador.send_header.assert_any_call("Content-Type", "image/jpeg")
         manejador.wfile.write.assert_called_with(b"fake_jpeg_bytes")
 
+    def test_endpoint_foto_cache_memoria_retorna_inmediatamente(self):
+        from core import branding
+        import server
+        from unittest.mock import MagicMock, patch
+
+        branding.guardar_foto_cache("hash_en_cache_123", b"cached_jpeg_data")
+
+        manejador = server.Manejador.__new__(server.Manejador)
+        manejador.send_response = MagicMock()
+        manejador.send_header = MagicMock()
+        manejador.end_headers = MagicMock()
+        manejador.wfile = MagicMock()
+        manejador.path = "/foto/hash_en_cache_123.jpg"
+
+        with patch("core.store.Store") as mock_store:
+            manejador.do_GET()
+            mock_store.assert_not_called()
+
+        manejador.send_response.assert_called_with(200)
+        manejador.send_header.assert_any_call("Content-Type", "image/jpeg")
+        manejador.wfile.write.assert_called_with(b"cached_jpeg_data")
+
+    def test_endpoint_foto_deal_inexistente_retorna_fallback_jpeg(self):
+        """Verifica que un deal desconocido NUNCA devuelve 404 ni JSON, sino 200 con imagen JPEG."""
+        import server
+        from unittest.mock import MagicMock
+
+        manejador = server.Manejador.__new__(server.Manejador)
+        manejador.send_response = MagicMock()
+        manejador.send_header = MagicMock()
+        manejador.end_headers = MagicMock()
+        manejador.wfile = MagicMock()
+        manejador.path = "/foto/hash_completamente_inexistente_999.jpg"
+
+        manejador.do_GET()
+
+        manejador.send_response.assert_called_with(200)
+        manejador.send_header.assert_any_call("Content-Type", "image/jpeg")
+        # El contenido escrito debe ser un JPEG válido (inicia con \xff\xd8)
+        escrito = manejador.wfile.write.call_args[0][0]
+        self.assertTrue(escrito.startswith(b"\xff\xd8"))
+
     def test_facebook_error_no_lanza_excepcion(self):
         from unittest.mock import patch
         from core import facebook

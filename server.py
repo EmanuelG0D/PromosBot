@@ -716,36 +716,43 @@ class Manejador(BaseHTTPRequestHandler):
         if ruta.path.startswith("/foto/") or ruta.path.startswith("/card/"):
             nombre_archivo = ruta.path.split("/")[-1]
             id_oferta = nombre_archivo.split(".")[0].strip()
-            if not id_oferta:
-                self._responder(400, {"error": "id de oferta requerido"})
-                return
-
-            with Store() as store:
-                deal = store.obtener_deal_reciente(id_oferta)
-
-            if not deal:
-                self._responder(404, {"error": "oferta no encontrada"})
-                return
 
             from core import branding
             foto_bytes = None
-            try:
-                if branding.debe_aplicar_branding(deal):
-                    foto_bytes = branding.generar_tarjeta_branding_bytes(deal, solo_texto_tienda=True)
-            except Exception as exc_brand:
-                log(f"error generando tarjeta branding ({id_oferta}): {exc_brand}")
+            if id_oferta:
+                foto_bytes = branding.obtener_foto_cache(id_oferta)
 
-            if not foto_bytes and deal.image:
+            if not foto_bytes and id_oferta:
                 try:
-                    req_img = urllib.request.Request(deal.image, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req_img, timeout=8) as resp_img:
-                        foto_bytes = resp_img.read()
-                except Exception as exc_img:
-                    log(f"error descargando imagen original ({id_oferta}): {exc_img}")
+                    with Store() as store:
+                        deal = store.obtener_deal_reciente(id_oferta)
+                except Exception as exc_db:
+                    deal = None
+                    log(f"error consultando store para foto ({id_oferta}): {exc_db}")
 
+                if deal:
+                    try:
+                        if branding.debe_aplicar_branding(deal):
+                            foto_bytes = branding.generar_tarjeta_branding_bytes(deal, solo_texto_tienda=True)
+                    except Exception as exc_brand:
+                        log(f"error generando tarjeta branding ({id_oferta}): {exc_brand}")
+
+                    if not foto_bytes and deal.image:
+                        try:
+                            req_img = urllib.request.Request(deal.image, headers={"User-Agent": "Mozilla/5.0"})
+                            with urllib.request.urlopen(req_img, timeout=6) as resp_img:
+                                foto_bytes = resp_img.read()
+                        except Exception as exc_img:
+                            log(f"error descargando imagen original ({id_oferta}): {exc_img}")
+
+                    if foto_bytes:
+                        branding.guardar_foto_cache(id_oferta, foto_bytes)
+
+            # Blindaje absoluto contra Error 324 (OAuthException) de Meta/Facebook:
+            # Si la oferta no se encontró o la imagen externa falló o tardó,
+            # NUNCA responder 404 ni JSON. Servir inmediatamente el banner oficial de respaldo.
             if not foto_bytes:
-                self._responder(404, {"error": "imagen no disponible"})
-                return
+                foto_bytes = branding.generar_banner_fallback_bytes()
 
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")

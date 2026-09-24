@@ -407,3 +407,85 @@ def generar_tarjeta_branding_bytes(
         return None
 
 
+_CACHE_FOTOS_BYTES: dict[str, bytes] = {}
+_CACHE_FOTOS_MAX: int = 50
+
+
+def guardar_foto_cache(hash_id: str, foto_bytes: bytes) -> None:
+    """Almacena en memoria RAM la imagen JPEG pregenerada para entrega instantánea a Facebook (< 5ms)."""
+    if not hash_id or not foto_bytes:
+        return
+    _CACHE_FOTOS_BYTES[hash_id] = foto_bytes
+    if len(_CACHE_FOTOS_BYTES) > _CACHE_FOTOS_MAX:
+        primer_key = next(iter(_CACHE_FOTOS_BYTES))
+        _CACHE_FOTOS_BYTES.pop(primer_key, None)
+
+
+def obtener_foto_cache(hash_id: str) -> bytes | None:
+    """Recupera la imagen JPEG pregenerada de la memoria RAM."""
+    return _CACHE_FOTOS_BYTES.get(hash_id)
+
+
+_BANNER_FALLBACK_CACHE: bytes | None = None
+
+
+def generar_banner_fallback_bytes() -> bytes:
+    """Genera y cachea un banner oficial JPEG 1080x1080 para garantizar que Facebook siempre reciba una imagen válida."""
+    global _BANNER_FALLBACK_CACHE
+    if _BANNER_FALLBACK_CACHE is not None:
+        return _BANNER_FALLBACK_CACHE
+
+    try:
+        W, H = 1080, 1080
+        canvas = Image.new("RGB", (W, H), (15, 23, 42))
+        draw = ImageDraw.Draw(canvas)
+
+        color_acento = (34, 197, 94)    # Verde neón esmeralda
+        color_badge = (11, 19, 36)      # Negro azulado profundo
+        color_estrella = (250, 204, 21) # Dorado
+
+        # Marco decorativo
+        b_th = 14
+        draw.rectangle([(b_th // 2, b_th // 2), (W - b_th // 2, H - b_th // 2)], outline=color_acento, width=b_th)
+
+        # Estrellas de soporte
+        _dibujar_estrella(draw, 120, 120, 28, color_estrella)
+        _dibujar_estrella(draw, 960, 120, 28, color_estrella)
+        _dibujar_estrella(draw, 120, 960, 28, color_estrella)
+        _dibujar_estrella(draw, 960, 960, 28, color_estrella)
+
+        # Badge central premium
+        pts_centro = [(140, 260), (940, 260), (900, 820), (180, 820)]
+        draw.polygon(pts_centro, fill=color_badge)
+        draw.line(pts_centro + [pts_centro[0]], fill=color_acento, width=6)
+
+        f_tit = _obtener_fuente(54, bold=True)
+        f_sub = _obtener_fuente(34, bold=True)
+        f_desc = _obtener_fuente(26, bold=False)
+
+        draw.text((W // 2, 380), "RADAR PROMOS", font=f_tit, fill=color_acento, anchor="mm")
+        draw.text((W // 2, 450), "COLOMBIA", font=f_tit, fill=(255, 255, 255), anchor="mm")
+
+        draw.line([(300, 520), (780, 520)], fill=(71, 85, 105), width=3)
+
+        draw.text((W // 2, 590), "🔥 OFERTA DESTACADA 🔥", font=f_sub, fill=color_estrella, anchor="mm")
+        draw.text((W // 2, 670), "Revisa los detalles y el enlace oficial", font=f_desc, fill=(241, 245, 249), anchor="mm")
+        draw.text((W // 2, 720), "de compra directa en esta publicación.", font=f_desc, fill=(148, 163, 184), anchor="mm")
+
+        buf = io.BytesIO()
+        canvas.save(buf, format="JPEG", quality=90)
+        _BANNER_FALLBACK_CACHE = buf.getvalue()
+        return _BANNER_FALLBACK_CACHE
+    except Exception as exc:
+        print(f"  [branding] error generando banner fallback ({exc})")
+        # Fallback mínimo de emergencia en blanco con borde verde
+        emergencia = Image.new("RGB", (800, 800), (20, 30, 45))
+        draw_em = ImageDraw.Draw(emergencia)
+        draw_em.rectangle([(10, 10), (790, 790)], outline=(34, 197, 94), width=10)
+        buf_em = io.BytesIO()
+        emergencia.save(buf_em, format="JPEG", quality=85)
+        _BANNER_FALLBACK_CACHE = buf_em.getvalue()
+        return _BANNER_FALLBACK_CACHE
+
+
+
