@@ -75,11 +75,13 @@ A diferencia de bots convencionales que comparten capturas genéricas o enlaces 
 - **Teclado Interactivo (`/menu`):** Menú de navegación por tiendas y categorías (`Smart TV`, `Portátiles`, `Celulares`, `Zapatos y Tenis`, `Audio`, etc.) con cancelación reactiva en tiempo real.
 - **Auto-aprobación de Usuarios:** Acceso instantáneo para nuevos miembros con invitación automática al canal oficial (`@RadarPromoCol`).
 
-### B. Facebook (Página Oficial en Carrusel e Historias 9:16)
-- **Modo Carrusel de Alto Engagement (2 a 4 ofertas cada 45 min):**
-  - **Motor Spintax de 3 Niveles:** Combina de forma aleatoria un titular llamativo, una bajada editorial y un llamado a la acción interactivo (+512 combinaciones únicas) para evitar duplicados y shadowban.
-  - **Cero Enlaces en el Feed:** El mensaje principal del muro no contiene URLs salientes, protegiendo el alcance algorítmico de la página.
-  - **Fichas Descriptivas por Foto (`render_caption_foto`):** Al tocar o deslizar cualquier foto en Facebook, el panel lateral muestra el título del producto, tienda, precio, descuento, cupón y enlace cloaked seguro (`https://promosbot.onrender.com/ir/{hash}`).
+### B. Facebook (Página Oficial vía Make.com & Historias 9:16)
+- **Publicación 100% Pública y Automática vía Make.com Webhook:**
+  - Garantiza alcance público (`EVERYONE`) y elimina restricciones de permisos de apps en modo desarrollo de Meta.
+  - **Pre-calentamiento y Caché en Memoria RAM (`_CACHE_FOTOS_BYTES`):** Al encolar ofertas, la imagen con marco de marca se pre-genera en RAM. Cuando el crawler de Facebook (`facebookexternalhit`) la solicita a `/foto/{id}.jpg`, Render responde en **< 5 milisegundos**.
+  - **Blindaje Anti-Error 324 (`OAuthException`):** El endpoint `/foto/{id}.jpg` nunca responde con errores 404 ni JSON. Si una oferta no se encuentra o la tienda remota falla, sirve inmediatamente un banner oficial de respaldo en formato `image/jpeg` con estado HTTP 200.
+- **Formateo Editorial y Cloaking:**
+  - **Fichas Descriptivas por Oferta (`render_individual`):** Publicación independiente para cada producto con título limpio, precio tachado, porcentaje de descuento y enlace cloaked seguro (`https://promosbot.onrender.com/ir/{hash}`).
   - **Blindaje Anti-Falsificaciones:** En lugar de imágenes de logotipos comerciales, estampa el nombre de la tienda en texto plano para eludir los filtros de derechos de marca de Meta.
 - **Regla del Camuflaje (5 a 1):** Cada 5 publicaciones comerciales, el bot publica automáticamente un post orgánico de interacción/comunidad sin enlaces para mantener una reputación óptima con el algoritmo.
 - **Historias de Facebook (Stories 1080x1920):**
@@ -130,7 +132,7 @@ BotPromos/
 │   ├── slickdeals.py        # Ofertas comunitarias de EE. UU. (Puma, Nike, Apple)
 │   ├── koaj.py              # Catálogo de moda Koaj Colombia
 │   └── ebay.py              # eBay Browse API
-└── pruebas.py               # Suite de 233 pruebas unitarias automatizadas
+└── pruebas.py               # Suite de 241 pruebas unitarias automatizadas
 ```
 
 ---
@@ -159,9 +161,10 @@ TELEGRAM_BOT_TOKEN="123456789:ABCdefGhIJKlmNoPQRstuVWXyz"
 TELEGRAM_CHAT_ID="-1001234567890"       # Canal o supergrupo donde se publican las alertas
 TELEGRAM_ADMIN_ID="5583002220"           # Chat ID personal del administrador
 
-# Facebook (Opcional - para publicación automática)
+# Facebook (Publicación automática 100% pública)
 FB_PAGE_ID="123456789012345"
 FB_PAGE_ACCESS_TOKEN="EAA..."
+FB_MAKE_WEBHOOK_URL="https://hook.us2.make.com/f8mxw7hhwd36rpupqexok6yeq73qgpin"
 
 # Respaldo en la Nube (para Render Free Tier)
 GITHUB_TOKEN="ghp_..."                   # Token de GitHub con permiso repo:contents
@@ -186,7 +189,7 @@ python radar.py --dry-run
 # Probar la conexión con el bot de Telegram
 python radar.py --test-telegram
 
-# Ejecutar la suite completa de 233 pruebas unitarias
+# Ejecutar la suite completa de 241 pruebas unitarias
 python pruebas.py
 
 # Iniciar el servidor web local con soporte de webhook
