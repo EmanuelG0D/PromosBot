@@ -4105,6 +4105,42 @@ class PruebaCuposPorTienda(unittest.TestCase):
                 store.conn.execute("DELETE FROM facebook_cola")
                 store.conn.commit()
 
+    def test_facebook_filtro_fuentes_y_enlaces_intermediarios(self):
+        from unittest.mock import patch
+        from core import facebook
+        from core.store import Store
+
+        with patch("config.FB_ENABLED", True):
+            # 1. Promocajita rechazada por fuente
+            d_promo = oferta(source="promocajita", store="PROMOCAJITA", title="Tablet en Promocajita", url="https://pccajita.link/deal/123")
+            self.assertIsNone(facebook.encolar_oferta(d_promo))
+
+            # 2. DescuentosTech rechazada por fuente
+            d_dt = oferta(source="descuentostech", store="Amazon", title="Billetera Airkit", url="https://www.facebook.com/permalink.php?id=111587068500720")
+            self.assertIsNone(facebook.encolar_oferta(d_dt))
+
+            # 3. Slickdeals rechazada por fuente
+            d_sd = oferta(source="slickdeals", store="Target", title="TV 55", url="https://target.com/p/123")
+            self.assertIsNone(facebook.encolar_oferta(d_sd))
+
+            # 4. Cualquier oferta con enlace a Facebook ajeno rechazada
+            d_fb_link = oferta(source="vtex", store="Exito", title="Promo Exito", url="https://www.facebook.com/otra_pagina/posts/999")
+            self.assertIsNone(facebook.encolar_oferta(d_fb_link))
+
+            # 5. Cualquier oferta con enlace a Promocajita rechazada
+            d_cajita_link = oferta(source="vtex", store="Exito", title="Promo Exito", url="https://promocajita.com/deal/456")
+            self.assertIsNone(facebook.encolar_oferta(d_cajita_link))
+
+            # 6. Oferta de tienda directa oficial (Falabella, Amazon, etc.) admitida
+            with Store() as store:
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+                d_ok = oferta(source="falabella", store="Falabella", title="Smart TV 55 4K", url="https://www.falabella.com.co/falabella-co/product/123")
+                h = facebook.encolar_oferta(d_ok)
+                self.assertIsNotNone(h)
+                store.conn.execute("DELETE FROM facebook_cola")
+                store.conn.commit()
+
 
 class PruebaFacebookHistorias(unittest.TestCase):
     def setUp(self):
@@ -4126,9 +4162,15 @@ class PruebaFacebookHistorias(unittest.TestCase):
         v_normal = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=False, etiquetas=[], motivo="")
         v_glitch = Verdict(alertar=True, inmediata=True, confianza="alta", glitch=True, etiquetas=[], motivo="")
 
-        # 1. Slickdeals descartado
+        # 1. Slickdeals, Promocajita y DescuentosTech descartados
         d_sd = oferta(source="slickdeals", store="Target", title="TV 55", price=200.0, list_price=500.0, image="https://img.com/tv.jpg")
         self.assertFalse(facebook.es_ganga_para_historia(d_sd, v_normal))
+
+        d_promo = oferta(source="promocajita", store="PROMOCAJITA", title="Tablet 50%", price=100000.0, list_price=250000.0, image="https://img.com/t.jpg", url="https://pccajita.link/1")
+        self.assertFalse(facebook.es_ganga_para_historia(d_promo, v_normal))
+
+        d_dt = oferta(source="descuentostech", store="Amazon", title="Zapatos 60%", price=100000.0, list_price=250000.0, image="https://img.com/z.jpg", url="https://facebook.com/permalink.php")
+        self.assertFalse(facebook.es_ganga_para_historia(d_dt, v_normal))
 
         # 2. Sin imagen descartado
         d_no_img = oferta(source="vtex", store="Falabella", title="Tenis", price=100000.0, list_price=250000.0, image="")

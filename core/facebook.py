@@ -567,12 +567,49 @@ def publicar_camuflaje() -> bool:
 
 # --- COLA Y PROCESAMIENTO EN LOTES (CADA 45 MIN) ---------------------------
 
+FUENTES_EXCLUIDAS_FACEBOOK: tuple[str, ...] = ("promocajita", "descuentostech", "slickdeals")
+DOMINIOS_EXCLUIDOS_FACEBOOK: tuple[str, ...] = (
+    "facebook.com",
+    "fb.com",
+    "fb.me",
+    "promocajita.com",
+    "pccajita.link",
+)
+
+
+def es_oferta_admisible_facebook(deal: Deal) -> tuple[bool, str]:
+    """Valida que la oferta provenga de una tienda oficial con enlace directo para Facebook.
+    
+    Excluye agregadores intermediarios (promocajita), fuentes que enlazan a páginas
+    ajenas de Facebook (descuentostech) y enlaces con dominios no oficiales.
+    """
+    fuente = (deal.source or "").lower().strip()
+    if fuente in FUENTES_EXCLUIDAS_FACEBOOK:
+        return False, f"fuente no admitida en Facebook ({fuente})"
+
+    url_l = (deal.url or "").lower().strip()
+    if not url_l.startswith("http"):
+        return False, "URL sin protocolo http/https válido"
+
+    for dom in DOMINIOS_EXCLUIDOS_FACEBOOK:
+        if dom in url_l:
+            return False, f"enlace intermediario o ajeno detectado ({dom})"
+
+    return True, "ok"
+
+
 def encolar_oferta(deal: Deal, verdict: Verdict | None = None,
                    landed: Landed | None = None,
                    veracidad: Veracidad | None = None) -> str | None:
     """Encola una oferta en la base de datos para ser publicada en el siguiente lote de 45 min."""
     if not configurado():
         return None
+
+    admisible, motivo = es_oferta_admisible_facebook(deal)
+    if not admisible:
+        print(f"  [facebook] oferta omitida para Facebook: {motivo} ('{deal.title[:30]}...')")
+        return None
+
     with Store() as store:
         h = store.encolar_facebook(deal)
         if h:
@@ -719,6 +756,10 @@ def publicar_oferta(deal: Deal, verdict: Verdict, landed: Landed | None = None,
     """Publica de forma directa con el protocolo de cero URLs en caption y primer comentario."""
     if not configurado():
         return False
+    admisible, motivo = es_oferta_admisible_facebook(deal)
+    if not admisible:
+        print(f"  [facebook] oferta omitida para Facebook: {motivo} ('{deal.title[:30]}...')")
+        return False
     with Store() as store:
         h = store.encolar_facebook(deal)
     res = procesar_cola(limite=1, forzar=True)
@@ -770,9 +811,9 @@ def descargar_foto_producto(url_foto: str) -> Image.Image | None:
 
 def es_ganga_para_historia(deal: Deal, verdict: Verdict | None = None) -> bool:
     """Determina si una oferta reúne los criterios para publicarse como Historia destacada."""
-    # 1. Filtro local: Cero Slickdeals (tiendas gringas sin soporte local)
-    fuente = (deal.source or "").lower().strip()
-    if fuente == "slickdeals":
+    # 1. Filtro de admisibilidad para Facebook (tiendas directas oficiales)
+    admisible, _ = es_oferta_admisible_facebook(deal)
+    if not admisible:
         return False
 
     # 2. Requiere imagen válida
