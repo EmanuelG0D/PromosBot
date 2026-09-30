@@ -661,8 +661,8 @@ class PruebaComandos(unittest.TestCase):
         from core.comandos import CATALOGO
         from radar import FUENTES
         for comando, (fuente, _tiendas, titulo) in CATALOGO.items():
-            # "co", "amazon_gangas" y "*" son comodines: agrupan fuentes.
-            self.assertIn(fuente, set(FUENTES) | {"*", "co", "amazon_gangas"},
+            # "co", "amazon_gangas", "ikea" y "*" son especiales para comandos.
+            self.assertIn(fuente, set(FUENTES) | {"*", "co", "amazon_gangas", "ikea"},
                           f"/{comando} apunta a una fuente inexistente")
             self.assertTrue(titulo)
 
@@ -4571,6 +4571,139 @@ class PruebaFastTrackModaYCalzado(unittest.TestCase):
         seleccion = fasttrack_glitches + fasttrack_moda_vip
         # Todas las 3 ofertas de Adidas deben pasar sin ser recortadas por el cupo de tienda (max 1)
         self.assertEqual(len(seleccion), 3)
+
+
+
+class PruebaIkeaColombia(unittest.TestCase):
+    """Pruebas para el scraper de IKEA Colombia y los flujos aislados en bot personal."""
+
+    MOCK_HTML = """
+    <div class="plp-fragment-wrapper" data-product-number="20448733">
+        <div class="plp-mastercard" data-product-name="BOAXEL" data-price="29990">
+            <a class="plp-price-module__link" href="https://www.ikea.com/co/es/p/boaxel-estante-blanco-20448733/">
+                <span class="plp-price-module__description">Estante, blanco, 60x40 cm</span>
+            </a>
+            <div class="plp-price__wrapper">
+                <span class="plp-price--current">$ 29.990</span>
+                <span class="plp-price--comparison">Precio anterior: $ 99.990</span>
+            </div>
+            <img class="pip-image" src="https://www.ikea.com/co/es/images/products/boaxel-estante__12345.jpg?f=xxs" alt="BOAXEL Estante" />
+        </div>
+    </div>
+    <div class="plp-fragment-wrapper" data-product-number="99999999">
+        <div class="plp-mastercard" data-product-name="KALLAX" data-price="300000">
+            <a class="plp-price-module__link" href="https://www.ikea.com/co/es/p/kallax-estanteria-99999999/">
+                <span class="plp-price-module__description">Estantería, blanco</span>
+            </a>
+            <div class="plp-price__wrapper">
+                <span class="plp-price--current">$ 300.000</span>
+            </div>
+        </div>
+    </div>
+    """
+
+    def test_ikea_extractor_deals_html(self):
+        from sources import ikea
+        deals = ikea.extraer_deals_html(self.MOCK_HTML)
+        self.assertEqual(len(deals), 1)
+
+        d = deals[0]
+        self.assertEqual(d.source, "ikea")
+        self.assertEqual(d.store, "IKEA")
+        self.assertEqual(d.country, "CO")
+        self.assertEqual(d.currency, "COP")
+        self.assertEqual(d.price, 29990.0)
+        self.assertEqual(d.list_price, 99990.0)
+        self.assertAlmostEqual(d.discount_pct, 70.0, places=1)
+        self.assertIn("BOAXEL", d.title)
+        self.assertIn("Estante, blanco", d.title)
+        self.assertEqual(d.url, "https://www.ikea.com/co/es/p/boaxel-estante-blanco-20448733/")
+        self.assertEqual(d.image, "https://www.ikea.com/co/es/images/products/boaxel-estante__12345.jpg")
+        self.assertNotIn("?f=xxs", d.image)
+
+    def test_ikea_comandos_aislamiento_grupo_vs_privado(self):
+        from core.comandos import leer_comando
+
+        # 1. En grupo: un no-admin no puede enviar comandos (se ignora/borra);
+        # un admin que escriba /ikea o toque el botón en grupo recibe tipo "ikea_en_grupo" para no spamear
+        msg_grupo_no_admin = {
+            "chat": {"id": -1001234567, "type": "supergroup"},
+            "text": "/ikea",
+            "from": {"id": 111, "first_name": "Test"},
+        }
+        self.assertIsNone(leer_comando(msg_grupo_no_admin))
+
+        msg_grupo_admin = {
+            "chat": {"id": -1001234567, "type": "supergroup"},
+            "text": "/ikea",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_g = leer_comando(msg_grupo_admin)
+        self.assertIsNotNone(cmd_g)
+        self.assertEqual(cmd_g["tipo"], "ikea_en_grupo")
+        self.assertEqual(cmd_g["comando"], "ikea_en_grupo")
+
+        # 2. En chat privado: /ikea debe devolver tipo "ikea" para entregar ofertas
+        msg_privado = {
+            "chat": {"id": 5583002220, "type": "private"},
+            "text": "/ikea",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_p = leer_comando(msg_privado)
+        self.assertIsNotNone(cmd_p)
+        self.assertEqual(cmd_p["tipo"], "ikea")
+        self.assertEqual(cmd_p["comando"], "ikea")
+
+        # 3. Deep link /start ikea (enlace directo desde el grupo al bot)
+        msg_start_ikea = {
+            "chat": {"id": 111, "type": "private"},
+            "text": "/start ikea",
+            "from": {"id": 111, "first_name": "Test"},
+        }
+        cmd_start = leer_comando(msg_start_ikea)
+        self.assertIsNotNone(cmd_start)
+        self.assertEqual(cmd_start["tipo"], "ikea")
+        self.assertEqual(cmd_start["comando"], "ikea")
+
+        # 4. Botón de IKEA en grupo vs privado
+        msg_btn_grupo = {
+            "chat": {"id": -1001234567, "type": "supergroup"},
+            "text": "🛋️ IKEA Colombia",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_bg = leer_comando(msg_btn_grupo)
+        self.assertEqual(cmd_bg["tipo"], "ikea_en_grupo")
+
+        msg_btn_priv = {
+            "chat": {"id": 5583002220, "type": "private"},
+            "text": "🛋️ IKEA Colombia",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_bp = leer_comando(msg_btn_priv)
+        self.assertEqual(cmd_bp["tipo"], "todo_tienda")
+        self.assertEqual(cmd_bp["tienda"], "ikea")
+
+    def test_ikea_radar_atender_en_grupo(self):
+        import radar
+        from unittest.mock import patch
+
+        mensajes_enviados = []
+        with patch("core.telegram.send", side_effect=lambda txt, **k: mensajes_enviados.append((txt, k)) or True):
+            solicitud = {
+                "comando": "ikea_en_grupo",
+                "tipo": "ikea_en_grupo",
+                "chat_id": -1001234567,
+            }
+            res = radar.atender_solicitudes([solicitud])
+            self.assertEqual(res["enviadas"], 1)
+            self.assertEqual(len(mensajes_enviados), 1)
+            txt, kwargs = mensajes_enviados[0]
+            self.assertIn("IKEA Colombia — Consulta Personal", txt)
+            self.assertIn("bot personal", txt)
+            markup = kwargs.get("reply_markup", {})
+            self.assertIn("inline_keyboard", markup)
+            btn = markup["inline_keyboard"][0][0]
+            self.assertIn("start=ikea", btn["url"])
 
 
 if __name__ == "__main__":

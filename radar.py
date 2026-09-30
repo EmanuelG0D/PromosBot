@@ -26,7 +26,7 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech
+from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech, ikea
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
            "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica", "descuentostech")
@@ -524,6 +524,16 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
                                          por_canal=cfg.get("por_canal", 20),
                                          incluir=cfg.get("incluir"),
                                          excluir=cfg.get("excluir"))
+        _guardar_en_cache(clave, resultado)
+        return resultado
+
+    if fuente == "ikea":
+        deals = ikea.fetch()
+        if consultas_custom:
+            palabras = [c.strip().lower() for c in consultas_custom if len(c.strip()) >= 2]
+            if palabras:
+                deals = [d for d in deals if any(p in d.title.lower() for p in palabras)]
+        resultado = _sin_ruido(deals, cfg)
         _guardar_en_cache(clave, resultado)
         return resultado
 
@@ -1469,6 +1479,21 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
+        if tipo == "ikea_en_grupo":
+            bot_user = config.TELEGRAM_BOT_USERNAME or "PromosOn_bot"
+            url_bot = f"https://t.me/{bot_user}?start=ikea"
+            markup = {"inline_keyboard": [[{"text": "🛋️ Ver ofertas de IKEA en el bot", "url": url_bot}]]}
+            telegram.send(
+                "🛋️ <b>IKEA Colombia — Consulta Personal</b>\n\n"
+                "Para no saturar el grupo con ofertas de hogar y decoración, "
+                "las consultas de <b>IKEA Colombia</b> están disponibles exclusivamente en el <b>bot personal</b>.\n\n"
+                "Toca el botón abajo para explorarlas directamente en tu chat privado:",
+                reply_markup=markup,
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
         if comando in ("salud", "diagnostico", "status_admin") or tipo == "salud":
             user_id = solicitud.get("user_id")
             if not whitelist.es_admin(user_id):
@@ -1732,7 +1757,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 atendidos += 1
                 continue
 
-            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon")
+            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon", "ikea")
                               else telegram.teclado_categorias(titulo))
             if not seleccion:
                 if solicitud.get("es_siguiente"):
@@ -1833,7 +1858,7 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
-        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon")
+        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon", "ikea")
                           else telegram.teclado_categorias(titulo))
         if not seleccion:
             if solicitud.get("es_siguiente"):
