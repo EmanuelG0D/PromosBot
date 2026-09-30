@@ -1597,6 +1597,18 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
+        if tipo == "ver_tiendas":
+            mod_comandos.limpiar_estado_feedback(chat_id)
+            telegram.send(
+                "🏬 <b>Tiendas y Marcas Oficiales</b>\n\n"
+                "Selecciona una tienda para explorar sus ofertas y catálogos exclusivos:\n"
+                "<i>(O presiona ⬅️ Volver al Menú Principal)</i>",
+                reply_markup=telegram.teclado_tiendas_individuales(),
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
         if tipo == "elegir_tienda":
             tienda = solicitud.get("tienda", "colombia")
             tienda_nombre = solicitud.get("tienda_nombre", tienda.capitalize())

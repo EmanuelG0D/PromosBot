@@ -860,14 +860,29 @@ class PruebaComandos(unittest.TestCase):
         self.assertTrue(tiendas.get("resize_keyboard"))
         self.assertFalse(tiendas.get("is_persistent", False))
         botones_tiendas = [b["text"] for row in tiendas["keyboard"] for b in row]
-        self.assertIn("🟡 Éxito", botones_tiendas)
-        self.assertIn("🔴 Alkosto", botones_tiendas)
-        self.assertIn("🟢 Carulla", botones_tiendas)
-        self.assertIn("🟠 Homecenter", botones_tiendas)
-        self.assertIn("📦 Promocajita", botones_tiendas)
         self.assertIn("🇨🇴 Comparar Tiendas", botones_tiendas)
+        self.assertIn("💻 Tecnología", botones_tiendas)
+        self.assertIn("🍳 Cocina y Hogar", botones_tiendas)
+        self.assertIn("❄️ Electrodomésticos", botones_tiendas)
+        self.assertIn("👟 Ropa y Calzado", botones_tiendas)
+        self.assertIn("🛋️ IKEA Colombia", botones_tiendas)
+        self.assertIn("🏍️ Cascos Moto", botones_tiendas)
+        self.assertIn("⚡ Gangas Amazon", botones_tiendas)
+        self.assertIn("🏬 Ver por Tienda", botones_tiendas)
+        self.assertIn("✍️ Sugerencias y Reportes", botones_tiendas)
         self.assertNotIn("🎯 Mis Objetivos", botones_tiendas)
         self.assertNotIn("pepeganga", vtex.TIENDAS)
+
+        indiv = telegram.teclado_tiendas_individuales()
+        self.assertTrue(indiv.get("resize_keyboard"))
+        self.assertFalse(indiv.get("is_persistent", False))
+        botones_indiv = [b["text"] for row in indiv["keyboard"] for b in row]
+        self.assertIn("🟡 Éxito", botones_indiv)
+        self.assertIn("🔴 Alkosto", botones_indiv)
+        self.assertIn("🟢 Carulla", botones_indiv)
+        self.assertIn("🟠 Homecenter", botones_indiv)
+        self.assertIn("📦 Promocajita", botones_indiv)
+        self.assertIn("⬅️ Volver al Menú Principal", botones_indiv)
 
         categorias = telegram.teclado_categorias("Éxito")
         self.assertTrue(categorias.get("resize_keyboard"))
@@ -1473,7 +1488,7 @@ class PruebaRespuestaInmediataYCancelacion(unittest.TestCase):
 class PruebaMercadoLibre(unittest.TestCase):
     def test_teclado_tiendas_incluye_mercadolibre(self):
         from core import telegram
-        teclado = telegram.teclado_tiendas()
+        teclado = telegram.teclado_tiendas_individuales()
         botones = [btn["text"] for fila in teclado.get("keyboard", []) for btn in fila]
         self.assertIn("💛 Mercado Libre", botones)
 
@@ -2055,8 +2070,8 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
 
     def test_teclados_especificos_bien_formados(self):
         from core import telegram
-        # Teclado tiendas incluye las nuevas
-        t_tiendas = telegram.teclado_tiendas()
+        # Teclado tiendas individuales incluye las marcas
+        t_tiendas = telegram.teclado_tiendas_individuales()
         textos_tiendas = [b["text"] for row in t_tiendas["keyboard"] for b in row]
         self.assertIn("🎒 Totto", textos_tiendas)
         self.assertIn("👗 Studio F", textos_tiendas)

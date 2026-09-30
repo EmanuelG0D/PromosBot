@@ -139,13 +139,21 @@ BOTONES_TIENDA: dict[str, tuple[str, str]] = {
 GRUPOS_MENU: dict[str, str] = {
     "🍳 cocina": "cocina",
     "cocina": "cocina",
+    "🍳 cocina y hogar": "cocina",
+    "cocina y hogar": "cocina",
     "❄️ neveras y lavadoras": "neveras",
     "neveras y lavadoras": "neveras",
+    "❄️ electrodomésticos": "neveras",
+    "❄️ electrodomesticos": "neveras",
+    "electrodomésticos": "neveras",
+    "electrodomesticos": "neveras",
     "💻 tecnología": "tecnologia",
     "tecnología": "tecnologia",
     "tecnologia": "tecnologia",
     "👟 ropa y tenis": "ropa",
     "ropa y tenis": "ropa",
+    "👟 ropa y calzado": "ropa",
+    "ropa y calzado": "ropa",
     "🏠 hogar": "hogar",
     "hogar": "hogar",
 }
@@ -782,9 +790,13 @@ def leer_comando(mensaje: dict) -> dict | None:
         elif any(frase in texto_norm for frase in ("volver a grupos", "volver a categorías", "volver a categorias")):
             res = {"comando": "grupo_categoria", "grupo": "volver", "chat_id": chat, "tipo": "grupo_categoria"}
 
-        # Volver a la lista de tiendas
-        elif "volver a tiendas" in texto_norm or "volver" in texto_norm:
+        # Volver al menú principal o a la lista de tiendas
+        elif any(frase in texto_norm for frase in ("volver al menú principal", "volver al menu principal", "volver a tiendas", "volver al inicio", "volver")):
             res = {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
+
+        # Ver catálogo de tiendas individuales
+        elif any(frase in texto_norm for frase in ("ver por tienda", "tiendas individuales", "todas las tiendas", "por tienda", "más tiendas", "mas tiendas")):
+            res = {"comando": "ver_tiendas", "chat_id": chat, "tipo": "ver_tiendas"}
 
         # Boton de grupo tematico (Cocina, Tecnologia, etc.)
         elif texto_norm in GRUPOS_MENU:

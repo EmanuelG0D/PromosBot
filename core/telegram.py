@@ -312,10 +312,25 @@ def _avisar_migracion(error: Exception) -> None:
 
 
 def teclado_tiendas() -> dict:
-    """Menu principal de tiendas para ReplyKeyboardMarkup."""
+    """Menu principal compacto y ordenado para ReplyKeyboardMarkup (Zero Scroll)."""
     return {
         "keyboard": [
             [{"text": "🇨🇴 Comparar Tiendas"}],
+            [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina y Hogar"}],
+            [{"text": "❄️ Electrodomésticos"}, {"text": "👟 Ropa y Calzado"}],
+            [{"text": "🛋️ IKEA Colombia"}, {"text": "🏍️ Cascos Moto"}],
+            [{"text": "⚡ Gangas Amazon"}, {"text": "🏬 Ver por Tienda"}],
+            [{"text": "✍️ Sugerencias y Reportes"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_tiendas_individuales() -> dict:
+    """Menu secundario con todas las marcas y tiendas individuales."""
+    return {
+        "keyboard": [
             [{"text": "🟡 Éxito"}, {"text": "🔴 Alkosto"}],
             [{"text": "🟢 Jumbo"}, {"text": "🔵 Alkomprar"}],
             [{"text": "💛 Mercado Libre"}, {"text": "🟢 Falabella"}],
@@ -326,10 +341,10 @@ def teclado_tiendas() -> dict:
             [{"text": "🎒 Totto"}, {"text": "👔 Arturo Calle"}],
             [{"text": "👞 Vélez"}, {"text": "👗 Studio F"}],
             [{"text": "🦅 Americanino"}, {"text": "👖 Koaj"}],
-            [{"text": "⚡ Gangas Amazon"}, {"text": "🛋️ IKEA Colombia"}],
-            [{"text": "🏍️ Cascos Moto"}, {"text": "📦 Promocajita"}],
+            [{"text": "🛋️ IKEA Colombia"}, {"text": "🏍️ Cascos Moto"}],
+            [{"text": "⚡ Gangas Amazon"}, {"text": "📦 Promocajita"}],
             [{"text": "🇺🇸 Exterior (EE. UU.)"}],
-            [{"text": "✍️ Sugerencias y Reportes"}],
+            [{"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
