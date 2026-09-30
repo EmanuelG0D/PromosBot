@@ -495,6 +495,24 @@ def boton_cancelar_feedback() -> dict:
     }
 
 
+def boton_responder_sugerencia(uid: int | str) -> dict:
+    """Boton inline para que el administrador pueda responder directamente al usuario."""
+    return {
+        "inline_keyboard": [
+            [{"text": "💬 Responder a este usuario", "callback_data": f"responder_sugerencia:{uid}"}]
+        ]
+    }
+
+
+def boton_cancelar_respuesta_admin() -> dict:
+    """Boton inline para que el administrador cancele el modo de respuesta."""
+    return {
+        "inline_keyboard": [
+            [{"text": "❌ Cancelar respuesta", "callback_data": "cancelar_respuesta_admin"}]
+        ]
+    }
+
+
 def es_miembro_del_canal(user_id: int | str,
                          channel_id: int | str | None = None) -> bool:
     """Verifica si el usuario es miembro activo del canal/grupo configurado."""

@@ -344,6 +344,30 @@ def atender_callback_query(callback_query: dict) -> None:
             "Lo sentimos, tu solicitud de acceso no fue aprobada por el administrador.",
             chat_id=target_id,
         )
+
+    elif data.startswith("responder_sugerencia:"):
+        target_id = data.split(":", 1)[1].strip()
+        comandos.fijar_estado_respuesta_admin(remitente_id, target_id)
+        telegram.responder_callback(cq_id, "Modo respuesta activado")
+        telegram.send(
+            f"✍️ <b>Responder a sugerencia</b>\n\n"
+            f"Escribe a continuación en un mensaje el texto que deseas enviarle al usuario (ID: <code>{target_id}</code>):\n\n"
+            f"<i>(O escribe /cancelar para anular la respuesta)</i>",
+            reply_markup=telegram.boton_cancelar_respuesta_admin(),
+            chat_id=remitente_id,
+        )
+        return
+
+    elif data == "cancelar_respuesta_admin":
+        comandos.limpiar_estado_respuesta_admin(remitente_id)
+        telegram.responder_callback(cq_id, "Respuesta cancelada")
+        if chat_id and msg_id:
+            telegram.editar_mensaje(
+                chat_id=chat_id,
+                message_id=msg_id,
+                texto="❌ <i>Respuesta cancelada. Puedes seguir explorando ofertas en el menú inferior.</i>",
+            )
+        return
     else:
         telegram.responder_callback(cq_id, "Opción no reconocida.")
 
@@ -364,7 +388,7 @@ def atender_comando(actualizacion: dict) -> None:
 
     tipo = solicitud.get("tipo")
     cmd = solicitud.get("comando")
-    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal", "salud") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado", "salud"):
+    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal", "salud", "enviar_respuesta_admin", "cancelar_respuesta_admin", "ayuda_responder") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado", "salud"):
         radar.atender_solicitudes([solicitud])
         _estado["comandos_atendidos"] += 1
         return
@@ -428,7 +452,7 @@ def sondeo_local() -> None:
                 # se responden de inmediato en el mismo hilo de sondeo sin bloquear la cola.
                 inmediatas = [
                     s for s in resto
-                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal", "salud")
+                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal", "salud", "enviar_respuesta_admin", "cancelar_respuesta_admin", "ayuda_responder")
                     or s.get("comando") in ("menu", "start", "ayuda", "help", "objetivos", "estado", "salud")
                 ]
                 busquedas = [s for s in resto if s not in inmediatas]

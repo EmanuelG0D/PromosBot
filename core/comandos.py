@@ -455,6 +455,36 @@ def limpiar_estado_feedback(chat_id: int | str) -> None:
         _guardar(datos)
 
 
+def obtener_estado_respuesta_admin(admin_id: int | str) -> dict | None:
+    """Retorna el estado de respuesta activa para el admin, o None si no hay."""
+    if not admin_id:
+        return None
+    datos = _cargar()
+    respuestas = datos.get("respuesta_admin_activa", {})
+    return respuestas.get(str(admin_id))
+
+
+def fijar_estado_respuesta_admin(admin_id: int | str, target_id: int | str) -> None:
+    """Registra que el admin está en proceso de responder a un usuario específico."""
+    if not admin_id or not target_id:
+        return
+    datos = _cargar()
+    respuestas = datos.setdefault("respuesta_admin_activa", {})
+    respuestas[str(admin_id)] = {"target_id": str(target_id)}
+    _guardar(datos)
+
+
+def limpiar_estado_respuesta_admin(admin_id: int | str) -> None:
+    """Elimina el estado de respuesta activa del admin."""
+    if not admin_id:
+        return
+    datos = _cargar()
+    respuestas = datos.get("respuesta_admin_activa", {})
+    if str(admin_id) in respuestas:
+        del respuestas[str(admin_id)]
+        _guardar(datos)
+
+
 def leer_comando(mensaje: dict) -> dict | None:
     """Un mensaje de Telegram vuelto solicitud, o None si no es para el bot.
 
@@ -520,6 +550,34 @@ def leer_comando(mensaje: dict) -> dict | None:
                     "username": username,
                     "tipo": "solicitud_acceso",
                     "es_nueva": es_nueva,
+                }
+
+    # Modo respuesta activo para el administrador
+    if es_admin and user_id:
+        estado_resp = obtener_estado_respuesta_admin(user_id)
+        if estado_resp:
+            if texto.lower() in ("/cancelar", "cancelar", "❌ cancelar"):
+                limpiar_estado_respuesta_admin(user_id)
+                return {
+                    "comando": "cancelar_respuesta_admin",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "cancelar_respuesta_admin",
+                }
+            if not texto.startswith("/") or len(texto.split()) > 1:
+                target_id = estado_resp.get("target_id")
+                limpiar_estado_respuesta_admin(user_id)
+                return {
+                    "comando": "enviar_respuesta_admin",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "enviar_respuesta_admin",
+                    "target_id": target_id,
+                    "texto_respuesta": texto.strip(),
                 }
 
     res = None
@@ -635,6 +693,31 @@ def leer_comando(mensaje: dict) -> dict | None:
                 "nombre": nombre,
                 "username": username,
                 "tipo": "salud",
+            }
+
+        if crudo in ("responder", "reply"):
+            if not es_admin:
+                return None
+            if len(partes) < 3:
+                return {
+                    "comando": "ayuda_responder",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "ayuda_responder",
+                }
+            target_id = partes[1].strip()
+            texto_resp = " ".join(partes[2:]).strip()
+            return {
+                "comando": "enviar_respuesta_admin",
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "enviar_respuesta_admin",
+                "target_id": target_id,
+                "texto_respuesta": texto_resp,
             }
 
         if crudo in ("reportar", "sugerencia", "feedback", "reporte"):

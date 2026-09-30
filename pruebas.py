@@ -3163,6 +3163,75 @@ class PruebaBuzonFeedbackYReportes(unittest.TestCase):
             mock_edit.assert_called_once()
             self.assertIsNone(comandos.obtener_estado_feedback(9999))
 
+    def test_admin_responde_sugerencia_boton_y_comando(self):
+        import server
+        import radar
+        from core import comandos, telegram
+        from unittest.mock import patch
+
+        admin_id = 5583002220
+        target_user = 88887777
+
+        # 1. Verificar botones
+        btn_resp = telegram.boton_responder_sugerencia(target_user)
+        self.assertEqual(btn_resp["inline_keyboard"][0][0]["callback_data"], f"responder_sugerencia:{target_user}")
+
+        btn_canc = telegram.boton_cancelar_respuesta_admin()
+        self.assertEqual(btn_canc["inline_keyboard"][0][0]["callback_data"], "cancelar_respuesta_admin")
+
+        # 2. El admin toca el botón inline "💬 Responder a este usuario"
+        cb = {
+            "id": "cq_admin_1",
+            "from": {"id": admin_id, "first_name": "Admin"},
+            "message": {"message_id": 99, "chat": {"id": admin_id}},
+            "data": f"responder_sugerencia:{target_user}",
+        }
+        with patch("core.telegram.responder_callback") as mock_resp, \
+             patch("core.telegram.send") as mock_send:
+            server.atender_callback_query(cb)
+            mock_resp.assert_called_once()
+            mock_send.assert_called_once()
+            self.assertEqual(comandos.obtener_estado_respuesta_admin(admin_id), {"target_id": str(target_user)})
+
+        # 3. El admin escribe su mensaje de respuesta
+        msg_admin = {
+            "chat": {"id": admin_id, "type": "private"},
+            "text": "Hola, tu sugerencia fue revisada y ya se encuentra disponible en el bot.",
+            "from": {"id": admin_id, "first_name": "Admin"},
+        }
+        cmd = comandos.leer_comando(msg_admin)
+        self.assertIsNotNone(cmd)
+        self.assertEqual(cmd["tipo"], "enviar_respuesta_admin")
+        self.assertEqual(cmd["target_id"], str(target_user))
+        self.assertIn("tu sugerencia fue revisada", cmd["texto_respuesta"])
+        self.assertIsNone(comandos.obtener_estado_respuesta_admin(admin_id))
+
+        # 4. El radar ejecuta el envío al usuario y confirmación al admin
+        mensajes_salida = []
+        with patch("core.telegram.send", side_effect=lambda txt, **k: mensajes_salida.append((txt, k)) or True):
+            res = radar.atender_solicitudes([cmd])
+            self.assertEqual(res["enviadas"], 1)
+            self.assertEqual(len(mensajes_salida), 2)
+            # Mensaje 1: al usuario destinatario
+            self.assertEqual(mensajes_salida[0][1].get("chat_id"), str(target_user))
+            self.assertIn("Respuesta del equipo de PromosBot", mensajes_salida[0][0])
+            self.assertIn("tu sugerencia fue revisada", mensajes_salida[0][0])
+            # Mensaje 2: confirmación al admin
+            self.assertEqual(mensajes_salida[1][1].get("chat_id"), admin_id)
+            self.assertIn("Respuesta enviada con éxito al usuario", mensajes_salida[1][0])
+
+        # 5. Comando directo /responder <target_id> <mensaje>
+        msg_cmd_directo = {
+            "chat": {"id": admin_id, "type": "private"},
+            "text": f"/responder {target_user} Ya agregamos IKEA y Cascos de moto.",
+            "from": {"id": admin_id, "first_name": "Admin"},
+        }
+        cmd_dir = comandos.leer_comando(msg_cmd_directo)
+        self.assertIsNotNone(cmd_dir)
+        self.assertEqual(cmd_dir["tipo"], "enviar_respuesta_admin")
+        self.assertEqual(cmd_dir["target_id"], str(target_user))
+        self.assertEqual(cmd_dir["texto_respuesta"], "Ya agregamos IKEA y Cascos de moto.")
+
 
 class PruebaBalanceoYDiversificacion(unittest.TestCase):
     def test_clasificar_departamento(self):

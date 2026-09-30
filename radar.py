@@ -1448,9 +1448,60 @@ def atender_solicitudes(solicitudes: list[dict],
                     ]
                 telegram.send(
                     telegram.NL.join(lineas_admin),
+                    reply_markup=telegram.boton_responder_sugerencia(uid_u),
                     chat_id=admin_id,
                 )
 
+            atendidos += 1
+            continue
+
+        if tipo == "enviar_respuesta_admin":
+            target_id = solicitud.get("target_id")
+            texto_resp = solicitud.get("texto_respuesta", "").strip()
+            mod_comandos.limpiar_estado_respuesta_admin(user_id)
+
+            msg_usuario = (
+                "📬 <b>Respuesta del equipo de PromosBot:</b>\n\n"
+                f"{telegram.esc(texto_resp)}\n\n"
+                "<i>¡Muchas gracias por ayudarnos a mejorar el bot! Si tienes más ideas o encuentras algún error, escríbenos cuando quieras.</i>"
+            )
+            exito = telegram.send(msg_usuario, reply_markup=telegram.teclado_tiendas(), chat_id=target_id)
+            if exito:
+                telegram.send(
+                    f"✅ <b>Respuesta enviada con éxito al usuario</b> (<code>{target_id}</code>):\n\n"
+                    f"<i>\"{telegram.esc(texto_resp)}\"</i>",
+                    reply_markup=telegram.teclado_tiendas(),
+                    chat_id=chat_id,
+                )
+            else:
+                telegram.send(
+                    f"⚠️ No se pudo entregar el mensaje al usuario <code>{target_id}</code> "
+                    f"(posiblemente bloqueó el bot o el ID no es válido).",
+                    reply_markup=telegram.teclado_tiendas(),
+                    chat_id=chat_id,
+                )
+            atendidos += 1
+            continue
+
+        if tipo == "cancelar_respuesta_admin":
+            mod_comandos.limpiar_estado_respuesta_admin(user_id)
+            telegram.send(
+                "❌ <i>Respuesta cancelada. Puedes seguir usando el menú interactivo.</i>",
+                reply_markup=telegram.teclado_tiendas(),
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "ayuda_responder":
+            telegram.send(
+                "ℹ️ <b>Uso del comando responder:</b>\n\n"
+                "<code>/responder &lt;ID_USUARIO&gt; &lt;Tu mensaje de respuesta&gt;</code>\n\n"
+                "<i>Ejemplo:</i>\n"
+                "<code>/responder 123456789 Hola, tu sugerencia fue revisada y ya agregamos la tienda.</code>",
+                reply_markup=telegram.teclado_tiendas(),
+                chat_id=chat_id,
+            )
             atendidos += 1
             continue
 
