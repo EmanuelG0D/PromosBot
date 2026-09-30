@@ -4131,7 +4131,11 @@ class PruebaCuposPorTienda(unittest.TestCase):
             d_cajita_link = oferta(source="vtex", store="Exito", title="Promo Exito", url="https://promocajita.com/deal/456")
             self.assertIsNone(facebook.encolar_oferta(d_cajita_link))
 
-            # 6. Oferta de tienda directa oficial (Falabella, Amazon, etc.) admitida
+            # 6. Cualquier oferta con enlace a Slickdeals rechazada
+            d_sd_link = oferta(source="vtex", store="Exito", title="Promo Exito", url="https://slickdeals.net/f/123")
+            self.assertIsNone(facebook.encolar_oferta(d_sd_link))
+
+            # 7. Oferta de tienda directa oficial (Falabella, Amazon, etc.) admitida
             with Store() as store:
                 store.conn.execute("DELETE FROM facebook_cola")
                 store.conn.commit()

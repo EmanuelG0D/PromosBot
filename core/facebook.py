@@ -574,6 +574,7 @@ DOMINIOS_EXCLUIDOS_FACEBOOK: tuple[str, ...] = (
     "fb.me",
     "promocajita.com",
     "pccajita.link",
+    "slickdeals.net",
 )
 
 
