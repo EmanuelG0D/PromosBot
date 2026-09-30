@@ -1655,7 +1655,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 )
             elif grupo == "neveras":
                 telegram.send(
-                    f"❄️ <b>Neveras y Lavadoras en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"❄️ <b>Electrodomésticos en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_neveras_lavadoras(),
                     chat_id=chat_id,
                 )
@@ -1667,7 +1667,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 )
             elif grupo == "hogar":
                 telegram.send(
-                    f"🏠 <b>Hogar y Herramientas en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"🏠 <b>Hogar y Muebles en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_hogar(),
                     chat_id=chat_id,
                 )

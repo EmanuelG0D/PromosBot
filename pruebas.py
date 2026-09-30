@@ -862,7 +862,8 @@ class PruebaComandos(unittest.TestCase):
         botones_tiendas = [b["text"] for row in tiendas["keyboard"] for b in row]
         self.assertIn("🇨🇴 Ofertas Colombia", botones_tiendas)
         self.assertIn("💻 Tecnología", botones_tiendas)
-        self.assertIn("🍳 Cocina y Hogar", botones_tiendas)
+        self.assertIn("🍳 Cocina", botones_tiendas)
+        self.assertIn("🏠 Hogar y Muebles", botones_tiendas)
         self.assertIn("❄️ Electrodomésticos", botones_tiendas)
         self.assertIn("👟 Ropa y Calzado", botones_tiendas)
         self.assertIn("⚡ Gangas Amazon", botones_tiendas)
@@ -2035,6 +2036,10 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             self.assertEqual(res_hogar["tipo"], "grupo_categoria")
             self.assertEqual(res_hogar["grupo"], "hogar")
 
+            res_hogar_m = parsear("🏠 Hogar y Muebles")
+            self.assertEqual(res_hogar_m["tipo"], "grupo_categoria")
+            self.assertEqual(res_hogar_m["grupo"], "hogar")
+
             res_volver = parsear("⬅️ Volver a Grupos")
             self.assertEqual(res_volver["tipo"], "grupo_categoria")
             self.assertEqual(res_volver["grupo"], "volver")
@@ -2088,13 +2093,13 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("👟 Tenis y Zapatos", textos_totto)
         self.assertIn("👕 Camisetas y Polos", textos_totto)
 
-        # Teclado Cocina y Hogar
+        # Teclado Cocina
         t_cocina = telegram.teclado_cocina()
         textos_cocina = [b["text"] for row in t_cocina["keyboard"] for b in row]
         self.assertIn("🍟 Airfryers", textos_cocina)
         self.assertIn("🥪 Sandwicheras", textos_cocina)
         self.assertIn("🍹 Licuadoras", textos_cocina)
-        self.assertIn("🛋️ Muebles y Colchones", textos_cocina)
+        self.assertNotIn("🛋️ Muebles y Colchones", textos_cocina)
 
         # Teclado Tecnologia
         t_tec = telegram.teclado_tecnologia()
@@ -2115,7 +2120,9 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         t_hogar = telegram.teclado_hogar()
         textos_hogar = [b["text"] for row in t_hogar["keyboard"] for b in row]
         self.assertIn("🛋️ Muebles y Colchones", textos_hogar)
-        self.assertIn("🛞 Llantas", textos_hogar)
+        self.assertIn("🔨 Herramientas", textos_hogar)
+        self.assertIn("💨 Ventiladores", textos_hogar)
+        self.assertNotIn("🛞 Llantas", textos_hogar)
 
         # Tiendas de electrodomésticos en teclado_tiendas
         self.assertIn("🟢 Jumbo", textos_tiendas)

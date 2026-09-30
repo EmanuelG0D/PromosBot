@@ -316,10 +316,10 @@ def teclado_tiendas() -> dict:
     return {
         "keyboard": [
             [{"text": "🇨🇴 Ofertas Colombia"}],
-            [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina y Hogar"}],
-            [{"text": "❄️ Electrodomésticos"}, {"text": "👟 Ropa y Calzado"}],
-            [{"text": "⚡ Gangas Amazon"}, {"text": "🏬 Ver por Tienda"}],
-            [{"text": "✍️ Sugerencias y Reportes"}],
+            [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina"}],
+            [{"text": "🏠 Hogar y Muebles"}, {"text": "❄️ Electrodomésticos"}],
+            [{"text": "👟 Ropa y Calzado"}, {"text": "⚡ Gangas Amazon"}],
+            [{"text": "🏬 Ver por Tienda"}, {"text": "✍️ Sugerencias y Reportes"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -380,8 +380,8 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
     return {
         "keyboard": [
             [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina"}],
-            [{"text": "❄️ Neveras y Lavadoras"}, {"text": "👟 Ropa y Tenis"}],
-            [{"text": "🏠 Hogar"}, {"text": boton_todo}],
+            [{"text": "🏠 Hogar y Muebles"}, {"text": "❄️ Electrodomésticos"}],
+            [{"text": "👟 Ropa y Calzado"}, {"text": boton_todo}],
             [{"text": "📺 Smart TV"}, {"text": "⬅️ Volver a Tiendas"}],
         ],
         "resize_keyboard": True,
@@ -390,14 +390,13 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
 
 
 def teclado_cocina() -> dict:
-    """Submenu de productos especificos de cocina y hogar."""
+    """Submenu de productos especificos de cocina."""
     return {
         "keyboard": [
             [{"text": "🍟 Airfryers"}, {"text": "☕ Cafeteras"}],
             [{"text": "🍹 Licuadoras"}, {"text": "🍿 Microondas"}],
             [{"text": "🍳 Sartenes y Baterías"}, {"text": "🥪 Sandwicheras"}],
-            [{"text": "🛋️ Muebles y Colchones"}, {"text": "🧹 Aspiradoras"}],
-            [{"text": "🔨 Herramientas"}, {"text": "🌟 Toda la Cocina"}],
+            [{"text": "🌟 Toda la Cocina"}],
             [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
@@ -456,7 +455,7 @@ def teclado_hogar() -> dict:
         "keyboard": [
             [{"text": "🛋️ Muebles y Colchones"}, {"text": "🧹 Aspiradoras"}],
             [{"text": "🔨 Herramientas"}, {"text": "💨 Ventiladores"}],
-            [{"text": "🛞 Llantas"}, {"text": "🌟 Todo el Hogar"}],
+            [{"text": "🌟 Todo el Hogar"}],
             [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,

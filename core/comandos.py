@@ -163,6 +163,8 @@ GRUPOS_MENU: dict[str, str] = {
     "ropa y calzado": "ropa",
     "🏠 hogar": "hogar",
     "hogar": "hogar",
+    "🏠 hogar y muebles": "hogar",
+    "hogar y muebles": "hogar",
 }
 
 # Consultas especificas al tocar cada categoria o cosita especifica
