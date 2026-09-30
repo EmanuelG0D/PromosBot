@@ -124,6 +124,10 @@ BOTONES_TIENDA: dict[str, tuple[str, str]] = {
     "🏍️ cascos": ("cascos", "Cascos de Moto"),
     "cascos moto": ("cascos", "Cascos de Moto"),
     "cascos": ("cascos", "Cascos de Moto"),
+    "🇨🇴 ofertas colombia": ("colombia", "Todo Colombia"),
+    "ofertas colombia": ("colombia", "Todo Colombia"),
+    "🇨🇴 ofertas": ("colombia", "Todo Colombia"),
+    "ofertas": ("colombia", "Todo Colombia"),
     "🇨🇴 comparar tiendas": ("colombia", "Todo Colombia"),
     "comparar tiendas": ("colombia", "Todo Colombia"),
     "🇨🇴 comparar en todo colombia": ("colombia", "Todo Colombia"),
@@ -860,6 +864,17 @@ def leer_comando(mensaje: dict) -> dict | None:
                                 "cantidad": None,
                                 "tipo": "todo_tienda",
                             }
+                    elif tienda_key == "colombia":
+                        # Entrega directa de las mejores ofertas de Colombia en 1 solo clic
+                        fijar_tienda_activa("colombia", chat_id=chat)
+                        res = {
+                            "comando": "todo_tienda",
+                            "tienda": "colombia",
+                            "tienda_nombre": "Todo Colombia",
+                            "chat_id": chat,
+                            "cantidad": None,
+                            "tipo": "todo_tienda",
+                        }
                     else:
                         res = {
                             "comando": "elegir_tienda",

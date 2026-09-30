@@ -860,16 +860,16 @@ class PruebaComandos(unittest.TestCase):
         self.assertTrue(tiendas.get("resize_keyboard"))
         self.assertFalse(tiendas.get("is_persistent", False))
         botones_tiendas = [b["text"] for row in tiendas["keyboard"] for b in row]
-        self.assertIn("🇨🇴 Comparar Tiendas", botones_tiendas)
+        self.assertIn("🇨🇴 Ofertas Colombia", botones_tiendas)
         self.assertIn("💻 Tecnología", botones_tiendas)
         self.assertIn("🍳 Cocina y Hogar", botones_tiendas)
         self.assertIn("❄️ Electrodomésticos", botones_tiendas)
         self.assertIn("👟 Ropa y Calzado", botones_tiendas)
-        self.assertIn("🛋️ IKEA Colombia", botones_tiendas)
-        self.assertIn("🏍️ Cascos Moto", botones_tiendas)
         self.assertIn("⚡ Gangas Amazon", botones_tiendas)
         self.assertIn("🏬 Ver por Tienda", botones_tiendas)
         self.assertIn("✍️ Sugerencias y Reportes", botones_tiendas)
+        self.assertNotIn("🛋️ IKEA Colombia", botones_tiendas)
+        self.assertNotIn("🏍️ Cascos Moto", botones_tiendas)
         self.assertNotIn("🎯 Mis Objetivos", botones_tiendas)
         self.assertNotIn("pepeganga", vtex.TIENDAS)
 
@@ -881,6 +881,8 @@ class PruebaComandos(unittest.TestCase):
         self.assertIn("🔴 Alkosto", botones_indiv)
         self.assertIn("🟢 Carulla", botones_indiv)
         self.assertIn("🟠 Homecenter", botones_indiv)
+        self.assertIn("🛋️ IKEA Colombia", botones_indiv)
+        self.assertIn("🏍️ Cascos Moto", botones_indiv)
         self.assertIn("📦 Promocajita", botones_indiv)
         self.assertIn("⬅️ Volver al Menú Principal", botones_indiv)
 
@@ -2151,9 +2153,9 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         from unittest.mock import patch
         t = telegram.teclado_tiendas()
         textos = [b["text"] for row in t["keyboard"] for b in row]
-        self.assertIn("🇨🇴 Comparar Tiendas", textos)
+        self.assertIn("🇨🇴 Ofertas Colombia", textos)
         # Debe estar en la primera fila como botón estelar
-        self.assertEqual(t["keyboard"][0][0]["text"], "🇨🇴 Comparar Tiendas")
+        self.assertEqual(t["keyboard"][0][0]["text"], "🇨🇴 Ofertas Colombia")
 
         # Categorías en Colombia
         t_col = telegram.teclado_categorias("Todo Colombia")
@@ -2162,8 +2164,12 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("💻 Tecnología", textos_col)
         self.assertIn("🍳 Cocina", textos_col)
 
-        # Parsear '🌟 Todo Colombia' y '⬅️ Volver a Categorías'
+        # Parsear '🇨🇴 Ofertas Colombia', '🌟 Todo Colombia' y '⬅️ Volver a Categorías'
         with patch("core.whitelist.es_admin", return_value=True):
+            r_of = comandos.leer_comando({"text": "🇨🇴 Ofertas Colombia", "chat": {"id": 1234, "type": "private"}, "from": {"id": 1234}})
+            self.assertEqual(r_of["tipo"], "todo_tienda")
+            self.assertEqual(r_of["tienda"], "colombia")
+
             r_todo = comandos.leer_comando({"text": "🌟 Todo Colombia", "chat": {"id": 1234, "type": "private"}, "from": {"id": 1234}})
             self.assertEqual(r_todo["tipo"], "todo_tienda")
             self.assertEqual(comandos.tienda_activa(1234), "colombia")
@@ -4988,7 +4994,7 @@ class PruebaCascosMoto(unittest.TestCase):
 
     def test_teclado_tiendas_incluye_cascos(self):
         from core import telegram
-        teclado = telegram.teclado_tiendas()
+        teclado = telegram.teclado_tiendas_individuales()
         textos = [b["text"] for fila in teclado["keyboard"] for b in fila]
         self.assertIn("🏍️ Cascos Moto", textos)
 

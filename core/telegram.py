@@ -315,10 +315,9 @@ def teclado_tiendas() -> dict:
     """Menu principal compacto y ordenado para ReplyKeyboardMarkup (Zero Scroll)."""
     return {
         "keyboard": [
-            [{"text": "🇨🇴 Comparar Tiendas"}],
+            [{"text": "🇨🇴 Ofertas Colombia"}],
             [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina y Hogar"}],
             [{"text": "❄️ Electrodomésticos"}, {"text": "👟 Ropa y Calzado"}],
-            [{"text": "🛋️ IKEA Colombia"}, {"text": "🏍️ Cascos Moto"}],
             [{"text": "⚡ Gangas Amazon"}, {"text": "🏬 Ver por Tienda"}],
             [{"text": "✍️ Sugerencias y Reportes"}],
         ],

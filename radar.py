@@ -1847,7 +1847,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 atendidos += 1
                 continue
 
-            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon", "ikea", "cascos")
+            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon", "ikea", "cascos", "colombia")
                               else telegram.teclado_categorias(titulo))
             if not seleccion:
                 if solicitud.get("es_siguiente"):
@@ -1948,7 +1948,7 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
-        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon", "ikea", "cascos")
+        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon", "ikea", "cascos", "colombia")
                           else telegram.teclado_categorias(titulo))
         if not seleccion:
             if solicitud.get("es_siguiente"):
