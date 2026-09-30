@@ -340,7 +340,7 @@ def teclado_tiendas_individuales() -> dict:
             [{"text": "🎒 Totto"}, {"text": "👔 Arturo Calle"}],
             [{"text": "👞 Vélez"}, {"text": "👗 Studio F"}],
             [{"text": "🦅 Americanino"}, {"text": "👖 Koaj"}],
-            [{"text": "🛋️ IKEA Colombia"}, {"text": "🏍️ Cascos Moto"}],
+            [{"text": "🛋️ IKEA Colombia"}, {"text": "🏍️ Cascos y Llantas"}],
             [{"text": "⚡ Gangas Amazon"}, {"text": "📦 Promocajita"}],
             [{"text": "🇺🇸 Exterior (EE. UU.)"}],
             [{"text": "⬅️ Volver al Menú Principal"}],
@@ -456,7 +456,7 @@ def teclado_hogar() -> dict:
         "keyboard": [
             [{"text": "🛋️ Muebles y Colchones"}, {"text": "🧹 Aspiradoras"}],
             [{"text": "🔨 Herramientas"}, {"text": "💨 Ventiladores"}],
-            [{"text": "🌟 Todo el Hogar"}],
+            [{"text": "🛞 Llantas"}, {"text": "🌟 Todo el Hogar"}],
             [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,

@@ -732,7 +732,7 @@ DEPTO_HOGAR = {
     "colchon", "colchones", "cama", "camas", "almohada", "almohadas",
     "sabana", "sabanas", "edredon", "mueble", "muebles", "sofa", "sofas",
     "silla", "sillas", "mesa", "mesas", "comedor", "escritorio", "escritorios",
-    "closet", "closets"
+    "closet", "closets", "llanta", "llantas", "neumatico", "neumaticos"
 }
 
 

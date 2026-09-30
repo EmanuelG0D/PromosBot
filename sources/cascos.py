@@ -35,6 +35,18 @@ TIENDAS_CONFIG = {
         "api_url": "https://ridersite.com.co/collections/cascos/products.json?limit=50",
         "tipo": "shopify",
     },
+    "cascosromo": {
+        "nombre": "Cascos Romo",
+        "url_base": "https://cascosromo.com",
+        "api_url": "https://cascosromo.com/collections/cascos/products.json?limit=50",
+        "tipo": "shopify",
+    },
+    "zonabiker": {
+        "nombre": "Zonabiker",
+        "url_base": "https://zonabiker.com.co",
+        "api_url": "https://zonabiker.com.co/collections/llantas-para-motos/products.json?limit=50",
+        "tipo": "shopify",
+    },
 }
 
 

@@ -869,7 +869,7 @@ class PruebaComandos(unittest.TestCase):
         self.assertIn("🏬 Ver por Tienda", botones_tiendas)
         self.assertIn("✍️ Sugerencias y Reportes", botones_tiendas)
         self.assertNotIn("🛋️ IKEA Colombia", botones_tiendas)
-        self.assertNotIn("🏍️ Cascos Moto", botones_tiendas)
+        self.assertNotIn("🏍️ Cascos y Llantas", botones_tiendas)
         self.assertNotIn("🎯 Mis Objetivos", botones_tiendas)
         self.assertNotIn("pepeganga", vtex.TIENDAS)
 
@@ -882,7 +882,7 @@ class PruebaComandos(unittest.TestCase):
         self.assertIn("🟢 Carulla", botones_indiv)
         self.assertIn("🟠 Homecenter", botones_indiv)
         self.assertIn("🛋️ IKEA Colombia", botones_indiv)
-        self.assertIn("🏍️ Cascos Moto", botones_indiv)
+        self.assertIn("🏍️ Cascos y Llantas", botones_indiv)
         self.assertIn("📦 Promocajita", botones_indiv)
         self.assertIn("⬅️ Volver al Menú Principal", botones_indiv)
 
@@ -2115,6 +2115,7 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         t_hogar = telegram.teclado_hogar()
         textos_hogar = [b["text"] for row in t_hogar["keyboard"] for b in row]
         self.assertIn("🛋️ Muebles y Colchones", textos_hogar)
+        self.assertIn("🛞 Llantas", textos_hogar)
 
         # Tiendas de electrodomésticos en teclado_tiendas
         self.assertIn("🟢 Jumbo", textos_tiendas)
@@ -2148,6 +2149,10 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             r_muebles = comandos.leer_comando({"text": "🛋️ Muebles y Colchones", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
             self.assertEqual(r_muebles["tipo"], "categoria")
             self.assertIn("colchon", r_muebles["consultas"])
+
+            r_llantas = comandos.leer_comando({"text": "🛞 Llantas", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
+            self.assertEqual(r_llantas["tipo"], "categoria")
+            self.assertIn("llanta", r_llantas["consultas"])
 
     def test_tiendas_electrodomesticos_registradas(self):
         from unittest.mock import patch
@@ -5025,7 +5030,7 @@ class PruebaCascosMoto(unittest.TestCase):
         from core import telegram
         teclado = telegram.teclado_tiendas_individuales()
         textos = [b["text"] for fila in teclado["keyboard"] for b in fila]
-        self.assertIn("🏍️ Cascos Moto", textos)
+        self.assertIn("🏍️ Cascos y Llantas", textos)
 
 
 if __name__ == "__main__":
