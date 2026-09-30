@@ -52,6 +52,7 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "koaj":         ("koaj",   None,             "Koaj"),
     "amazon":       ("amazon_gangas", None,      "Gangas Amazon"),
     "ikea":         ("ikea",   None,             "IKEA Colombia"),
+    "cascos":       ("cascos", None,             "Cascos de Moto"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
     "colombia": ("co",         None,         "Todo lo colombiano"),
     "todo":     ("*",          None,         "Todas las tiendas"),
@@ -119,6 +120,10 @@ BOTONES_TIENDA: dict[str, tuple[str, str]] = {
     "🛋️ ikea": ("ikea", "IKEA Colombia"),
     "ikea colombia": ("ikea", "IKEA Colombia"),
     "ikea": ("ikea", "IKEA Colombia"),
+    "🏍️ cascos moto": ("cascos", "Cascos de Moto"),
+    "🏍️ cascos": ("cascos", "Cascos de Moto"),
+    "cascos moto": ("cascos", "Cascos de Moto"),
+    "cascos": ("cascos", "Cascos de Moto"),
     "🇨🇴 comparar tiendas": ("colombia", "Todo Colombia"),
     "comparar tiendas": ("colombia", "Todo Colombia"),
     "🇨🇴 comparar en todo colombia": ("colombia", "Todo Colombia"),
@@ -490,7 +495,7 @@ def leer_comando(mensaje: dict) -> dict | None:
     else:
         # Los usuarios que no sean admin SOLO pueden usar el bot si están inscritos en el canal
         if not es_admin:
-            es_deep_link = texto.startswith("/start") and any(k in texto for k in ("deal_", "report_", "ikea"))
+            es_deep_link = texto.startswith("/start") and any(k in texto for k in ("deal_", "report_", "ikea", "cascos"))
             if es_deep_link:
                 # Si llega desde Facebook o enlace externo con una oferta específica, se auto-aprueba
                 # para entregarle la oferta de inmediato sin fricción
@@ -585,6 +590,40 @@ def leer_comando(mensaje: dict) -> dict | None:
                 "nombre": nombre,
                 "username": username,
                 "tipo": "ikea",
+            }
+
+        # Si es un deep link de cascos: /start cascos
+        if crudo == "start" and len(partes) > 1 and partes[1].lower() in ("cascos", "casco", "motos"):
+            return {
+                "comando": "cascos",
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "cascos",
+            }
+
+        if crudo in ("cascos", "casco", "motos"):
+            if es_grupo:
+                return {
+                    "comando": "cascos_en_grupo",
+                    "chat_id": chat,
+                    "user_id": user_id,
+                    "nombre": nombre,
+                    "username": username,
+                    "tipo": "cascos_en_grupo",
+                }
+            cantidad = None
+            if len(partes) > 1 and partes[1].isdigit():
+                cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
+            return {
+                "comando": "cascos",
+                "chat_id": chat,
+                "cantidad": cantidad,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "cascos",
             }
 
         if crudo in ("salud", "diagnostico", "status_admin"):
@@ -704,6 +743,24 @@ def leer_comando(mensaje: dict) -> dict | None:
                                 "comando": "todo_tienda",
                                 "tienda": "ikea",
                                 "tienda_nombre": "IKEA Colombia",
+                                "chat_id": chat,
+                                "cantidad": None,
+                                "tipo": "todo_tienda",
+                            }
+                    elif tienda_key == "cascos":
+                        if es_grupo:
+                            res = {
+                                "comando": "cascos_en_grupo",
+                                "chat_id": chat,
+                                "cantidad": None,
+                                "tipo": "cascos_en_grupo",
+                            }
+                        else:
+                            fijar_tienda_activa("cascos", chat_id=chat)
+                            res = {
+                                "comando": "todo_tienda",
+                                "tienda": "cascos",
+                                "tienda_nombre": "Cascos de Moto",
                                 "chat_id": chat,
                                 "cantidad": None,
                                 "tipo": "todo_tienda",

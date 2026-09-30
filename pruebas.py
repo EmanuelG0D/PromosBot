@@ -661,8 +661,8 @@ class PruebaComandos(unittest.TestCase):
         from core.comandos import CATALOGO
         from radar import FUENTES
         for comando, (fuente, _tiendas, titulo) in CATALOGO.items():
-            # "co", "amazon_gangas", "ikea" y "*" son especiales para comandos.
-            self.assertIn(fuente, set(FUENTES) | {"*", "co", "amazon_gangas", "ikea"},
+            # "co", "amazon_gangas", "ikea", "cascos" y "*" son especiales para comandos.
+            self.assertIn(fuente, set(FUENTES) | {"*", "co", "amazon_gangas", "ikea", "cascos"},
                           f"/{comando} apunta a una fuente inexistente")
             self.assertTrue(titulo)
 
@@ -4704,6 +4704,188 @@ class PruebaIkeaColombia(unittest.TestCase):
             self.assertIn("inline_keyboard", markup)
             btn = markup["inline_keyboard"][0][0]
             self.assertIn("start=ikea", btn["url"])
+
+
+
+class PruebaCascosMoto(unittest.TestCase):
+    """Pruebas unitarias para el agregador multitienda de cascos de moto."""
+
+    MOCK_VTEX_INDUCASCOS = [
+        {
+            "productId": "98765",
+            "productName": "Casco ICH 503 ED SPECIAL World Cup",
+            "link": "https://www.inducascos.com/casco-ich-503/p",
+            "brand": "ICH",
+            "items": [
+                {
+                    "images": [{"imageUrl": "https://www.inducascos.com/arquivos/casco.jpg"}],
+                    "sellers": [
+                        {
+                            "commertialOffer": {
+                                "Price": 187000.0,
+                                "ListPrice": 220000.0,
+                                "AvailableQuantity": 5,
+                            }
+                        }
+                    ],
+                }
+            ],
+        },
+        {
+            "productId": "11111",
+            "productName": "Casco SHAFT Sin Descuento",
+            "link": "https://www.inducascos.com/casco-sin-descuento/p",
+            "brand": "SHAFT",
+            "items": [
+                {
+                    "sellers": [
+                        {
+                            "commertialOffer": {
+                                "Price": 300000.0,
+                                "ListPrice": 300000.0,
+                                "AvailableQuantity": 2,
+                            }
+                        }
+                    ]
+                }
+            ],
+        },
+    ]
+
+    MOCK_SHOPIFY_DS2M2 = {
+        "products": [
+            {
+                "id": 123456789,
+                "title": "Casco SHAFT 549 SP SOLID - Negro Azul",
+                "handle": "casco-shaft-549-sp-solid-negro-azul",
+                "vendor": "SHAFT",
+                "images": [{"src": "https://cdn.shopify.com/casco.jpg"}],
+                "variants": [
+                    {
+                        "available": True,
+                        "price": "339000",
+                        "compare_at_price": "469000",
+                    }
+                ],
+            },
+            {
+                "id": 999999999,
+                "title": "Casco Regular Sin Oferta",
+                "handle": "casco-regular",
+                "vendor": "HJC",
+                "variants": [
+                    {
+                        "available": True,
+                        "price": "1200000",
+                        "compare_at_price": None,
+                    }
+                ],
+            },
+        ]
+    }
+
+    def test_cascos_extractor_vtex_inducascos(self):
+        from sources import cascos
+        deals = cascos.extraer_deals_vtex_inducascos(self.MOCK_VTEX_INDUCASCOS)
+        self.assertEqual(len(deals), 1)
+        d = deals[0]
+        self.assertEqual(d.source, "cascos")
+        self.assertEqual(d.store, "Inducascos")
+        self.assertEqual(d.price, 187000.0)
+        self.assertEqual(d.list_price, 220000.0)
+        self.assertAlmostEqual(d.discount_pct, 15.0, places=1)
+        self.assertEqual(d.image, "https://www.inducascos.com/arquivos/casco.jpg")
+        self.assertIn("ICH", d.title)
+
+    def test_cascos_extractor_shopify_ds2m2(self):
+        from sources import cascos
+        deals = cascos.extraer_deals_shopify(self.MOCK_SHOPIFY_DS2M2, "ds2m2", "DS2M2", "https://ds2m2.com")
+        self.assertEqual(len(deals), 1)
+        d = deals[0]
+        self.assertEqual(d.source, "cascos")
+        self.assertEqual(d.store, "DS2M2")
+        self.assertEqual(d.price, 339000.0)
+        self.assertEqual(d.list_price, 469000.0)
+        self.assertAlmostEqual(d.discount_pct, 27.7, places=1)
+        self.assertEqual(d.url, "https://ds2m2.com/products/casco-shaft-549-sp-solid-negro-azul")
+
+    def test_cascos_comandos_aislamiento_grupo_vs_privado(self):
+        from core.comandos import leer_comando
+
+        # 1. En grupo: un no-admin se ignora; un admin recibe cascos_en_grupo
+        msg_grupo_no_admin = {
+            "chat": {"id": -1001234567, "type": "supergroup"},
+            "text": "/cascos",
+            "from": {"id": 111, "first_name": "Test"},
+        }
+        self.assertIsNone(leer_comando(msg_grupo_no_admin))
+
+        msg_grupo_admin = {
+            "chat": {"id": -1001234567, "type": "supergroup"},
+            "text": "/cascos",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_g = leer_comando(msg_grupo_admin)
+        self.assertIsNotNone(cmd_g)
+        self.assertEqual(cmd_g["tipo"], "cascos_en_grupo")
+
+        # 2. En chat privado: /cascos entrega ofertas
+        msg_privado = {
+            "chat": {"id": 5583002220, "type": "private"},
+            "text": "/cascos",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_p = leer_comando(msg_privado)
+        self.assertIsNotNone(cmd_p)
+        self.assertEqual(cmd_p["tipo"], "cascos")
+        self.assertEqual(cmd_p["comando"], "cascos")
+
+        # 3. Deep link /start cascos
+        msg_start = {
+            "chat": {"id": 111, "type": "private"},
+            "text": "/start cascos",
+            "from": {"id": 111, "first_name": "Test"},
+        }
+        cmd_start = leer_comando(msg_start)
+        self.assertIsNotNone(cmd_start)
+        self.assertEqual(cmd_start["tipo"], "cascos")
+
+        # 4. Botón 🏍️ Cascos Moto
+        msg_btn_priv = {
+            "chat": {"id": 5583002220, "type": "private"},
+            "text": "🏍️ Cascos Moto",
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        cmd_btn = leer_comando(msg_btn_priv)
+        self.assertEqual(cmd_btn["tipo"], "todo_tienda")
+        self.assertEqual(cmd_btn["tienda"], "cascos")
+
+    def test_cascos_radar_atender_en_grupo(self):
+        import radar
+        from unittest.mock import patch
+
+        mensajes_enviados = []
+        with patch("core.telegram.send", side_effect=lambda txt, **k: mensajes_enviados.append((txt, k)) or True):
+            solicitud = {
+                "comando": "cascos_en_grupo",
+                "tipo": "cascos_en_grupo",
+                "chat_id": -1001234567,
+            }
+            res = radar.atender_solicitudes([solicitud])
+            self.assertEqual(res["enviadas"], 1)
+            self.assertEqual(len(mensajes_enviados), 1)
+            txt, kwargs = mensajes_enviados[0]
+            self.assertIn("Cascos de Moto — Consulta Personal", txt)
+            markup = kwargs.get("reply_markup", {})
+            self.assertIn("inline_keyboard", markup)
+            btn = markup["inline_keyboard"][0][0]
+            self.assertIn("start=cascos", btn["url"])
+
+    def test_teclado_tiendas_incluye_cascos(self):
+        from core import telegram
+        teclado = telegram.teclado_tiendas()
+        textos = [b["text"] for fila in teclado["keyboard"] for b in fila]
+        self.assertIn("🏍️ Cascos Moto", textos)
 
 
 if __name__ == "__main__":
