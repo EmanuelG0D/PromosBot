@@ -197,6 +197,8 @@ CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
     "estufas y hornos": ["estufa", "cubierta a gas", "horno"],
     "💨 Aires Acondicionados": ["aire acondicionado", "climatizador"],
     "aires acondicionados": ["aire acondicionado", "climatizador"],
+    "💈 Cuidado Personal": ["afeitadora", "rasuradora", "cortadora de pelo", "cortapelo", "secador de pelo", "secador de cabello", "plancha de cabello", "plancha de pelo", "depiladora", "cepillo electrico"],
+    "cuidado personal": ["afeitadora", "rasuradora", "cortadora de pelo", "cortapelo", "secador de pelo", "secador de cabello", "plancha de cabello", "plancha de pelo", "depiladora", "cepillo electrico"],
     "🌟 Toda la Línea Blanca": ["nevera", "lavadora", "estufa", "nevecon"],
 
     # --- Cositas Específicas: Tecnología ---
@@ -207,6 +209,12 @@ CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
     "portatiles": ["portatil", "laptop", "computador", "macbook", "notebook"],
     "📱 Celulares": ["celular", "smartphone", "iphone", "samsung galaxy", "telefono"],
     "celulares": ["celular", "smartphone", "iphone", "samsung galaxy", "telefono"],
+    "📱 Tablets e iPads": ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"],
+    "tablets e ipads": ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"],
+    "tablets": ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"],
+    "tablet": ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"],
+    "ipad": ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"],
+    "ipads": ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"],
     "🖥️ Monitores": ["monitor", "monitor gamer"],
     "monitores": ["monitor", "monitor gamer"],
     "🎧 Audífonos y Sonido": ["audifonos", "diadema", "parlante", "auriculares"],
@@ -234,6 +242,11 @@ CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
     "🌟 Toda la Ropa": ["camiseta", "jean", "chaqueta", "tenis", "morral"],
 
     # --- Cositas Específicas: Hogar ---
+    "🛋️ Muebles y Colchones": ["colchon", "cama", "sofa", "escritorio", "silla gamer", "silla de oficina", "comedor", "mueble", "closet", "mesa de noche"],
+    "muebles y colchones": ["colchon", "cama", "sofa", "escritorio", "silla gamer", "silla de oficina", "comedor", "mueble", "closet", "mesa de noche"],
+    "muebles": ["colchon", "cama", "sofa", "escritorio", "silla gamer", "silla de oficina", "comedor", "mueble", "closet", "mesa de noche"],
+    "colchones": ["colchon", "cama", "sofa", "escritorio", "silla gamer", "silla de oficina", "comedor", "mueble", "closet", "mesa de noche"],
+    "colchon": ["colchon", "cama", "sofa", "escritorio", "silla gamer", "silla de oficina", "comedor", "mueble", "closet", "mesa de noche"],
     "🧹 Aspiradoras": ["aspiradora", "robot aspiradora"],
     "aspiradoras": ["aspiradora", "robot aspiradora"],
     "aspiradora": ["aspiradora", "robot aspiradora"],
@@ -275,6 +288,9 @@ CATEGORIAS_BUSQUEDA_EN: dict[str, list[str]] = {
     "💻 Portátiles": ["laptop", "macbook", "notebook"],
     "🖥️ Monitores": ["monitor", "gaming monitor"],
     "📱 Celulares": ["phone", "smartphone", "iphone"],
+    "📱 Tablets e iPads": ["ipad", "tablet", "galaxy tab", "kindle fire"],
+    "💈 Cuidado Personal": ["shaver", "hair dryer", "straightener", "trimmer", "electric toothbrush"],
+    "🛋️ Muebles y Colchones": ["mattress", "bed", "sofa", "desk", "office chair", "furniture"],
     "👟 Tenis y Zapatos": ["shoes", "sneakers", "running shoes", "footwear", "boots", "nike", "adidas", "puma"],
     "👟 Zapatos y Tenis": ["shoes", "sneakers", "running shoes", "footwear", "boots", "nike", "adidas", "puma"],
     "tenis y zapatos": ["shoes", "sneakers", "running shoes", "footwear", "boots", "nike", "adidas", "puma"],

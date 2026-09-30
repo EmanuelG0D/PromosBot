@@ -390,14 +390,15 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
 
 
 def teclado_cocina() -> dict:
-    """Submenu de productos especificos de cocina."""
+    """Submenu de productos especificos de cocina y hogar."""
     return {
         "keyboard": [
-            [{"text": "🍟 Airfryers"}, {"text": "🥪 Sandwicheras"}],
-            [{"text": "🍹 Licuadoras"}, {"text": "☕ Cafeteras"}],
-            [{"text": "🍿 Microondas"}, {"text": "🍚 Arroceras y Ollas"}],
-            [{"text": "🍳 Sartenes y Baterías"}, {"text": "🌟 Toda la Cocina"}],
-            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver a Tiendas"}],
+            [{"text": "🍟 Airfryers"}, {"text": "☕ Cafeteras"}],
+            [{"text": "🍹 Licuadoras"}, {"text": "🍿 Microondas"}],
+            [{"text": "🍳 Sartenes y Baterías"}, {"text": "🥪 Sandwicheras"}],
+            [{"text": "🛋️ Muebles y Colchones"}, {"text": "🧹 Aspiradoras"}],
+            [{"text": "🔨 Herramientas"}, {"text": "🌟 Toda la Cocina"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -408,11 +409,12 @@ def teclado_tecnologia() -> dict:
     """Submenu de productos especificos de tecnologia."""
     return {
         "keyboard": [
-            [{"text": "📺 Televisores"}, {"text": "💻 Portátiles"}],
-            [{"text": "📱 Celulares"}, {"text": "🖥️ Monitores"}],
-            [{"text": "🎧 Audífonos y Sonido"}, {"text": "🎮 Consolas y Videojuegos"}],
-            [{"text": "⌚ Smartwatches"}, {"text": "🌟 Toda la Tecnología"}],
-            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver a Tiendas"}],
+            [{"text": "📱 Celulares"}, {"text": "💻 Portátiles"}],
+            [{"text": "📺 Televisores"}, {"text": "🖥️ Monitores"}],
+            [{"text": "📱 Tablets e iPads"}, {"text": "🎧 Audífonos y Sonido"}],
+            [{"text": "🎮 Consolas y Videojuegos"}, {"text": "⌚ Smartwatches"}],
+            [{"text": "🌟 Toda la Tecnología"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -420,13 +422,13 @@ def teclado_tecnologia() -> dict:
 
 
 def teclado_neveras_lavadoras() -> dict:
-    """Submenu de linea blanca y grandes electrodomesticos."""
+    """Submenu de linea blanca, electrodomesticos y cuidado personal."""
     return {
         "keyboard": [
             [{"text": "❄️ Neveras"}, {"text": "🧺 Lavadoras"}],
             [{"text": "🔥 Estufas y Hornos"}, {"text": "💨 Aires Acondicionados"}],
-            [{"text": "🌟 Toda la Línea Blanca"}, {"text": "⬅️ Volver a Grupos"}],
-            [{"text": "⬅️ Volver a Tiendas"}],
+            [{"text": "💈 Cuidado Personal"}, {"text": "🌟 Toda la Línea Blanca"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -441,7 +443,7 @@ def teclado_ropa() -> dict:
             [{"text": "👖 Jeans y Pantalones"}, {"text": "🧥 Chaquetas y Buzos"}],
             [{"text": "🎒 Bolsos y Morrales"}, {"text": "🩳 Ropa Deportiva"}],
             [{"text": "🌟 Toda la Ropa"}, {"text": "⬅️ Volver a Grupos"}],
-            [{"text": "⬅️ Volver a Tiendas"}],
+            [{"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,
@@ -449,12 +451,13 @@ def teclado_ropa() -> dict:
 
 
 def teclado_hogar() -> dict:
-    """Submenu de articulos de hogar y herramientas."""
+    """Submenu de articulos de hogar, muebles y herramientas."""
     return {
         "keyboard": [
-            [{"text": "🧹 Aspiradoras"}, {"text": "💨 Ventiladores"}],
-            [{"text": "🔨 Herramientas"}, {"text": "🌟 Todo el Hogar"}],
-            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver a Tiendas"}],
+            [{"text": "🛋️ Muebles y Colchones"}, {"text": "🧹 Aspiradoras"}],
+            [{"text": "🔨 Herramientas"}, {"text": "💨 Ventiladores"}],
+            [{"text": "🌟 Todo el Hogar"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
         "is_persistent": False,

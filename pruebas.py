@@ -2071,7 +2071,8 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             self.assertIn("aspiradora", r_asp["consultas"])
 
     def test_teclados_especificos_bien_formados(self):
-        from core import telegram
+        from unittest.mock import patch
+        from core import telegram, comandos
         # Teclado tiendas individuales incluye las marcas
         t_tiendas = telegram.teclado_tiendas_individuales()
         textos_tiendas = [b["text"] for row in t_tiendas["keyboard"] for b in row]
@@ -2087,12 +2088,13 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("👟 Tenis y Zapatos", textos_totto)
         self.assertIn("👕 Camisetas y Polos", textos_totto)
 
-        # Teclado Cocina
+        # Teclado Cocina y Hogar
         t_cocina = telegram.teclado_cocina()
         textos_cocina = [b["text"] for row in t_cocina["keyboard"] for b in row]
         self.assertIn("🍟 Airfryers", textos_cocina)
         self.assertIn("🥪 Sandwicheras", textos_cocina)
         self.assertIn("🍹 Licuadoras", textos_cocina)
+        self.assertIn("🛋️ Muebles y Colchones", textos_cocina)
 
         # Teclado Tecnologia
         t_tec = telegram.teclado_tecnologia()
@@ -2100,6 +2102,19 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         self.assertIn("📺 Televisores", textos_tec)
         self.assertIn("💻 Portátiles", textos_tec)
         self.assertIn("📱 Celulares", textos_tec)
+        self.assertIn("📱 Tablets e iPads", textos_tec)
+
+        # Teclado Línea Blanca y Electrodomésticos
+        t_lb = telegram.teclado_neveras_lavadoras()
+        textos_lb = [b["text"] for row in t_lb["keyboard"] for b in row]
+        self.assertIn("❄️ Neveras", textos_lb)
+        self.assertIn("🧺 Lavadoras", textos_lb)
+        self.assertIn("💈 Cuidado Personal", textos_lb)
+
+        # Teclado Hogar
+        t_hogar = telegram.teclado_hogar()
+        textos_hogar = [b["text"] for row in t_hogar["keyboard"] for b in row]
+        self.assertIn("🛋️ Muebles y Colchones", textos_hogar)
 
         # Tiendas de electrodomésticos en teclado_tiendas
         self.assertIn("🟢 Jumbo", textos_tiendas)
@@ -2119,6 +2134,20 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
         textos_haceb = [b["text"] for row in t_haceb["keyboard"] for b in row]
         self.assertIn("❄️ Neveras", textos_haceb)
         self.assertIn("🧺 Lavadoras", textos_haceb)
+
+        # Validación de parseo de las 3 nuevas categorías
+        with patch("core.whitelist.es_admin", return_value=True):
+            r_tab = comandos.leer_comando({"text": "📱 Tablets e iPads", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
+            self.assertEqual(r_tab["tipo"], "categoria")
+            self.assertIn("tablet", r_tab["consultas"])
+
+            r_cuidado = comandos.leer_comando({"text": "💈 Cuidado Personal", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
+            self.assertEqual(r_cuidado["tipo"], "categoria")
+            self.assertIn("afeitadora", r_cuidado["consultas"])
+
+            r_muebles = comandos.leer_comando({"text": "🛋️ Muebles y Colchones", "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
+            self.assertEqual(r_muebles["tipo"], "categoria")
+            self.assertIn("colchon", r_muebles["consultas"])
 
     def test_tiendas_electrodomesticos_registradas(self):
         from unittest.mock import patch

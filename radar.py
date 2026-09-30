@@ -702,7 +702,9 @@ DEPTO_LINEA_BLANCA = {
     "nevera", "neveras", "refrigerador", "refrigeradores", "nevecon", "nevecones",
     "refrigeradora", "freezer", "lavadora", "lavadoras", "secadora", "secadoras",
     "torre de lavado", "lavaseca", "estufa", "estufas", "cubierta a gas",
-    "horno", "hornos", "aire acondicionado", "aires acondicionados", "climatizador"
+    "horno", "hornos", "aire acondicionado", "aires acondicionados", "climatizador",
+    "afeitadora", "afeitadoras", "rasuradora", "rasuradoras", "secador", "secadores",
+    "plancha", "planchas", "depiladora", "depiladoras", "cortapelo", "cortapelos"
 }
 
 DEPTO_COCINA = {
@@ -717,9 +719,10 @@ DEPTO_TECNOLOGIA = {
     "televisor", "televisores", "smart tv", "tv", "portatil", "portatiles",
     "laptop", "laptops", "computador", "computadores", "macbook", "notebook",
     "celular", "celulares", "smartphone", "smartphones", "iphone", "galaxy",
-    "telefono", "telefonos", "monitor", "monitores", "gamer", "audifonos",
-    "diadema", "diademas", "parlante", "parlantes", "auriculares", "consola",
-    "consolas", "playstation", "xbox", "nintendo", "smartwatch", "smartwatches",
+    "telefono", "telefonos", "tablet", "tablets", "ipad", "ipads", "tableta",
+    "tabletas", "monitor", "monitores", "gamer", "audifonos", "diadema",
+    "diademas", "parlante", "parlantes", "auriculares", "consola", "consolas",
+    "playstation", "xbox", "nintendo", "smartwatch", "smartwatches",
     "reloj inteligente"
 }
 
@@ -728,7 +731,8 @@ DEPTO_HOGAR = {
     "taladro", "taladros", "herramientas", "destornillador",
     "colchon", "colchones", "cama", "camas", "almohada", "almohadas",
     "sabana", "sabanas", "edredon", "mueble", "muebles", "sofa", "sofas",
-    "silla", "sillas", "mesa", "mesas", "comedor"
+    "silla", "sillas", "mesa", "mesas", "comedor", "escritorio", "escritorios",
+    "closet", "closets"
 }
 
 
