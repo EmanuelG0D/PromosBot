@@ -315,6 +315,7 @@ def teclado_tiendas() -> dict:
     """Menu principal de tiendas para ReplyKeyboardMarkup."""
     return {
         "keyboard": [
+            [{"text": "🇨🇴 Comparar Tiendas"}],
             [{"text": "🟡 Éxito"}, {"text": "🔴 Alkosto"}],
             [{"text": "🟢 Jumbo"}, {"text": "🔵 Alkomprar"}],
             [{"text": "💛 Mercado Libre"}, {"text": "🟢 Falabella"}],
@@ -327,7 +328,6 @@ def teclado_tiendas() -> dict:
             [{"text": "🦅 Americanino"}, {"text": "👖 Koaj"}],
             [{"text": "⚡ Gangas Amazon"}, {"text": "🛋️ IKEA Colombia"}],
             [{"text": "🏍️ Cascos Moto"}, {"text": "📦 Promocajita"}],
-            [{"text": "🇨🇴 Comparar Tiendas"}],
             [{"text": "🇺🇸 Exterior (EE. UU.)"}],
             [{"text": "✍️ Sugerencias y Reportes"}],
         ],
@@ -361,12 +361,13 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
     if any(m in t_baja for m in ("haceb", "whirlpool")):
         return teclado_neveras_lavadoras()
 
-    # Tiendas generales y multirubro
+    # Tiendas generales y multirubro (con Comparador Nacional o tienda específica)
+    boton_todo = "🌟 Todo Colombia" if "colombia" in t_baja else "🌟 TODO"
     return {
         "keyboard": [
-            [{"text": "🍳 Cocina"}, {"text": "❄️ Neveras y Lavadoras"}],
-            [{"text": "💻 Tecnología"}, {"text": "👟 Ropa y Tenis"}],
-            [{"text": "🏠 Hogar"}, {"text": "🌟 TODO"}],
+            [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina"}],
+            [{"text": "❄️ Neveras y Lavadoras"}, {"text": "👟 Ropa y Tenis"}],
+            [{"text": "🏠 Hogar"}, {"text": boton_todo}],
             [{"text": "📺 Smart TV"}, {"text": "⬅️ Volver a Tiendas"}],
         ],
         "resize_keyboard": True,

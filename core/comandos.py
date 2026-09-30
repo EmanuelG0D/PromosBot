@@ -778,8 +778,8 @@ def leer_comando(mensaje: dict) -> dict | None:
         elif any(frase in texto_norm for frase in ("siguientes ofertas", "ver siguientes", "más ofertas", "mas ofertas", "siguientes")):
             res = {"comando": "siguientes", "chat_id": chat, "tipo": "siguientes"}
 
-        # Volver a grupos
-        elif "volver a grupos" in texto_norm:
+        # Volver a grupos o categorías
+        elif any(frase in texto_norm for frase in ("volver a grupos", "volver a categorías", "volver a categorias")):
             res = {"comando": "grupo_categoria", "grupo": "volver", "chat_id": chat, "tipo": "grupo_categoria"}
 
         # Volver a la lista de tiendas
@@ -859,8 +859,10 @@ def leer_comando(mensaje: dict) -> dict | None:
                         }
                     break
 
-        # Boton '🌟 TODO'
+        # Boton '🌟 TODO' o '🌟 Todo Colombia'
         if not res and "todo" in texto_norm:
+            if "colombia" in texto_norm:
+                fijar_tienda_activa("colombia", chat_id=chat)
             res = {
                 "comando": "todo_tienda",
                 "chat_id": chat,

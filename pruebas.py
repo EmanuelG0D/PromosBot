@@ -2132,9 +2132,30 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
 
     def test_teclado_tiendas_incluye_comparar_tiendas(self):
         from core import telegram
+        from core import comandos
+        from unittest.mock import patch
         t = telegram.teclado_tiendas()
         textos = [b["text"] for row in t["keyboard"] for b in row]
         self.assertIn("🇨🇴 Comparar Tiendas", textos)
+        # Debe estar en la primera fila como botón estelar
+        self.assertEqual(t["keyboard"][0][0]["text"], "🇨🇴 Comparar Tiendas")
+
+        # Categorías en Colombia
+        t_col = telegram.teclado_categorias("Todo Colombia")
+        textos_col = [b["text"] for row in t_col["keyboard"] for b in row]
+        self.assertIn("🌟 Todo Colombia", textos_col)
+        self.assertIn("💻 Tecnología", textos_col)
+        self.assertIn("🍳 Cocina", textos_col)
+
+        # Parsear '🌟 Todo Colombia' y '⬅️ Volver a Categorías'
+        with patch("core.whitelist.es_admin", return_value=True):
+            r_todo = comandos.leer_comando({"text": "🌟 Todo Colombia", "chat": {"id": 1234, "type": "private"}, "from": {"id": 1234}})
+            self.assertEqual(r_todo["tipo"], "todo_tienda")
+            self.assertEqual(comandos.tienda_activa(1234), "colombia")
+
+            r_volver = comandos.leer_comando({"text": "⬅️ Volver a Categorías", "chat": {"id": 1234, "type": "private"}, "from": {"id": 1234}})
+            self.assertEqual(r_volver["tipo"], "grupo_categoria")
+            self.assertEqual(r_volver["grupo"], "volver")
 
     def test_balance_top3_por_tienda(self):
         import radar

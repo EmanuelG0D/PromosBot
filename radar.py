@@ -1606,7 +1606,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.send(
                     "🇨🇴 <b>Comparador Nacional de Tiendas</b>\n\n"
                     "Elige un departamento o producto abajo para comparar y ver el <b>Top 3 de cada tienda</b> en Colombia:\n"
-                    "<i>(O presiona 🌟 TODO para ver las mejores rebajas generales)</i>",
+                    "<i>(O presiona 🌟 Todo Colombia para ver las mejores rebajas generales)</i>",
                     reply_markup=telegram.teclado_categorias(tienda_nombre),
                     chat_id=chat_id,
                 )
@@ -1656,8 +1656,9 @@ def atender_solicitudes(solicitudes: list[dict],
                     chat_id=chat_id,
                 )
             elif grupo == "volver":
+                btn_todo = "🌟 Todo Colombia" if tienda == "colombia" else "🌟 TODO"
                 telegram.send(
-                    f"🏬 <b>{telegram.esc(titulo_tienda)}</b>\n\nElige un grupo o presiona <b>🌟 TODO</b>:",
+                    f"🏬 <b>{telegram.esc(titulo_tienda)}</b>\n\nElige un departamento o presiona <b>{btn_todo}</b>:",
                     reply_markup=telegram.teclado_categorias(titulo_tienda),
                     chat_id=chat_id,
                 )
