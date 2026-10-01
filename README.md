@@ -31,6 +31,10 @@ Motor autónomo de rastreo, verificación, branding gráfico y publicación mult
 | **Koaj** | Moda y calzado colombiano | Scraper nativo en `sources/koaj.py` | ✅ `koaj.png` |
 | **Totto / Arturo Calle** | Ropa, morrales y accesorios | Tiendas oficiales VTEX | ✅ Logos de marca |
 | **Imusa / Haceb / Oster** | Electrohogar y cocina | Tiendas oficiales VTEX | ✅ Logos de marca |
+| **IKEA Colombia** | Muebles, organización y hogar | Catálogo digital integrado (`sources/ikea.py`) | ✅ Tipografía de marca |
+| **Cascos de Moto** | Inducascos, DS2M2, Rider Site, Cascos Romo | VTEX & Shopify APIs (`sources/cascos.py`) | ✅ Tipografía de marca |
+| **Llantas de Moto** | Zonabiker y repuestos | Shopify Products API (`sources/cascos.py`) | ✅ Tipografía de marca |
+| **Descuentos Tech / Redes** | Comunidad y liquidaciones de tecnología en Colombia | Scrapers y feeds estructurados (`sources/`) | ✅ Logos de marca |
 | **eBay** *(opcional)* | Outlets certificados y tecnología | Browse API oficial de eBay | ✅ `ebay.png` |
 
 ---
@@ -71,8 +75,14 @@ A diferencia de bots convencionales que comparten capturas genéricas o enlaces 
 ## 3. Publicación Multicanal Automática
 
 ### A. Telegram (Grupo, Canal y Consultas Privadas)
-- **Tarjeta por Oferta:** Cada oferta se despacha con la foto del producto enmarcada con el branding del bot, título depurado, precio tachado, porcentaje de descuento y cupón copiable con un toque.
-- **Teclado Interactivo (`/menu`):** Menú de navegación por tiendas y categorías (`Smart TV`, `Portátiles`, `Celulares`, `Zapatos y Tenis`, `Audio`, etc.) con cancelación reactiva en tiempo real.
+- **Tarjeta por Oferta y Guardado Personal:** Cada oferta se despacha con la foto del producto enmarcada con el branding del bot, título depurado, precio tachado, porcentaje de descuento, cupón copiable con un toque (`code`) y el enlace `📩 Enviármela` (deep link privado al bot para guardar o consultar la oferta en privado sin perderla en el canal o grupo).
+- **Menú Táctil Zero Scroll (5 filas compactas):** Interfaz táctil optimizada para móviles que evita el scroll vertical innecesario:
+  - Fila 1: `🇨🇴 Ofertas Colombia` (entrega inmediata de las mejores ofertas del país).
+  - Fila 2: `💻 Tecnología` | `🍳 Cocina`.
+  - Fila 3: `🏠 Hogar y Muebles` | `❄️ Electrodomésticos`.
+  - Fila 4: `👟 Ropa y Calzado` | `⚡ Gangas Amazon`.
+  - Fila 5: `🏬 Ver por Tienda` (catálogo secundario con 14+ marcas y tiendas individuales como Éxito, Alkosto, Cascos y Llantas, etc.) | `✍️ Sugerencias y Reportes`.
+- **Submenús Especializados y Paginación:** Teclados dedicados por categoría (`Celulares`, `Portátiles`, `Smart TV`, `Tablets e iPads`, `Airfryers`, `Muebles`, `Cascos y Llantas`, etc.) con navegación ágil y botón `⏩ Siguientes ofertas`.
 - **Auto-aprobación de Usuarios:** Acceso instantáneo para nuevos miembros con invitación automática al canal oficial (`@RadarPromoCol`).
 
 ### B. Facebook (Página Oficial vía Make.com & Historias 9:16)
@@ -131,8 +141,11 @@ BotPromos/
 │   ├── promohunter.py       # Ofertas verificadas con envío gratis a Colombia
 │   ├── slickdeals.py        # Ofertas comunitarias de EE. UU. (Puma, Nike, Apple)
 │   ├── koaj.py              # Catálogo de moda Koaj Colombia
+│   ├── ikea.py              # Catálogo de muebles y hogar IKEA Colombia
+│   ├── cascos.py            # Inducascos (VTEX) y DS2M2, Rider Site, Romo, Zonabiker (Shopify)
+│   ├── descuentostech.py    # Ofertas comunitarias de tecnología en Colombia
 │   └── ebay.py              # eBay Browse API
-└── pruebas.py               # Suite de 241 pruebas unitarias automatizadas
+└── pruebas.py               # Suite de 254 pruebas unitarias automatizadas
 ```
 
 ---
@@ -189,7 +202,7 @@ python radar.py --dry-run
 # Probar la conexión con el bot de Telegram
 python radar.py --test-telegram
 
-# Ejecutar la suite completa de 241 pruebas unitarias
+# Ejecutar la suite completa de 254 pruebas unitarias
 python pruebas.py
 
 # Iniciar el servidor web local con soporte de webhook

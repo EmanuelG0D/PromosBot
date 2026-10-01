@@ -132,6 +132,12 @@ def correr_ronda(motivo: str, fuentes=None, espera_s: float = 0) -> dict:
         _estado["ultimo_resultado"] = resultado
         _estado["ultimo_error"] = resultado.get("error")
         log(f"ronda terminada: {resultado}")
+        if motivo == "catalogos":
+            threading.Thread(
+                target=radar.precalentar_cache,
+                kwargs={"forzar_refresco": True},
+                daemon=True,
+            ).start()
 
         if respaldo.guardar():
             log("historial respaldado en GitHub")
@@ -867,6 +873,9 @@ def main() -> None:
             threading.Thread(target=programador_facebook, daemon=True).start()
     else:
         log("modo interactivo local: rondas de fondo desactivadas para maxima velocidad de respuesta")
+
+    log("iniciando precalentamiento de memoria en segundo plano...")
+    threading.Thread(target=radar.precalentar_cache, daemon=True).start()
 
     servidor = ThreadingHTTPServer(("0.0.0.0", PUERTO), Manejador)
     try:

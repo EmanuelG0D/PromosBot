@@ -181,7 +181,7 @@ TRM_FALLBACK = _float("TRM_FALLBACK", 4000.0)
 # --- Infraestructura ----------------------------------------------------
 DB_PATH = Path(_str("DB_PATH", str(BASE_DIR / "radar.db")))
 DATABASE_URL = _str("DATABASE_URL", "")
-HTTP_TIMEOUT = _int("HTTP_TIMEOUT", 25)
+HTTP_TIMEOUT = _int("HTTP_TIMEOUT", 15)
 USER_AGENT = _str(
     "USER_AGENT",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

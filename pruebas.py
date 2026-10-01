@@ -2255,6 +2255,49 @@ class PruebaNuevasTiendasYCategoriasEspecificas(unittest.TestCase):
             self.assertEqual(conteo.get("Haceb"), 2)
             self.assertEqual(len(seleccion), 8)
 
+    def test_mejores_colombia_intercala_tiendas_y_limita_monopolio(self):
+        """Verifica que la búsqueda general de Todo Colombia (sin categoría)
+        intercale las ofertas round-robin y no permita que una sola tienda (ej: Totto)
+        monopolice los resultados aunque tenga los porcentajes de descuento más altos."""
+        import radar
+        from core.models import Deal
+        from unittest.mock import patch
+
+        totto_deals = [
+            Deal("vtex", "Totto", "CO", f"k:tot:{i}", f"Morral Modelo {i} Totto", "http://t", 20 + i * 3, "COP", 100, in_stock=True)
+            for i in range(10)
+        ]
+        alkosto_deals = [
+            Deal("algolia_co", "Alkosto", "CO", f"k:alk:{i}", f"Smart TV Modelo {i}", "http://a", 50 + i * 3, "COP", 100, in_stock=True)
+            for i in range(4)
+        ]
+        falabella_deals = [
+            Deal("falabella", "Falabella", "CO", f"k:fal:{i}", f"Portatil Modelo {i}", "http://f", 60 + i * 3, "COP", 100, in_stock=True)
+            for i in range(3)
+        ]
+
+        def _mock_ofertas(_wl, fuente, _tiendas, **_kw):
+            if fuente == "vtex":
+                return totto_deals
+            elif fuente == "algolia_co":
+                return alkosto_deals
+            elif fuente == "falabella":
+                return falabella_deals
+            return []
+
+        with patch.object(radar, "_ofertas_de", side_effect=_mock_ofertas):
+            seleccion = radar._mejores_colombia({}, set(), cuantas=15, consultas_custom=None, max_por_tienda=3)
+
+            tiendas_orden = [deal.store for deal, _ in seleccion]
+            self.assertLessEqual(tiendas_orden.count("Totto"), 3)
+            self.assertLessEqual(tiendas_orden.count("Alkosto"), 3)
+            self.assertLessEqual(tiendas_orden.count("Falabella"), 3)
+
+            # Las primeras posiciones deben alternar tiendas (round-robin)
+            self.assertEqual(tiendas_orden[:3], ["Totto", "Alkosto", "Falabella"])
+            self.assertEqual(tiendas_orden[3:6], ["Totto", "Alkosto", "Falabella"])
+            self.assertEqual(tiendas_orden[6:9], ["Totto", "Alkosto", "Falabella"])
+
     def test_filtro_accesorios_bloquea_compresor(self):
         from core import filtros
         self.assertTrue(filtros.es_accesorio("Compresor GMCC 1/5 HP para Nevera"))
@@ -2359,24 +2402,24 @@ class PruebaCacheYTopesCategoria(unittest.TestCase):
         deal_prueba = Deal("vtex", "Totto", "CO", "k_exp", "Camiseta Vencida", "http://t", 40000, "COP", 80000, in_stock=True)
         clave = radar._clave_cache("vtex", ["totto"], ["camiseta"])
 
-        # Simular que se guardo hace 36 minutos
-        radar._CACHE_OFERTAS[clave] = (time.time() - (36 * 60), [deal_prueba])
+        # Simular que se guardo superando el TTL configurado
+        radar._CACHE_OFERTAS[clave] = (time.time() - (radar.CACHE_TTL_SEGUNDOS + 60), [deal_prueba])
 
         # Debe expirar y retornar None
         self.assertIsNone(radar._obtener_de_cache(clave))
         self.assertNotIn(clave, radar._CACHE_OFERTAS)
 
-    def test_cache_memoria_respeta_tope_maximo_60(self):
+    def test_cache_memoria_respeta_tope_maximo(self):
         import radar
         from core.models import Deal
 
         deal_prueba = Deal("vtex", "Totto", "CO", "k", "Item", "http://t", 10000, "COP", 20000, in_stock=True)
-        for i in range(70):
+        for i in range(radar.MAX_CACHE_ENTRIES + 15):
             clave = ("vtex", f"tienda_{i}", (f"query_{i}",))
             radar._guardar_en_cache(clave, [deal_prueba])
 
-        # No debe sobrepasar el maximo de 60 entradas
-        self.assertLessEqual(len(radar._CACHE_OFERTAS), 60)
+        # No debe sobrepasar el maximo de entradas permitido
+        self.assertLessEqual(len(radar._CACHE_OFERTAS), radar.MAX_CACHE_ENTRIES)
 
     def test_topes_categoria_admisibles(self):
         import radar
@@ -5038,6 +5081,52 @@ class PruebaCascosMoto(unittest.TestCase):
         teclado = telegram.teclado_tiendas_individuales()
         textos = [b["text"] for fila in teclado["keyboard"] for b in fila]
         self.assertIn("🏍️ Cascos y Llantas", textos)
+
+
+class PruebaPrecalentamientoYCaché(unittest.TestCase):
+    """Verifica que el precalentamiento de memoria RAM y el caché de respuestas funcionen con exactitud."""
+
+    def setUp(self):
+        import radar
+        radar.limpiar_cache()
+
+    def tearDown(self):
+        import radar
+        radar.limpiar_cache()
+
+    def test_precalentar_cache_recorre_categorias_y_guarda_en_ram(self):
+        import radar
+        from core.models import Deal
+        from unittest.mock import patch
+
+        deal_mock = Deal("vtex", "Exito", "CO", "k_test_pre", "Nevera Frost 300L", "http://exito", 1_200_000, "COP", 2_000_000, in_stock=True)
+
+        cats_prueba = [
+            ("❄️ Neveras", ["nevera", "refrigerador"]),
+            ("🧺 Lavadoras", ["lavadora", "secadora"]),
+        ]
+
+        with patch("sources.vtex.fetch", return_value=[deal_mock]), \
+             patch("sources.algolia_co.fetch", return_value=[deal_mock]), \
+             patch("sources.falabella.fetch", return_value=[]):
+            total = radar.precalentar_cache(forzar_refresco=True, categorias=cats_prueba)
+            self.assertGreater(total, 0)
+            self.assertGreater(len(radar._CACHE_OFERTAS), 0)
+
+    def test_categoria_precalentada_retorna_de_inmediato_sin_ir_a_red(self):
+        import radar
+        from core.models import Deal
+
+        # Guardar en memoria una oferta precalentada
+        deal_lavadora = Deal("vtex", "Exito", "CO", "k_lav", "Lavadora Carga Frontal 18kg", "http://lav", 1_400_000, "COP", 2_200_000, in_stock=True)
+        clave = radar._clave_cache("vtex", ("carulla", "exito", "haceb", "jumbo", "olimpica", "whirlpool"), ("lavadora", "secadora"))
+        radar._guardar_en_cache(clave, [deal_lavadora])
+
+        # Verificar que _obtener_de_cache la devuelva al instante
+        en_cache = radar._obtener_de_cache(clave)
+        self.assertIsNotNone(en_cache)
+        self.assertEqual(len(en_cache), 1)
+        self.assertEqual(en_cache[0].title, "Lavadora Carga Frontal 18kg")
 
 
 if __name__ == "__main__":

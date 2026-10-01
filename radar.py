@@ -9,6 +9,7 @@ Uso tipico:
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import datetime as dt
 import re
@@ -436,10 +437,10 @@ def _sin_ruido(ofertas: list[Deal], cfg: dict) -> list[Deal]:
             and not filtros.es_accesorio(d.title)]
 
 
-# --- Cache en memoria RAM para busquedas de tiendas (TTL 35 min, max 60 entradas) ---
+# --- Cache en memoria RAM para busquedas de tiendas (TTL 75 min, max 150 entradas) ---
 _CACHE_OFERTAS: dict[tuple, tuple[float, list[Deal]]] = {}
-CACHE_TTL_SEGUNDOS: float = 35.0 * 60.0  # 35 minutos
-MAX_CACHE_ENTRIES: int = 60
+CACHE_TTL_SEGUNDOS: float = 75.0 * 60.0  # 75 minutos (cubre con holgura rondas de 60m)
+MAX_CACHE_ENTRIES: int = 150
 
 
 def limpiar_cache() -> None:
@@ -478,12 +479,14 @@ def _guardar_en_cache(clave: tuple, ofertas: list[Deal]) -> None:
 
 
 def _ofertas_de(watchlist: dict, fuente: str, tiendas,
-                consultas_custom: list[str] | None = None) -> list[Deal]:
+                consultas_custom: list[str] | None = None,
+                forzar_refresco: bool = False) -> list[Deal]:
     """Trae las ofertas de una sola fuente, opcionalmente de tiendas concretas."""
     clave = _clave_cache(fuente, tiendas, consultas_custom)
-    en_cache = _obtener_de_cache(clave)
-    if en_cache is not None:
-        return en_cache
+    if not forzar_refresco:
+        en_cache = _obtener_de_cache(clave)
+        if en_cache is not None:
+            return en_cache
 
     cfg = watchlist.get(fuente, {})
 
@@ -573,7 +576,12 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
         _guardar_en_cache(clave, resultado)
         return resultado
 
-    consultas = consultas_custom if consultas_custom is not None else cfg.get("queries", [])
+    if fuente == "vtex" and consultas_custom is None:
+        # En catálogo general, usar el endpoint de rebajas ordenado por descuento
+        # en 1 sola petición por tienda en vez de multiplicar por todas las queries.
+        consultas = [vtex.CATALOGO]
+    else:
+        consultas = consultas_custom if consultas_custom is not None else cfg.get("queries", [])
     if not consultas:
         return []
     if fuente == "algolia_co":
@@ -1005,23 +1013,44 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
                       consultas_custom: list[str] | None = None,
                       trm: float = 4000.0,
                       max_por_tienda: int = 3,
-                      solo_nuevas: bool = False) -> list:
+                      solo_nuevas: bool = False,
+                      forzar_refresco: bool = False) -> list:
     """Las mejores ofertas de tiendas de Todo Colombia, garantizando el Top 3 por tienda en comparaciones."""
     ofertas: list[Deal] = []
 
     tiendas_algolia, tiendas_vtex, tiendas_falabella = _tiendas_por_departamento(consultas_custom)
 
+    tareas_fuente = []
     if tiendas_algolia:
-        ofertas += _ofertas_de(watchlist, "algolia_co", tiendas_algolia, consultas_custom=consultas_custom)
-
+        tareas_fuente.append(("algolia_co", tiendas_algolia))
     if tiendas_vtex:
-        ofertas += _ofertas_de(watchlist, "vtex", tiendas_vtex, consultas_custom=consultas_custom)
-
+        tareas_fuente.append(("vtex", tiendas_vtex))
     if tiendas_falabella:
-        ofertas += _ofertas_de(watchlist, "falabella", tiendas_falabella, consultas_custom=consultas_custom)
-
+        tareas_fuente.append(("falabella", tiendas_falabella))
     if not consultas_custom or any(any(p in DEPTO_ROPA for p in filtros._normalizar(c).split()) for c in (consultas_custom or [])):
-        ofertas += _ofertas_de(watchlist, "koaj", None, consultas_custom=consultas_custom)
+        tareas_fuente.append(("koaj", None))
+
+    kw = {}
+    if consultas_custom is not None:
+        kw["consultas_custom"] = consultas_custom
+    if forzar_refresco:
+        kw["forzar_refresco"] = True
+
+    if tareas_fuente:
+        if len(tareas_fuente) == 1:
+            fuente_k, tiendas_k = tareas_fuente[0]
+            ofertas += _ofertas_de(watchlist, fuente_k, tiendas_k, **kw)
+        else:
+            with ThreadPoolExecutor(max_workers=min(len(tareas_fuente), 4)) as pool:
+                futuros = [
+                    pool.submit(_ofertas_de, watchlist, tf[0], tf[1], **kw)
+                    for tf in tareas_fuente
+                ]
+                for f in futuros:
+                    try:
+                        ofertas += (f.result() or [])
+                    except Exception as exc:
+                        print(f"  [radar] error consultando fuente: {exc}")
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
@@ -1033,8 +1062,8 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
     candidatas.sort(key=lambda par: -par[0].discount_verificable)
     unicas, _hermanas = _colapsar_variantes(candidatas)
 
-    # En comparacion de categorias: garantizar el Top 3 de cada tienda
-    if consultas_custom and max_por_tienda > 0:
+    # Diversidad e intercalado round-robin entre tiendas (tanto en categorías como en búsqueda general)
+    if max_por_tienda > 0:
         por_tienda_nuevas: dict[str, list] = {}
         por_tienda_repetidas: dict[str, list] = {}
         for par in unicas:
@@ -1044,17 +1073,32 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
             else:
                 por_tienda_nuevas.setdefault(tienda_nombre, []).append(par)
 
+        # Mantiene el orden de tiendas según su mejor oferta disponible
         todas_tiendas = list(dict.fromkeys(list(por_tienda_nuevas.keys()) + list(por_tienda_repetidas.keys())))
-        balanceadas = []
+
+        # Listas de ofertas seleccionadas por tienda (hasta max_por_tienda por tienda)
+        listas_tiendas = []
         for tienda_nombre in todas_tiendas:
             nuevas_t = por_tienda_nuevas.get(tienda_nombre, [])
             repetidas_t = por_tienda_repetidas.get(tienda_nombre, [])
-            if solo_nuevas:
-                balanceadas.extend(nuevas_t[:max_por_tienda])
-            else:
-                balanceadas.extend((nuevas_t + repetidas_t)[:max_por_tienda])
+            items = nuevas_t if solo_nuevas else (nuevas_t + repetidas_t)
+            if items:
+                listas_tiendas.append(items[:max_por_tienda])
 
-        limite = max(cuantas, len(balanceadas))
+        # Intercalado round-robin para garantizar diversidad visual:
+        # Se toma la mejor oferta de cada tienda (turno 0), luego la segunda mejor (turno 1), etc.
+        balanceadas = []
+        for turno in range(max_por_tienda):
+            for lista_t in listas_tiendas:
+                if turno < len(lista_t):
+                    balanceadas.append(lista_t[turno])
+
+        # En comparaciones de categoría se asegura mostrar al menos el top de cada tienda disponible;
+        # en búsqueda general (Ofertas Colombia), se respeta el tope 'cuantas' para no saturar.
+        if consultas_custom:
+            limite = max(cuantas, len(balanceadas))
+        else:
+            limite = cuantas
         seleccion = balanceadas[:limite]
     else:
         nuevas = [par for par in unicas if par[0].key not in vistas]
@@ -1073,14 +1117,31 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
 def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
              cuantas: int, consultas_custom: list[str] | None = None,
              trm: float = 4000.0,
-             solo_nuevas: bool = False) -> list:
+             solo_nuevas: bool = False,
+             forzar_refresco: bool = False) -> list:
     """Las mejores ofertas de esas fuentes, priorizando las que no has visto."""
     ofertas: list[Deal] = []
-    for fuente in fuentes:
-        if consultas_custom is not None:
-            ofertas += _ofertas_de(watchlist, fuente, tiendas, consultas_custom=consultas_custom)
-        else:
-            ofertas += _ofertas_de(watchlist, fuente, tiendas)
+    kw = {}
+    if consultas_custom is not None:
+        kw["consultas_custom"] = consultas_custom
+    if forzar_refresco:
+        kw["forzar_refresco"] = True
+
+    if len(fuentes) == 1:
+        fuente = fuentes[0]
+        ofertas += _ofertas_de(watchlist, fuente, tiendas, **kw)
+    else:
+        with ThreadPoolExecutor(max_workers=min(len(fuentes), 4)) as pool:
+            futuros = [
+                pool.submit(_ofertas_de, watchlist, f, tiendas, **kw)
+                for f in fuentes
+            ]
+            for f in futuros:
+                try:
+                    ofertas += (f.result() or [])
+                except Exception as exc:
+                    print(f"  [radar] error consultando fuente: {exc}")
+
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
 
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
@@ -1113,6 +1174,45 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
         if deal.key in vistas:
             verdict.etiquetas.append("ya te la habia mostrado")
     return seleccion
+
+
+CATEGORIAS_PRECARGA: list[tuple[str, list[str] | None]] = [
+    ("🌟 Todo Colombia", None),
+    ("❄️ Neveras", ["nevera", "refrigerador", "nevecon", "refrigeradora", "freezer"]),
+    ("🧺 Lavadoras", ["lavadora", "secadora", "torre de lavado", "lavaseca"]),
+    ("🖥️ Monitores", ["monitor", "monitor gamer"]),
+    ("📱 Tablets e iPads", ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"]),
+    ("📺 Televisores", ["televisor", "smart tv", "tv"]),
+    ("💻 Portátiles", ["portatil", "laptop", "computador", "macbook", "notebook"]),
+    ("📱 Celulares", ["celular", "smartphone", "iphone", "samsung galaxy", "telefono"]),
+    ("🍟 Airfryers", ["freidora de aire", "air fryer", "airfryer", "freidora"]),
+    ("👟 Tenis y Zapatos", ["tenis", "zapatillas", "sneakers", "botas", "zapatos"]),
+    ("🌟 Toda la Cocina", ["sarten", "freidora de aire", "licuadora", "sandwichera", "cafetera", "microondas", "bateria de cocina"]),
+]
+
+
+def precalentar_cache(forzar_refresco: bool = False,
+                      categorias: list[tuple[str, list[str] | None]] | None = None) -> int:
+    """Precarga en memoria RAM las ofertas de las categorías principales para respuestas instantáneas."""
+    watchlist = config.load_watchlist()
+    if not watchlist:
+        return 0
+
+    cats = categorias if categorias is not None else CATEGORIAS_PRECARGA
+    print(f"  [cache] Precalentando {len(cats)} categorias clave (forzar={forzar_refresco})...")
+    total_ofertas = 0
+    t0 = time.time()
+    for nombre, consultas in cats:
+        try:
+            res = _mejores_colombia(watchlist, vistas=set(), cuantas=15,
+                                    consultas_custom=consultas,
+                                    forzar_refresco=forzar_refresco)
+            total_ofertas += len(res)
+        except Exception as exc:
+            print(f"  [cache] Error precalentando '{nombre}': {exc}")
+    dur = round(time.time() - t0, 1)
+    print(f"  [cache] Precalentamiento listo: {len(cats)} categorias en memoria ({total_ofertas} ofertas, {dur}s)")
+    return total_ofertas
 
 
 _token_busqueda_activa: int = 0

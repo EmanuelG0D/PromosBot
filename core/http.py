@@ -35,7 +35,7 @@ def _request(
     data: bytes | None = None,
     headers: dict[str, str] | None = None,
     timeout: int | None = None,
-    retries: int = 2,
+    retries: int = 1,
     method: str | None = None,
 ) -> bytes:
     hdrs = {
