@@ -149,7 +149,7 @@ def parsear_articulos(contenido_html: str, etiqueta: str = "") -> list[Deal]:
 def _cargar_url(url: str, etiqueta: str = "") -> list[Deal]:
     """Carga una URL de Koaj de forma segura y devuelve sus ofertas."""
     try:
-        texto = http.get_text(url, timeout=12)
+        texto = http.get_text(url, timeout=4)
         return parsear_articulos(texto, etiqueta=etiqueta)
     except Exception as exc:
         print(f"  [koaj] Error consultando {url}: {exc}")

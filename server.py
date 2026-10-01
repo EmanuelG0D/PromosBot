@@ -378,6 +378,18 @@ def atender_callback_query(callback_query: dict) -> None:
         telegram.responder_callback(cq_id, "Opción no reconocida.")
 
 
+TIPOS_INMEDIATOS = (
+    "menu", "elegir_tienda", "ver_tiendas", "solicitud_acceso",
+    "unirse_canal", "grupo_categoria", "iniciar_reporte",
+    "cancelar_feedback", "enviar_feedback", "start_deal",
+    "salud", "enviar_respuesta_admin", "cancelar_respuesta_admin",
+    "ayuda_responder", "ikea_en_grupo", "cascos_en_grupo",
+)
+COMANDOS_INMEDIATOS = (
+    "menu", "start", "ayuda", "help", "objetivos", "estado", "salud", "ver_tiendas"
+)
+
+
 def atender_comando(actualizacion: dict) -> None:
     """Responde un comando o evento llegado por webhook. Corre en su propio hilo."""
     if "callback_query" in actualizacion:
@@ -394,7 +406,7 @@ def atender_comando(actualizacion: dict) -> None:
 
     tipo = solicitud.get("tipo")
     cmd = solicitud.get("comando")
-    if tipo in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal", "salud", "enviar_respuesta_admin", "cancelar_respuesta_admin", "ayuda_responder") or cmd in ("menu", "start", "ayuda", "help", "objetivos", "estado", "salud"):
+    if tipo in TIPOS_INMEDIATOS or cmd in COMANDOS_INMEDIATOS:
         radar.atender_solicitudes([solicitud])
         _estado["comandos_atendidos"] += 1
         return
@@ -454,12 +466,11 @@ def sondeo_local() -> None:
                     _estado["comandos_atendidos"] += 1
 
                 resto = [s for s in solicitudes if s.get("tipo") != "callback_query"]
-                # Comandos de interfaz pura (menu, elegir tienda, ayuda, objetivos, solicitud_acceso):
+                # Comandos de interfaz pura (menu, elegir tienda, ayuda, objetivos, solicitud_acceso, ver_tiendas):
                 # se responden de inmediato en el mismo hilo de sondeo sin bloquear la cola.
                 inmediatas = [
                     s for s in resto
-                    if s.get("tipo") in ("menu", "elegir_tienda", "solicitud_acceso", "unirse_canal", "grupo_categoria", "iniciar_reporte", "cancelar_feedback", "enviar_feedback", "start_deal", "salud", "enviar_respuesta_admin", "cancelar_respuesta_admin", "ayuda_responder")
-                    or s.get("comando") in ("menu", "start", "ayuda", "help", "objetivos", "estado", "salud")
+                    if s.get("tipo") in TIPOS_INMEDIATOS or s.get("comando") in COMANDOS_INMEDIATOS
                 ]
                 busquedas = [s for s in resto if s not in inmediatas]
 
@@ -850,34 +861,42 @@ def main() -> None:
         f"catalogos cada {INTERVALO_CATALOGOS_MIN:g} min | "
         f"horario {HORA_DESDE}:00-{HORA_HASTA}:00 Colombia")
 
-    respaldo.restaurar()
-
-    # El menu que Telegram sugiere al escribir "/" y la entrega de comandos.
-    # Antes lo hacia el flujo de GitHub Actions; ahora vive aqui.
-    telegram_menu = comandos.registrar_menu()
-    log(f"menu de comandos publicado: {telegram_menu}")
-    webhook_activo = registrar_webhook()
-    if not webhook_activo and telegram.enabled():
-        threading.Thread(target=sondeo_local, daemon=True).start()
-
-    # Las rondas de fondo automaticas (scraping masivo de miles de productos)
-    # son para despliegue 24/7 en la nube (Render con webhook).
-    # En modo local, NO se ejecutan en segundo plano para no saturar la red
-    # ni congelar la respuesta del bot mientras el usuario interactua con los menus.
-    if webhook_activo or os.environ.get("ENABLE_LOCAL_ROUNDS") == "1":
-        threading.Thread(target=programador, daemon=True, args=(
-            "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
-        threading.Thread(target=programador, daemon=True, args=(
-            "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
-        if facebook.configurado():
-            threading.Thread(target=programador_facebook, daemon=True).start()
-    else:
-        log("modo interactivo local: rondas de fondo desactivadas para maxima velocidad de respuesta")
-
-    log("iniciando precalentamiento de memoria en segundo plano...")
-    threading.Thread(target=radar.precalentar_cache, daemon=True).start()
-
     servidor = ThreadingHTTPServer(("0.0.0.0", PUERTO), Manejador)
+    log(f"servidor HTTP activo en el puerto {PUERTO}")
+
+    def _inicializacion_en_segundo_plano() -> None:
+        try:
+            respaldo.restaurar()
+
+            # El menu que Telegram sugiere al escribir "/" y la entrega de comandos.
+            # Antes lo hacia el flujo de GitHub Actions; ahora vive aqui.
+            telegram_menu = comandos.registrar_menu()
+            log(f"menu de comandos publicado: {telegram_menu}")
+            webhook_activo = registrar_webhook()
+            if not webhook_activo and telegram.enabled():
+                threading.Thread(target=sondeo_local, daemon=True).start()
+
+            # Las rondas de fondo automaticas (scraping masivo de miles de productos)
+            # son para despliegue 24/7 en la nube (Render con webhook).
+            # En modo local, NO se ejecutan en segundo plano para no saturar la red
+            # ni congelar la respuesta del bot mientras el usuario interactua con los menus.
+            if webhook_activo or os.environ.get("ENABLE_LOCAL_ROUNDS") == "1":
+                threading.Thread(target=programador, daemon=True, args=(
+                    "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
+                threading.Thread(target=programador, daemon=True, args=(
+                    "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
+                if facebook.configurado():
+                    threading.Thread(target=programador_facebook, daemon=True).start()
+            else:
+                log("modo interactivo local: rondas de fondo desactivadas para maxima velocidad de respuesta")
+
+            log("iniciando precalentamiento de memoria en segundo plano...")
+            threading.Thread(target=radar.precalentar_cache, daemon=True).start()
+        except Exception as exc:
+            log(f"error en inicializacion en segundo plano: {exc}")
+
+    threading.Thread(target=_inicializacion_en_segundo_plano, daemon=True).start()
+
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:
