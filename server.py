@@ -20,6 +20,7 @@ un /alkosto tardara horas, o no llegara nunca.
 from __future__ import annotations
 
 import datetime as dt
+import gc
 import hmac
 import json
 import os
@@ -158,6 +159,7 @@ def correr_ronda(motivo: str, fuentes=None, espera_s: float = 0) -> dict:
     finally:
         _estado["corriendo"] = False
         _ronda_en_curso.release()
+        gc.collect()
 
 
 def _ya_atendido(update_id) -> bool:

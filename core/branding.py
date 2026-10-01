@@ -7,6 +7,7 @@ Rota los colores dinámicamente entre Verde Neón, Azul Eléctrico y Naranja Fue
 """
 from __future__ import annotations
 
+import gc
 import hashlib
 import io
 import math
@@ -408,7 +409,7 @@ def generar_tarjeta_branding_bytes(
 
 
 _CACHE_FOTOS_BYTES: dict[str, bytes] = {}
-_CACHE_FOTOS_MAX: int = 50
+_CACHE_FOTOS_MAX: int = 6
 
 
 def guardar_foto_cache(hash_id: str, foto_bytes: bytes) -> None:
@@ -419,6 +420,7 @@ def guardar_foto_cache(hash_id: str, foto_bytes: bytes) -> None:
     if len(_CACHE_FOTOS_BYTES) > _CACHE_FOTOS_MAX:
         primer_key = next(iter(_CACHE_FOTOS_BYTES))
         _CACHE_FOTOS_BYTES.pop(primer_key, None)
+        gc.collect()
 
 
 def obtener_foto_cache(hash_id: str) -> bytes | None:

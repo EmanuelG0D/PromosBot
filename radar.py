@@ -12,6 +12,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import copy
 import datetime as dt
+import gc
 import re
 import sys
 import time
@@ -437,15 +438,17 @@ def _sin_ruido(ofertas: list[Deal], cfg: dict) -> list[Deal]:
             and not filtros.es_accesorio(d.title)]
 
 
-# --- Cache en memoria RAM para busquedas de tiendas (TTL 75 min, max 150 entradas) ---
+# --- Cache en memoria RAM para busquedas de tiendas (TTL 30 min, max 40 entradas, max 50 ofertas por entrada) ---
 _CACHE_OFERTAS: dict[tuple, tuple[float, list[Deal]]] = {}
-CACHE_TTL_SEGUNDOS: float = 75.0 * 60.0  # 75 minutos (cubre con holgura rondas de 60m)
-MAX_CACHE_ENTRIES: int = 150
+CACHE_TTL_SEGUNDOS: float = 30.0 * 60.0  # 30 minutos (suficiente y ultra ligero en RAM)
+MAX_CACHE_ENTRIES: int = 40
+MAX_OFERTAS_POR_ENTRADA: int = 50
 
 
 def limpiar_cache() -> None:
     """Vacia la cache en memoria de busquedas."""
     _CACHE_OFERTAS.clear()
+    gc.collect()
 
 
 def _clave_cache(fuente: str, tiendas, consultas_custom: list[str] | None) -> tuple:
@@ -475,7 +478,8 @@ def _guardar_en_cache(clave: tuple, ofertas: list[Deal]) -> None:
         if len(_CACHE_OFERTAS) >= MAX_CACHE_ENTRIES:
             mas_vieja = min(_CACHE_OFERTAS.keys(), key=lambda k: _CACHE_OFERTAS[k][0])
             del _CACHE_OFERTAS[mas_vieja]
-    _CACHE_OFERTAS[clave] = (ahora, list(ofertas))
+        gc.collect()
+    _CACHE_OFERTAS[clave] = (ahora, list(ofertas[:MAX_OFERTAS_POR_ENTRADA]))
 
 
 def _ofertas_de(watchlist: dict, fuente: str, tiendas,
@@ -1178,22 +1182,15 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
 
 CATEGORIAS_PRECARGA: list[tuple[str, list[str] | None]] = [
     ("🌟 Todo Colombia", None),
-    ("❄️ Neveras", ["nevera", "refrigerador", "nevecon", "refrigeradora", "freezer"]),
-    ("🧺 Lavadoras", ["lavadora", "secadora", "torre de lavado", "lavaseca"]),
-    ("🖥️ Monitores", ["monitor", "monitor gamer"]),
-    ("📱 Tablets e iPads", ["tablet", "ipad", "galaxy tab", "xiaomi pad", "lenovo tab", "tableta"]),
     ("📺 Televisores", ["televisor", "smart tv", "tv"]),
-    ("💻 Portátiles", ["portatil", "laptop", "computador", "macbook", "notebook"]),
-    ("📱 Celulares", ["celular", "smartphone", "iphone", "samsung galaxy", "telefono"]),
-    ("🍟 Airfryers", ["freidora de aire", "air fryer", "airfryer", "freidora"]),
-    ("👟 Tenis y Zapatos", ["tenis", "zapatillas", "sneakers", "botas", "zapatos"]),
-    ("🌟 Toda la Cocina", ["sarten", "freidora de aire", "licuadora", "sandwichera", "cafetera", "microondas", "bateria de cocina"]),
+    ("❄️ Neveras", ["nevera", "refrigerador", "nevecon", "refrigeradora", "freezer"]),
+    ("🖥️ Monitores", ["monitor", "monitor gamer"]),
 ]
 
 
 def precalentar_cache(forzar_refresco: bool = False,
                       categorias: list[tuple[str, list[str] | None]] | None = None) -> int:
-    """Precarga en memoria RAM las ofertas de las categorías principales para respuestas instantáneas."""
+    """Precarga en memoria RAM las ofertas clave manteniendo bajo consumo."""
     watchlist = config.load_watchlist()
     if not watchlist:
         return 0
@@ -1208,9 +1205,11 @@ def precalentar_cache(forzar_refresco: bool = False,
                                     consultas_custom=consultas,
                                     forzar_refresco=forzar_refresco)
             total_ofertas += len(res)
+            gc.collect()
         except Exception as exc:
             print(f"  [cache] Error precalentando '{nombre}': {exc}")
     dur = round(time.time() - t0, 1)
+    gc.collect()
     print(f"  [cache] Precalentamiento listo: {len(cats)} categorias en memoria ({total_ofertas} ofertas, {dur}s)")
     return total_ofertas
 
