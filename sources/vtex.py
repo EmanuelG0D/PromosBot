@@ -48,7 +48,7 @@ RUTA = "/api/catalog_system/pub/products/search?ft={q}&O=OrderByBestDiscountDESC
 # concreto sino "a ver que hay rebajado hoy", como la drogueria.
 CATALOGO = "rebajas"
 RUTA_CATALOGO = "/api/catalog_system/pub/products/search?O=OrderByBestDiscountDESC&_from=0&_to={hasta}"
-HILOS = 6
+HILOS = 2
 
 # VTEX mete en clusterHighlights tanto promociones reales como basura interna
 # ("reindex total", "cont-pequenos-4431"). Por eso se usa lista blanca: solo

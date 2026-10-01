@@ -213,3 +213,16 @@ def limpiar_sesiones() -> None:
     """Limpia el registro de sesiones en memoria (util para pruebas)."""
     _ultimas_sesiones.clear()
 
+
+def modo_mantenimiento() -> bool:
+    """Indica si el modo de mantenimiento en chat personal está activado."""
+    datos = cargar()
+    return bool(datos.get("mantenimiento_privado", False))
+
+
+def fijar_modo_mantenimiento(activo: bool) -> None:
+    """Activa o desactiva el modo de mantenimiento en chat personal."""
+    datos = cargar()
+    datos["mantenimiento_privado"] = bool(activo)
+    guardar(datos)
+

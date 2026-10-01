@@ -375,6 +375,37 @@ def atender_callback_query(callback_query: dict) -> None:
                 message_id=msg_id,
                 texto="❌ <i>Respuesta cancelada. Puedes seguir explorando ofertas en el menú inferior.</i>",
             )
+    elif data.startswith("mantenimiento:"):
+        accion = data.split(":", 1)[1].strip()
+        if accion == "on":
+            whitelist.fijar_modo_mantenimiento(True)
+            telegram.responder_callback(cq_id, "🛑 Modo mantenimiento ACTIVADO")
+        elif accion == "off":
+            whitelist.fijar_modo_mantenimiento(False)
+            telegram.responder_callback(cq_id, "🟢 Modo mantenimiento DESACTIVADO")
+        else:
+            telegram.responder_callback(cq_id, "Estado actualizado")
+
+        activo = whitelist.modo_mantenimiento()
+        estado_icono = "🛑 <b>ACTIVO (Chat personal en mantenimiento)</b>" if activo else "🟢 <b>INACTIVO (Servicio normal operando)</b>"
+        desc = (
+            "Los usuarios regulares que escriban por privado verán el mensaje de mantenimiento."
+            if activo else
+            "Los usuarios pueden consultar ofertas y categorías libremente por privado."
+        )
+        texto_panel = (
+            "⚙️ <b>Panel de Mantenimiento — Chat Personal</b>\n\n"
+            f"Estado actual: {estado_icono}\n\n"
+            f"ℹ️ <i>{desc}</i>\n\n"
+            "Toca el botón abajo para alternar el estado cuando desees:"
+        )
+        if chat_id and msg_id:
+            telegram.editar_mensaje(
+                chat_id=chat_id,
+                message_id=msg_id,
+                texto=texto_panel,
+                reply_markup=telegram.teclado_mantenimiento_admin(activo),
+            )
         return
     else:
         telegram.responder_callback(cq_id, "Opción no reconocida.")
@@ -386,9 +417,11 @@ TIPOS_INMEDIATOS = (
     "cancelar_feedback", "enviar_feedback", "start_deal",
     "salud", "enviar_respuesta_admin", "cancelar_respuesta_admin",
     "ayuda_responder", "ikea_en_grupo", "cascos_en_grupo",
+    "mantenimiento", "panel_mantenimiento",
 )
 COMANDOS_INMEDIATOS = (
-    "menu", "start", "ayuda", "help", "objetivos", "estado", "salud", "ver_tiendas"
+    "menu", "start", "ayuda", "help", "objetivos", "estado", "salud", "ver_tiendas",
+    "mantenimiento",
 )
 
 

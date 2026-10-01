@@ -137,7 +137,12 @@ def descargar_foto_producto(url_foto: str, timeout: float = 4.0) -> Image.Image 
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read()
-            return Image.open(io.BytesIO(data)).convert("RGBA")
+        buf = io.BytesIO(data)
+        img = Image.open(buf).convert("RGBA")
+        buf.close()
+        if img.width > 1000 or img.height > 1000:
+            img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
+        return img
     except Exception:
         return None
 
@@ -291,6 +296,10 @@ def componer_canvas_branding(
         canvas.paste(prod_resized, (pos_x, pos_y), prod_resized)
     else:
         canvas.paste(prod_resized, (pos_x, pos_y))
+    try:
+        prod_resized.close()
+    except Exception:
+        pass
 
     # 2. Marco perimetral decorativo
     b_th = 12
@@ -377,6 +386,9 @@ def generar_tarjeta_branding_bytes(
     if not debe_aplicar_branding(deal):
         return None
 
+    foto = None
+    canvas = None
+    buf = None
     try:
         foto = descargar_foto_producto(deal.image, timeout=timeout)
         if not foto:
@@ -401,11 +413,28 @@ def generar_tarjeta_branding_bytes(
         )
 
         buf = io.BytesIO()
-        canvas.save(buf, format="JPEG", quality=95)
+        canvas.save(buf, format="JPEG", quality=90)
         return buf.getvalue()
     except Exception as exc:
         print(f"  [branding] aviso: no se pudo generar tarjeta con marco ({exc})")
         return None
+    finally:
+        if foto is not None:
+            try:
+                foto.close()
+            except Exception:
+                pass
+        if canvas is not None:
+            try:
+                canvas.close()
+            except Exception:
+                pass
+        if buf is not None:
+            try:
+                buf.close()
+            except Exception:
+                pass
+        gc.collect()
 
 
 _CACHE_FOTOS_BYTES: dict[str, bytes] = {}

@@ -560,6 +560,17 @@ def leer_comando(mensaje: dict) -> dict | None:
 
     # 2. En chat privado:
     else:
+        # Si el modo mantenimiento en chat personal está activo, avisar a usuarios regulares
+        if not es_admin and whitelist.modo_mantenimiento():
+            return {
+                "comando": "mantenimiento",
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "mantenimiento",
+            }
+
         # Los usuarios que no sean admin SOLO pueden usar el bot si están inscritos en el canal
         if not es_admin:
             es_deep_link = texto.startswith("/start") and any(k in texto for k in ("deal_", "report_", "ikea", "cascos"))
@@ -719,6 +730,26 @@ def leer_comando(mensaje: dict) -> dict | None:
                 "nombre": nombre,
                 "username": username,
                 "tipo": "cascos",
+            }
+
+        if crudo in ("mantenimiento", "modo_mantenimiento", "pausa", "pausar"):
+            if not es_admin:
+                return None
+            accion = None
+            if len(partes) > 1:
+                arg = partes[1].lower()
+                if arg in ("on", "activar", "si", "true", "1"):
+                    accion = "on"
+                elif arg in ("off", "desactivar", "no", "false", "0"):
+                    accion = "off"
+            return {
+                "comando": "mantenimiento",
+                "accion": accion,
+                "chat_id": chat,
+                "user_id": user_id,
+                "nombre": nombre,
+                "username": username,
+                "tipo": "panel_mantenimiento",
             }
 
         if crudo in ("salud", "diagnostico", "status_admin"):
@@ -935,6 +966,25 @@ def leer_comando(mensaje: dict) -> dict | None:
                     "chat_id": chat,
                     "cantidad": None,
                     "tipo": "categoria",
+                }
+
+        # Botones exclusivos del administrador en su teclado
+        if not res and es_admin:
+            if "modo mantenimiento" in texto_norm or texto_norm in ("mantenimiento", "🛠️ modo mantenimiento"):
+                res = {
+                    "comando": "mantenimiento",
+                    "accion": None,
+                    "chat_id": chat,
+                    "cantidad": None,
+                    "tipo": "panel_mantenimiento",
+                }
+            elif "salud del bot" in texto_norm or texto_norm == "🩺 salud del bot":
+                res = {
+                    "comando": "salud",
+                    "deal_hash": None,
+                    "chat_id": chat,
+                    "cantidad": None,
+                    "tipo": "salud",
                 }
 
         # Fallback para chat privado: si escribe 'menu', 'tiendas', 'hola', 'inicio', desplegar menu

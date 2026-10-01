@@ -5129,8 +5129,88 @@ class PruebaPrecalentamientoYCaché(unittest.TestCase):
         self.assertEqual(en_cache[0].title, "Lavadora Carga Frontal 18kg")
 
 
+class PruebaModoMantenimientoYBlindajeMemoria(unittest.TestCase):
+    """Verifica que el modo mantenimiento en chat privado y los topes de hilos funcionen correctamente."""
+
+    def test_hilos_fuentes_optimizados_a_dos(self):
+        from sources import vtex, falabella
+        self.assertEqual(vtex.HILOS, 2)
+        self.assertEqual(falabella.HILOS, 2)
+
+    def test_modo_mantenimiento_whitelist_activar_desactivar(self):
+        from core import whitelist
+        from unittest.mock import patch
+
+        datos = {"admin": "5583002220", "usuarios_permitidos": ["5583002220"]}
+        with patch("core.whitelist.cargar", return_value=datos), \
+             patch("core.whitelist.guardar") as mock_guardar:
+            whitelist.fijar_modo_mantenimiento(True)
+            self.assertTrue(datos.get("mantenimiento_privado"))
+            mock_guardar.assert_called_once()
+
+            whitelist.fijar_modo_mantenimiento(False)
+            self.assertFalse(datos.get("mantenimiento_privado"))
+
+    def test_usuario_regular_recibe_mantenimiento_cuando_esta_activo(self):
+        from core import comandos
+        from unittest.mock import patch
+
+        msg_usuario = {
+            "text": "💻 Tecnología",
+            "chat": {"id": 987654, "type": "private"},
+            "from": {"id": 987654, "first_name": "Pedro"},
+        }
+        with patch("core.whitelist.es_admin", return_value=False), \
+             patch("core.whitelist.modo_mantenimiento", return_value=True):
+            cmd = comandos.leer_comando(msg_usuario)
+            self.assertIsNotNone(cmd)
+            self.assertEqual(cmd.get("tipo"), "mantenimiento")
+            self.assertEqual(cmd.get("comando"), "mantenimiento")
+
+    def test_admin_tiene_acceso_total_aun_con_mantenimiento_activo(self):
+        from core import comandos
+        from unittest.mock import patch
+
+        msg_admin = {
+            "text": "💻 Tecnología",
+            "chat": {"id": 5583002220, "type": "private"},
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        with patch("core.whitelist.es_admin", return_value=True), \
+             patch("core.whitelist.modo_mantenimiento", return_value=True):
+            cmd = comandos.leer_comando(msg_admin)
+            self.assertIsNotNone(cmd)
+            self.assertNotEqual(cmd.get("tipo"), "mantenimiento")
+            self.assertEqual(cmd.get("tipo"), "grupo_categoria")
+
+    def test_comando_mantenimiento_admin_y_teclado(self):
+        from core import comandos, telegram
+        from unittest.mock import patch
+
+        msg_cmd = {
+            "text": "/mantenimiento",
+            "chat": {"id": 5583002220, "type": "private"},
+            "from": {"id": 5583002220, "first_name": "Admin"},
+        }
+        with patch("core.whitelist.es_admin", return_value=True):
+            cmd = comandos.leer_comando(msg_cmd)
+            self.assertEqual(cmd.get("tipo"), "panel_mantenimiento")
+
+        # Boton inline
+        t_activo = telegram.teclado_mantenimiento_admin(activo=True)
+        self.assertIn("mantenimiento:off", str(t_activo))
+        t_inactivo = telegram.teclado_mantenimiento_admin(activo=False)
+        self.assertIn("mantenimiento:on", str(t_inactivo))
+
+        # Teclado principal incluye opcion para admin
+        t_admin = telegram.teclado_tiendas(es_admin=True)
+        textos = [btn["text"] for fila in t_admin["keyboard"] for btn in fila]
+        self.assertIn("🛠️ Modo Mantenimiento", textos)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
 
 

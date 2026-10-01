@@ -1399,6 +1399,60 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
+        if tipo == "mantenimiento":
+            enlace = (getattr(config, "TELEGRAM_CHANNEL_URL", "") or "https://t.me/RadarPromoCol").strip()
+            if not enlace or "+GE1nQO-f0HYwNGQx" in enlace or "joinchat" in enlace or "/+" in enlace:
+                enlace = "https://t.me/RadarPromoCol"
+            msg_mantenimiento = (
+                "🔧 <b>PromosBot en Mantenimiento</b>\n\n"
+                "Estamos realizando labores de optimización y mejoras técnicas en el servicio de consultas privadas.\n\n"
+                "El bot volverá a estar disponible muy pronto. ¡Muchas gracias por tu paciencia!\n\n"
+                "📢 <i>Mientras tanto, puedes seguir disfrutando de las mejores gangas y errores de precio en vivo en nuestro canal oficial:</i>\n"
+                f"👉 <a href=\"{enlace}\">{enlace}</a>"
+            )
+            telegram.send(
+                msg_mantenimiento,
+                reply_markup={"remove_keyboard": True},
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
+        if tipo == "panel_mantenimiento":
+            user_id = solicitud.get("user_id")
+            if not whitelist.es_admin(user_id):
+                telegram.send("⛔ Este comando es exclusivo para el administrador de PromosBot.", chat_id=chat_id)
+                atendidos += 1
+                continue
+
+            accion = solicitud.get("accion")
+            if accion == "on":
+                whitelist.fijar_modo_mantenimiento(True)
+            elif accion == "off":
+                whitelist.fijar_modo_mantenimiento(False)
+
+            activo = whitelist.modo_mantenimiento()
+            estado_icono = "🛑 <b>ACTIVO (Chat personal en mantenimiento)</b>" if activo else "🟢 <b>INACTIVO (Servicio normal operando)</b>"
+            desc = (
+                "Los usuarios regulares que escriban por privado verán el mensaje de mantenimiento."
+                if activo else
+                "Los usuarios pueden consultar ofertas y categorías libremente por privado."
+            )
+            texto_panel = (
+                "⚙️ <b>Panel de Mantenimiento — Chat Personal</b>\n\n"
+                f"Estado actual: {estado_icono}\n\n"
+                f"ℹ️ <i>{desc}</i>\n\n"
+                "Toca el botón abajo para alternar el estado cuando desees:"
+            )
+            es_adm = whitelist.es_admin(user_id or chat_id)
+            telegram.send(
+                texto_panel,
+                reply_markup=telegram.teclado_mantenimiento_admin(activo),
+                chat_id=chat_id,
+            )
+            atendidos += 1
+            continue
+
         if tipo == "start_deal":
             deal_hash = solicitud.get("deal_hash", "")
             telegram.accion_escribiendo(chat_id=chat_id)
@@ -1601,10 +1655,11 @@ def atender_solicitudes(solicitudes: list[dict],
 
         if comando in ("start", "menu") or tipo == "menu":
             mod_comandos.limpiar_estado_feedback(chat_id)
+            es_adm = whitelist.es_admin(user_id or chat_id)
             telegram.send(
                 "🤖 <b>PromosBot — Menú Principal</b>\n\n"
                 "Toca una tienda o el <b>🇨🇴 Comparador</b> en los botones inferiores para explorar ofertas:",
-                reply_markup=telegram.teclado_tiendas(),
+                reply_markup=telegram.teclado_tiendas(es_admin=es_adm),
                 chat_id=chat_id,
             )
             atendidos += 1
@@ -1866,6 +1921,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
                 enviadas_ahora.append(deal.key)
                 time.sleep(1.2)
+                gc.collect()
             if token_actual != _token_busqueda_activa:
                 atendidos += 1
                 continue
@@ -1968,6 +2024,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
                 enviadas_ahora.append(deal.key)
                 time.sleep(1.2)
+                gc.collect()
             if token_actual != _token_busqueda_activa:
                 atendidos += 1
                 continue

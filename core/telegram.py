@@ -311,16 +311,19 @@ def _avisar_migracion(error: Exception) -> None:
         print(f"  [telegram] actualiza TELEGRAM_CHAT_ID a: {nuevo.group(1)}")
 
 
-def teclado_tiendas() -> dict:
+def teclado_tiendas(es_admin: bool = False) -> dict:
     """Menu principal compacto y ordenado para ReplyKeyboardMarkup (Zero Scroll)."""
+    filas = [
+        [{"text": "🇨🇴 Ofertas Colombia"}],
+        [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina"}],
+        [{"text": "🏠 Hogar y Muebles"}, {"text": "❄️ Electrodomésticos"}],
+        [{"text": "👟 Ropa y Calzado"}, {"text": "⚡ Gangas Amazon"}],
+        [{"text": "🏬 Ver por Tienda"}, {"text": "✍️ Sugerencias y Reportes"}],
+    ]
+    if es_admin:
+        filas.append([{"text": "🛠️ Modo Mantenimiento"}, {"text": "🩺 Salud del Bot"}])
     return {
-        "keyboard": [
-            [{"text": "🇨🇴 Ofertas Colombia"}],
-            [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina"}],
-            [{"text": "🏠 Hogar y Muebles"}, {"text": "❄️ Electrodomésticos"}],
-            [{"text": "👟 Ropa y Calzado"}, {"text": "⚡ Gangas Amazon"}],
-            [{"text": "🏬 Ver por Tienda"}, {"text": "✍️ Sugerencias y Reportes"}],
-        ],
+        "keyboard": filas,
         "resize_keyboard": True,
         "is_persistent": False,
     }
@@ -526,6 +529,22 @@ def boton_cancelar_respuesta_admin() -> dict:
     return {
         "inline_keyboard": [
             [{"text": "❌ Cancelar respuesta", "callback_data": "cancelar_respuesta_admin"}]
+        ]
+    }
+
+
+def teclado_mantenimiento_admin(activo: bool) -> dict:
+    """Botones inline para que el administrador active o desactive el modo mantenimiento."""
+    if activo:
+        texto_btn = "🟢 Desactivar Mantenimiento (Reanudar Bot)"
+        cb = "mantenimiento:off"
+    else:
+        texto_btn = "🛑 Activar Modo Mantenimiento"
+        cb = "mantenimiento:on"
+    return {
+        "inline_keyboard": [
+            [{"text": texto_btn, "callback_data": cb}],
+            [{"text": "🔄 Actualizar Estado", "callback_data": "mantenimiento:check"}],
         ]
     }
 

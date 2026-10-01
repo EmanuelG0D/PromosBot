@@ -39,7 +39,7 @@ TIENDAS = {
     },
 }
 
-HILOS = 4
+HILOS = 2
 _BLOQUE = re.compile(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 
 
