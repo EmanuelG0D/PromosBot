@@ -9,7 +9,6 @@ Uso tipico:
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import copy
 import datetime as dt
 import gc
@@ -1041,20 +1040,13 @@ def _mejores_colombia(watchlist: dict, vistas: set, cuantas: int,
         kw["forzar_refresco"] = True
 
     if tareas_fuente:
-        if len(tareas_fuente) == 1:
-            fuente_k, tiendas_k = tareas_fuente[0]
-            ofertas += _ofertas_de(watchlist, fuente_k, tiendas_k, **kw)
-        else:
-            with ThreadPoolExecutor(max_workers=min(len(tareas_fuente), 4)) as pool:
-                futuros = [
-                    pool.submit(_ofertas_de, watchlist, tf[0], tf[1], **kw)
-                    for tf in tareas_fuente
-                ]
-                for f in futuros:
-                    try:
-                        ofertas += (f.result() or [])
-                    except Exception as exc:
-                        print(f"  [radar] error consultando fuente: {exc}")
+        for fuente_k, tiendas_k in tareas_fuente:
+            try:
+                res = _ofertas_de(watchlist, fuente_k, tiendas_k, **kw)
+                if res:
+                    ofertas += res
+            except Exception as exc:
+                print(f"  [radar] error consultando fuente {fuente_k}: {exc}")
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
     disponibles = [d for d in ofertas if d.in_stock and _precio_admisible(d, trm)]
@@ -1131,20 +1123,13 @@ def _mejores(watchlist: dict, fuentes: list[str], tiendas, vistas: set,
     if forzar_refresco:
         kw["forzar_refresco"] = True
 
-    if len(fuentes) == 1:
-        fuente = fuentes[0]
-        ofertas += _ofertas_de(watchlist, fuente, tiendas, **kw)
-    else:
-        with ThreadPoolExecutor(max_workers=min(len(fuentes), 4)) as pool:
-            futuros = [
-                pool.submit(_ofertas_de, watchlist, f, tiendas, **kw)
-                for f in fuentes
-            ]
-            for f in futuros:
-                try:
-                    ofertas += (f.result() or [])
-                except Exception as exc:
-                    print(f"  [radar] error consultando fuente: {exc}")
+    for f in fuentes:
+        try:
+            res = _ofertas_de(watchlist, f, tiendas, **kw)
+            if res:
+                ofertas += res
+        except Exception as exc:
+            print(f"  [radar] error consultando fuente {f}: {exc}")
 
     ofertas = _marketplace_solo_si_mejora(_sin_repetidas(ofertas))
 

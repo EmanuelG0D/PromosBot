@@ -35,8 +35,6 @@ TIENDAS = {
         "nombre": "Homecenter",
         "base": "https://www.homecenter.com.co",
         "buscar": "/homecenter-co/search?Ntt={q}",
-        # Homecenter no trae el enlace en el JSON; con el id basta, la tienda
-        # redirige sola a la ficha completa.
         "producto": "/homecenter-co/product/{pid}/",
     },
 }
@@ -153,7 +151,11 @@ def _una_consulta(clave: str, tienda: dict, consulta: str,
             return []
         crudos = _productos(json.loads(bloque.group(1)))
     except Exception as exc:
-        print(f"  [{clave}] {consulta}: {exc}")
+        msg = str(exc)
+        if "429" in msg:
+            print(f"  [{clave}] {consulta}: HTTP 429 (bloqueado por Cloudflare)")
+        else:
+            print(f"  [{clave}] {consulta}: {exc}")
         return []
     if not crudos:
         return []
