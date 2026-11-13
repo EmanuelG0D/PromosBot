@@ -42,16 +42,6 @@ services:
       - key: EBAY_CLIENT_SECRET
         sync: false
 
-      # Opcional: credenciales de Facebook Page
-      - key: FB_PAGE_ID
-        sync: false
-      - key: FB_PAGE_ACCESS_TOKEN
-        sync: false
-      - key: FB_ENABLED
-        value: "true"
-      - key: FB_MAKE_WEBHOOK_URL
-        value: "https://hook.us2.make.com/f8mxw7hhwd36rpupqexok6yeq73qgpin"
-
       - key: PYTHONUNBUFFERED
         value: "1"
       # Dos ritmos: la comunidad cambia por hora, los catalogos por dia.

@@ -33,7 +33,7 @@ from urllib.parse import parse_qs, urlparse
 
 import config
 import radar
-from core import comandos, facebook, respaldo, telegram, whitelist
+from core import comandos, respaldo, telegram, whitelist
 from core.store import Store
 
 PUERTO = int(os.environ.get("PORT", "10000"))
@@ -49,9 +49,6 @@ INTERVALO_COMUNIDAD_MIN = float(os.environ.get("RONDA_COMUNIDAD_MINUTOS", "15"))
 # RUN_EVERY_MINUTES quedo obsoleta a proposito: heredarla aqui habria dejado
 # los catalogos en 15 minutos, que es justo lo que este cambio evita.
 INTERVALO_CATALOGOS_MIN = float(os.environ.get("RONDA_CATALOGOS_MINUTOS", "60"))
-# Ritmo de publicación en Facebook: Meta penaliza ráfagas continuas. Se agrupan
-# ofertas en lotes carrusel y se publican estrictamente cada 45 minutos.
-INTERVALO_FACEBOOK_MIN = float(os.environ.get("RONDA_FACEBOOK_MINUTOS", "45"))
 
 # Horario de trabajo, en hora de Colombia. De madrugada las tiendas no
 # publican nada, y el servicio gratuito de Render tiene 750 horas al mes:
@@ -549,38 +546,6 @@ def programador(nombre: str, fuentes, intervalo_min: float,
         time.sleep(intervalo_min * 60)
 
 
-def programador_facebook(intervalo_min: float = INTERVALO_FACEBOOK_MIN) -> None:
-    """Hilo de fondo: procesa la cola de Facebook estrictamente cada 45 minutos."""
-    # Retraso inicial para permitir que el servicio web y la base de datos se estabilicen
-    time.sleep(ESPERA_INICIAL_S + 25)
-    log(f"iniciando programador de Facebook (lotes cada {intervalo_min:g} min)")
-    while True:
-        try:
-            if en_horario():
-                res = facebook.procesar_cola(limite=4)
-                if res.get("ok"):
-                    if res.get("tipo") == "camuflaje":
-                        log("Facebook: post de camuflaje publicado exitosamente (regla 5:1)")
-                    elif res.get("tipo") in ("lote", "individual"):
-                        log(f"Facebook: publicación realizada exitosamente ({res.get('tipo')}, "
-                            f"{res.get('deals_count', 1)} ofertas, post_id={res.get('post_id')}, "
-                            f"comentario_id={res.get('comentario_id')})")
-                elif res.get("tipo") == "error_publicacion":
-                    error_fb = res.get("error", "error desconocido")
-                    log(f"Facebook: fallo al publicar lote: {error_fb}")
-                    try:
-                        if config.TELEGRAM_ADMIN_ID:
-                            telegram.send(
-                                f"⚠️ <b>Facebook: fallo al publicar</b>\n\n<code>{telegram.esc(str(error_fb))}</code>",
-                                chat_id=config.TELEGRAM_ADMIN_ID,
-                            )
-                    except Exception as err_notif:
-                        log(f"Facebook: no se pudo notificar al admin del fallo: {err_notif}")
-            else:
-                log("Facebook: lote omitido (fuera de horario)")
-        except Exception as exc:
-            log(f"Facebook: error en hilo programador: {type(exc).__name__}: {exc}")
-        time.sleep(intervalo_min * 60)
 
 
 class Manejador(BaseHTTPRequestHandler):
@@ -616,10 +581,7 @@ class Manejador(BaseHTTPRequestHandler):
                 "horario": f"{HORA_DESDE}:00 a {HORA_HASTA}:00 (Colombia)",
                 "en_horario_ahora": en_horario(),
                 "telegram_configurado": telegram.enabled(),
-                "facebook_configurado": facebook.configurado(),
-                "facebook_page_id": (config.FB_PAGE_ID[:4] + "..." + config.FB_PAGE_ID[-4:]) if config.FB_PAGE_ID else "no configurado",
-                "facebook_conexion": facebook.verificar_conexion(),
-                "facebook_telemetria": facebook.telemetria(),
+                "facebook_configurado": False,
                 "webhook": _estado["webhook"],
                 "comandos_atendidos": _estado["comandos_atendidos"],
                 "respaldo_configurado": respaldo.configurado(),
@@ -678,96 +640,6 @@ class Manejador(BaseHTTPRequestHandler):
             self._responder(202, {"ok": True, "mensaje": "ronda lanzada en segundo plano"})
             return
 
-        if ruta.path in ("/run_facebook", "/run_fb"):
-            if RUN_TOKEN:
-                enviado = parse_qs(ruta.query).get("token", [""])[0]
-                if enviado != RUN_TOKEN:
-                    self._responder(403, {"error": "token invalido"})
-                    return
-            qs = parse_qs(ruta.query)
-            if "muestra" in qs:
-                from core.models import Deal
-                ts_now = int(time.time())
-                d1 = Deal(
-                    source="falabella",
-                    store="Falabella",
-                    country="CO",
-                    key=f"sample:falabella_{ts_now}",
-                    title="Tenis Deportivos Hombre - Descuento Especial",
-                    price=219900.0,
-                    list_price=449900.0,
-                    currency="COP",
-                    url="https://www.falabella.com.co/falabella-co/product/123769186/Tenis-Hombre-Deportivos/123769186",
-                    image="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
-                    notes=["Envío gratis a toda Colombia", "Oferta en tienda oficial"],
-                )
-                d2 = Deal(
-                    source="amazon",
-                    store="Amazon",
-                    country="US",
-                    key=f"sample:amazon_{ts_now}",
-                    title="Zapatillas Deportivas Clásicas Unisex",
-                    price=29.99,
-                    list_price=75.0,
-                    currency="USD",
-                    url="https://www.amazon.com/dp/B08N5WRWNW",
-                    image="https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&q=80",
-                    notes=["Importación desde Estados Unidos", "Rebaja directa en tienda oficial"],
-                )
-                facebook.encolar_oferta(d1)
-                facebook.encolar_oferta(d2)
-            limite_lote = int(qs.get("limite", [2 if "muestra" in qs else 4])[0])
-            res = facebook.procesar_cola(limite=limite_lote)
-            self._responder(200, {"ok": True, "resultado": res})
-            return
-
-        if ruta.path == "/debug_post":
-            token = facebook._obtener_page_token()
-            qs = parse_qs(ruta.query)
-            post_id = qs.get("id", ["234499896420989_122329259648241646"])[0]
-            url = f"https://graph.facebook.com/v20.0/{post_id}?fields=id,is_published,privacy,status_type,message,permalink_url,created_time&access_token={token}"
-            url_posts = f"https://graph.facebook.com/v20.0/{config.FB_PAGE_ID}/posts?fields=id,is_published,message,created_time,permalink_url&limit=5&access_token={token}"
-            res_debug = {}
-            try:
-                with urllib.request.urlopen(url, timeout=10) as resp:
-                    res_debug["post"] = json.loads(resp.read().decode("utf-8"))
-            except Exception as e:
-                res_debug["post_error"] = str(e)
-            try:
-                with urllib.request.urlopen(url_posts, timeout=10) as resp:
-                    res_debug["ultimos_posts_pagina"] = json.loads(resp.read().decode("utf-8"))
-            except Exception as e:
-                res_debug["ultimos_posts_error"] = str(e)
-            self._responder(200, res_debug)
-            return
-
-        if ruta.path in ("/run_historia", "/run_story"):
-            if RUN_TOKEN:
-                enviado = parse_qs(ruta.query).get("token", [""])[0]
-                if enviado != RUN_TOKEN:
-                    self._responder(403, {"error": "token invalido"})
-                    return
-            with Store() as s:
-                pendientes = s.obtener_cola_facebook(limite=10)
-            if not pendientes:
-                self._responder(200, {"ok": False, "motivo": "no hay ofertas en cola"})
-                return
-            deal_elegido = None
-            for _, d in pendientes:
-                if facebook.es_ganga_para_historia(d):
-                    deal_elegido = d
-                    break
-            if not deal_elegido:
-                for _, d in pendientes:
-                    if d.image:
-                        deal_elegido = d
-                        break
-            if not deal_elegido:
-                self._responder(200, {"ok": False, "motivo": "ninguna oferta con imagen"})
-                return
-            res = facebook.publicar_historia(deal_elegido, forzar=True)
-            self._responder(200, {"ok": True, "resultado": res, "oferta": deal_elegido.title})
-            return
 
         if ruta.path.startswith("/ir/"):
             id_oferta = ruta.path[len("/ir/"):].strip()
@@ -838,7 +710,7 @@ class Manejador(BaseHTTPRequestHandler):
             self.wfile.write(foto_bytes)
             return
 
-        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/run_fb", "/ir/{id}", "/foto/{id}.jpg", RUTA_WEBHOOK]})
+        self._responder(404, {"error": "ruta desconocida", "rutas": ["/", "/status", "/healthz", "/run", "/ir/{id}", "/foto/{id}.jpg", RUTA_WEBHOOK]})
 
     def do_POST(self) -> None:  # noqa: N802  (lo exige BaseHTTPRequestHandler)
         # El cuerpo se lee SIEMPRE y antes de decidir nada. Responder sin
@@ -920,8 +792,6 @@ def main() -> None:
                     "comunidad", RONDA_COMUNIDAD, INTERVALO_COMUNIDAD_MIN)).start()
                 threading.Thread(target=programador, daemon=True, args=(
                     "catalogos", RONDA_CATALOGOS, INTERVALO_CATALOGOS_MIN, 90)).start()
-                if facebook.configurado():
-                    threading.Thread(target=programador_facebook, daemon=True).start()
             else:
                 log("modo interactivo local: rondas de fondo desactivadas para maxima velocidad de respuesta")
 

@@ -1848,7 +1848,11 @@ class PruebaControlAccesoWhitelist(unittest.TestCase):
     def test_es_miembro_del_canal_estados(self):
         from core import http, telegram
         orig_post = http.post_json
+        orig_token = config.TELEGRAM_BOT_TOKEN
+        orig_chat = config.TELEGRAM_CHAT_ID
         try:
+            config.TELEGRAM_BOT_TOKEN = "123:test"
+            config.TELEGRAM_CHAT_ID = "-100"
             # Miembro activo
             http.post_json = lambda url, payload, **k: {"ok": True, "result": {"status": "member"}}
             self.assertTrue(telegram.es_miembro_del_canal(12345, channel_id="-100"))
@@ -1870,6 +1874,8 @@ class PruebaControlAccesoWhitelist(unittest.TestCase):
             self.assertFalse(telegram.es_miembro_del_canal(12345, channel_id="-100"))
         finally:
             http.post_json = orig_post
+            config.TELEGRAM_BOT_TOKEN = orig_token
+            config.TELEGRAM_CHAT_ID = orig_chat
 
     def test_teclado_unirse_canal_estructura(self):
         from core import telegram

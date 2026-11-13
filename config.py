@@ -63,20 +63,9 @@ EBAY_CLIENT_ID = _str("EBAY_CLIENT_ID")
 EBAY_CLIENT_SECRET = _str("EBAY_CLIENT_SECRET")
 
 # --- Facebook Page (opcional: sin credenciales se omite solo) ------------
-FB_PAGE_ID = (
-    _str("FB_PAGE_ID")
-    or _str("FACEBOOK_PAGE_ID")
-    or _str("FB_PAGE")
-    or _str("PAGE_ID")
-)
-FB_PAGE_ACCESS_TOKEN = (
-    _str("FB_PAGE_ACCESS_TOKEN")
-    or _str("FACEBOOK_PAGE_ACCESS_TOKEN")
-    or _str("FACEBOOK_ACCESS_TOKEN")
-    or _str("FB_ACCESS_TOKEN")
-    or _str("FB_TOKEN")
-)
-FB_ENABLED = _bool("FB_ENABLED", _bool("FACEBOOK_ENABLED", True))
+FB_PAGE_ID = _str("FB_PAGE_ID")
+FB_PAGE_ACCESS_TOKEN = _str("FB_PAGE_ACCESS_TOKEN")
+FB_ENABLED = _bool("FB_ENABLED", False)
 FB_HISTORIAS_MAX_DIA = _int("FB_HISTORIAS_MAX_DIA", 5)
 FB_HISTORIAS_MIN_HORAS = _float("FB_HISTORIAS_MIN_HORAS", 2.0)
 FB_MAKE_WEBHOOK_URL = _str("FB_MAKE_WEBHOOK_URL", "https://hook.us2.make.com/f8mxw7hhwd36rpupqexok6yeq73qgpin")
