@@ -155,7 +155,8 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         cfg = watchlist.get("falabella", {})
         consultas = cfg.get("queries", [])
         if consultas:
-            print(f"-> Falabella/Homecenter: {len(consultas)} busquedas")
+            tiendas_fala = cfg.get("tiendas", ["falabella"])
+            print(f"-> Falabella ({', '.join(tiendas_fala)}): {len(consultas)} busquedas")
             ofertas += _sin_ruido(
                 _recolectar_fuente(
                     "falabella",
