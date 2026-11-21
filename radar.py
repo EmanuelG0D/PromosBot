@@ -278,15 +278,17 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
         consultas = cfg.get("queries", [])
         colecciones = cfg.get("collections", [])
         if consultas or colecciones:
-            print(f"-> Simon Premium Outlets: {len(consultas)} busquedas, {len(colecciones)} colecciones")
+            max_u = cfg.get("max_usd", 40.0)
+            print(f"-> Simon Premium Outlets: {len(consultas)} busquedas, {len(colecciones)} colecciones (máx US${max_u:.0f})")
             ofertas += _sin_ruido(
                 _recolectar_fuente(
                     "simon",
                     simon.fetch,
                     consultas=consultas,
                     colecciones=colecciones,
-                    por_consulta=cfg.get("por_consulta", 24),
+                    por_consulta=cfg.get("por_consulta", 30),
                     min_descuento=cfg.get("min_descuento", 30.0),
+                    max_usd=max_u,
                 ),
                 cfg,
             )
@@ -623,8 +625,9 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
                             por_consulta=cfg.get("por_consulta", 24))
     elif fuente == "simon":
         crudas = simon.fetch(consultas, colecciones=cfg.get("collections"),
-                             por_consulta=cfg.get("por_consulta", 24),
-                             min_descuento=cfg.get("min_descuento", 30.0))
+                             por_consulta=cfg.get("por_consulta", 30),
+                             min_descuento=cfg.get("min_descuento", 30.0),
+                             max_usd=cfg.get("max_usd", 40.0))
     else:
         return []
     resultado = _sin_ruido(crudas, cfg)

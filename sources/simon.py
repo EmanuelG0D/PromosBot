@@ -5,7 +5,8 @@ de sus endpoints públicos de colecciones y búsqueda predictiva:
 - /collections/{handle}/products.json (liquidaciones, price drops y marcas outlet)
 - /search/suggest.json?q={query}&resources[type]=product (búsqueda por término)
 
-Filtra productos con descuento comprobable (list_price > price) y porcentaje mínimo.
+Filtra productos con descuento comprobable (list_price > price), porcentaje mínimo
+y tope de precio máximo en USD (por defecto máx $40 USD para gangas imbatibles).
 Al ser compras en EE. UU., los productos se registran en USD para que el radar
 calcule automáticamente el costo puesto en Colombia (TRM + flete).
 """
@@ -25,16 +26,21 @@ CURRENCY = "USD"
 HILOS = 4
 
 COLECCIONES_DEFECTO = [
+    "store-adidas",
     "curated-adidas-price-drops",
-    "curated-adidas-extra-50",
+    "curated-adidas-sale-top-picks",
+    "curated-adidas-last-chance",
+    "curated-adidas-best-sellers",
     "store-coach-outlet",
-    "curated-coach-outlet-sale",
-    "curated-michael-kors-all",
     "curated-clarks-extra-40-off",
 ]
 
 
-def extraer_deals_productos_json(raw_json: str | dict, min_descuento: float = 30.0) -> list[Deal]:
+def extraer_deals_productos_json(
+    raw_json: str | dict,
+    min_descuento: float = 30.0,
+    max_usd: float | None = 40.0,
+) -> list[Deal]:
     """Parsea el listado de productos de una colección de Shopify (products.json)."""
     deals: list[Deal] = []
     try:
@@ -59,7 +65,7 @@ def extraer_deals_productos_json(raw_json: str | dict, min_descuento: float = 30
             if not variants:
                 continue
 
-            # Buscar la variante disponible con mejor descuento
+            # Buscar la variante disponible con mejor descuento que cumpla con max_usd
             mejor_v = None
             max_disc_pct = 0.0
             for v in variants:
@@ -67,6 +73,8 @@ def extraer_deals_productos_json(raw_json: str | dict, min_descuento: float = 30
                     continue
                 pr = float(v.get("price") or 0)
                 cp = float(v.get("compare_at_price") or 0)
+                if max_usd is not None and pr > max_usd:
+                    continue
                 if cp > pr and pr > 0:
                     disc_pct = round(((cp - pr) / cp) * 100)
                     if disc_pct > max_disc_pct:
@@ -82,7 +90,11 @@ def extraer_deals_productos_json(raw_json: str | dict, min_descuento: float = 30
             img_url = images[0].get("src") if images else None
 
             notes = [f"🇺🇸 {STORE_NAME}", f"-{pct}% OFF"]
-            if vendor and not vendor.isdigit() and vendor.lower() not in title.lower():
+            if pct >= 50:
+                notes.append("🔥 50%+ EXTRA OFF")
+            if "adidas" in title.lower() or "adidas" in vendor.lower():
+                notes.append("👟 Adidas Outlet")
+            elif vendor and not vendor.isdigit() and vendor.lower() not in title.lower():
                 notes.append(vendor)
 
             deals.append(Deal(
@@ -106,7 +118,11 @@ def extraer_deals_productos_json(raw_json: str | dict, min_descuento: float = 30
     return deals
 
 
-def extraer_deals_suggest_json(raw_json: str | dict, min_descuento: float = 30.0) -> list[Deal]:
+def extraer_deals_suggest_json(
+    raw_json: str | dict,
+    min_descuento: float = 30.0,
+    max_usd: float | None = 40.0,
+) -> list[Deal]:
     """Parsea productos devueltos por el buscador predictivo de Shopify (search/suggest.json)."""
     deals: list[Deal] = []
     try:
@@ -126,6 +142,9 @@ def extraer_deals_suggest_json(raw_json: str | dict, min_descuento: float = 30.0
                 continue
 
             price = float(p.get("price") or 0)
+            if max_usd is not None and price > max_usd:
+                continue
+
             list_price = float(p.get("compare_at_price_max") or 0)
             if list_price <= price or price <= 0:
                 continue
@@ -138,6 +157,12 @@ def extraer_deals_suggest_json(raw_json: str | dict, min_descuento: float = 30.0
             p_url = f"{BASE_URL}{rel_url}" if rel_url.startswith("/") else rel_url
             img_url = p.get("image") or p.get("featured_image")
 
+            notes = [f"🇺🇸 {STORE_NAME}", f"-{pct}% OFF"]
+            if pct >= 50:
+                notes.append("🔥 50%+ EXTRA OFF")
+            if "adidas" in title.lower():
+                notes.append("👟 Adidas Outlet")
+
             deals.append(Deal(
                 source="simon",
                 store=STORE_NAME,
@@ -149,7 +174,7 @@ def extraer_deals_suggest_json(raw_json: str | dict, min_descuento: float = 30.0
                 currency=CURRENCY,
                 list_price=list_price,
                 image=img_url,
-                notes=[f"🇺🇸 {STORE_NAME}", f"-{pct}% OFF"],
+                notes=notes,
                 free_shipping_co=False,
                 in_stock=True,
             ))
@@ -159,24 +184,34 @@ def extraer_deals_suggest_json(raw_json: str | dict, min_descuento: float = 30.0
     return deals
 
 
-def _una_coleccion(handle: str, por_consulta: int = 24, min_descuento: float = 30.0) -> list[Deal]:
+def _una_coleccion(
+    handle: str,
+    por_consulta: int = 24,
+    min_descuento: float = 30.0,
+    max_usd: float | None = 40.0,
+) -> list[Deal]:
     """Descarga y extrae productos de una colección específica de Simon."""
     url = f"{BASE_URL}/collections/{handle}/products.json?limit={por_consulta}"
     try:
         raw = http.get_text(url, timeout=12)
-        return extraer_deals_productos_json(raw, min_descuento=min_descuento)
+        return extraer_deals_productos_json(raw, min_descuento=min_descuento, max_usd=max_usd)
     except Exception as exc:
         print(f"  [simon] aviso: error en colección '{handle}': {exc}")
         return []
 
 
-def _una_busqueda(query: str, por_consulta: int = 24, min_descuento: float = 30.0) -> list[Deal]:
+def _una_busqueda(
+    query: str,
+    por_consulta: int = 24,
+    min_descuento: float = 30.0,
+    max_usd: float | None = 40.0,
+) -> list[Deal]:
     """Busca ofertas por término en el buscador de Simon."""
     q_enc = urllib.parse.quote_plus(query.strip())
     url = f"{BASE_URL}/search/suggest.json?q={q_enc}&resources[type]=product&resources[limit]={por_consulta}"
     try:
         raw = http.get_text(url, timeout=12)
-        return extraer_deals_suggest_json(raw, min_descuento=min_descuento)
+        return extraer_deals_suggest_json(raw, min_descuento=min_descuento, max_usd=max_usd)
     except Exception as exc:
         print(f"  [simon] aviso: error en búsqueda '{query}': {exc}")
         return []
@@ -185,7 +220,8 @@ def _una_busqueda(query: str, por_consulta: int = 24, min_descuento: float = 30.
 def fetch(consultas: list[str] | None = None,
           colecciones: list[str] | None = None,
           por_consulta: int = 24,
-          min_descuento: float = 30.0) -> list[Deal]:
+          min_descuento: float = 30.0,
+          max_usd: float | None = 40.0) -> list[Deal]:
     """Recolecta ofertas de Simon Premium Outlets en paralelo."""
     col_efectivas = colecciones if colecciones is not None else COLECCIONES_DEFECTO
     q_efectivas = consultas or []
@@ -207,9 +243,9 @@ def fetch(consultas: list[str] | None = None,
     def _ejecutar(t):
         tipo, valor = t
         if tipo == "col":
-            return _una_coleccion(valor, por_consulta=por_consulta, min_descuento=min_descuento)
+            return _una_coleccion(valor, por_consulta=por_consulta, min_descuento=min_descuento, max_usd=max_usd)
         else:
-            return _una_busqueda(valor, por_consulta=por_consulta, min_descuento=min_descuento)
+            return _una_busqueda(valor, por_consulta=por_consulta, min_descuento=min_descuento, max_usd=max_usd)
 
     with ThreadPoolExecutor(max_workers=HILOS) as pool:
         for lote in pool.map(_ejecutar, tareas):

@@ -463,24 +463,26 @@
     "excluir": []
   },
   "simon": {
-    "_nota": "Simon Premium Outlets (EE. UU.): liquidaciones y ofertas outlet en USD de marcas como Adidas, Coach, Michael Kors, etc.",
+    "_nota": "Simon Premium Outlets (EE. UU.): liquidaciones y ofertas outlet en USD (máximo $40 USD) con foco especial en Adidas (50%+ extra off).",
     "collections": [
+      "store-adidas",
       "curated-adidas-price-drops",
-      "curated-adidas-extra-50",
+      "curated-adidas-sale-top-picks",
+      "curated-adidas-last-chance",
+      "curated-adidas-best-sellers",
       "store-coach-outlet",
-      "curated-coach-outlet-sale",
-      "curated-michael-kors-all",
       "curated-clarks-extra-40-off"
     ],
     "queries": [
       "adidas",
-      "sneakers",
-      "hoodie",
-      "running shoes",
-      "coach",
-      "jacket"
+      "adidas shoes",
+      "adidas sneakers",
+      "adidas hoodie",
+      "adidas track pants",
+      "running shoes"
     ],
-    "por_consulta": 24,
-    "min_descuento": 30.0
+    "por_consulta": 30,
+    "min_descuento": 30.0,
+    "max_usd": 40.0
   }
 }
