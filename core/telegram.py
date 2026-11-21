@@ -360,14 +360,28 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
     """Menu de categorias o grupos para la tienda seleccionada."""
     t_baja = tienda_nombre.lower()
 
-    # Marcas oficiales de ropa y calzado
-    if any(m in t_baja for m in ("totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle", "koaj")):
+    # Simon Outlet o marcas oficiales de ropa y calzado
+    if any(m in t_baja for m in ("simon", "totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle", "koaj")):
         return {
             "keyboard": [
                 [{"text": "🌟 TODO"}, {"text": "👟 Tenis y Zapatos"}],
                 [{"text": "👕 Camisetas y Polos"}, {"text": "👖 Jeans y Pantalones"}],
                 [{"text": "🧥 Chaquetas y Buzos"}, {"text": "🎒 Bolsos y Morrales"}],
-                [{"text": "🩳 Ropa Deportiva"}, {"text": "⬅️ Volver a Tiendas"}],
+                [{"text": "🩳 Ropa Deportiva"}, {"text": "⬅️ Volver al Menú Principal"}],
+            ],
+            "resize_keyboard": True,
+            "is_persistent": False,
+        }
+
+    # Decathlon Colombia
+    if "decathlon" in t_baja:
+        return teclado_deportes()
+
+    # Exterior (Slickdeals / EE. UU.)
+    if any(m in t_baja for m in ("exterior", "slickdeals")):
+        return {
+            "keyboard": [
+                [{"text": "🌟 TODO"}, {"text": "⬅️ Volver al Menú Principal"}],
             ],
             "resize_keyboard": True,
             "is_persistent": False,

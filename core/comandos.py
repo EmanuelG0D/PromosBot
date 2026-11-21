@@ -902,6 +902,8 @@ def leer_comando(mensaje: dict) -> dict | None:
         if len(partes) > 1 and partes[1].isdigit():
             cantidad = max(1, min(int(partes[1]), config.COMANDO_MAX_RESULTADOS))
         tipo_cmd = "siguientes" if crudo in ("siguientes", "mas", "siguiente") else None
+        if crudo in ("menu", "start", "inicio", "tiendas"):
+            fijar_tienda_activa("colombia", chat_id=chat)
         res = {"comando": crudo, "chat_id": chat, "cantidad": cantidad}
         if tipo_cmd:
             res["tipo"] = tipo_cmd
@@ -939,10 +941,13 @@ def leer_comando(mensaje: dict) -> dict | None:
 
         # Volver al menú principal o a la lista de tiendas
         elif any(frase in texto_norm for frase in ("volver al menú principal", "volver al menu principal", "volver a tiendas", "volver al inicio", "volver")):
+            fijar_tienda_activa("colombia", chat_id=chat)
             res = {"comando": "menu", "chat_id": chat, "cantidad": None, "tipo": "menu"}
 
         # Ver catálogo de tiendas individuales
         elif any(frase in texto_norm for frase in ("ver por tienda", "tiendas individuales", "todas las tiendas", "por tienda", "más tiendas", "mas tiendas")):
+            fijar_tienda_activa("colombia", chat_id=chat)
+            res = {"comando": "ver_tiendas", "chat_id": chat, "tipo": "ver_tiendas"}
             res = {"comando": "ver_tiendas", "chat_id": chat, "tipo": "ver_tiendas"}
 
         # Boton de grupo tematico (Cocina, Tecnologia, etc.)
@@ -1014,6 +1019,28 @@ def leer_comando(mensaje: dict) -> dict | None:
                             "comando": "todo_tienda",
                             "tienda": "colombia",
                             "tienda_nombre": "Todo Colombia",
+                            "chat_id": chat,
+                            "cantidad": None,
+                            "tipo": "todo_tienda",
+                        }
+                    elif tienda_key == "simon":
+                        # Entrega directa de ofertas de Simon Outlet en 1 solo clic
+                        fijar_tienda_activa("simon", chat_id=chat)
+                        res = {
+                            "comando": "todo_tienda",
+                            "tienda": "simon",
+                            "tienda_nombre": "Simon Outlet",
+                            "chat_id": chat,
+                            "cantidad": None,
+                            "tipo": "todo_tienda",
+                        }
+                    elif tienda_key == "exterior":
+                        # Entrega directa de ofertas del exterior en 1 solo clic
+                        fijar_tienda_activa("exterior", chat_id=chat)
+                        res = {
+                            "comando": "todo_tienda",
+                            "tienda": "exterior",
+                            "tienda_nombre": "Exterior (EE. UU.)",
                             "chat_id": chat,
                             "cantidad": None,
                             "tipo": "todo_tienda",

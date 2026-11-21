@@ -1325,6 +1325,98 @@ def generar_panel_salud() -> str:
     return "\n".join(lineas)
 
 
+CATEGORIA_A_GRUPO: dict[str, str] = {
+    # Cocina
+    "airfryers": "cocina", "sandwicheras": "cocina", "licuadoras": "cocina",
+    "cafeteras": "cocina", "microondas": "cocina", "arroceras y ollas": "cocina",
+    "sartenes y baterías": "cocina", "sartenes y baterias": "cocina", "toda la cocina": "cocina",
+    # Neveras y Lavadoras
+    "neveras": "neveras", "lavadoras": "neveras", "estufas y hornos": "neveras",
+    "aires acondicionados": "neveras", "cuidado personal": "neveras", "toda la línea blanca": "neveras", "toda la linea blanca": "neveras",
+    # Tecnología
+    "televisores": "tecnologia", "portátiles": "tecnologia", "portatiles": "tecnologia",
+    "celulares": "tecnologia", "tablets e ipads": "tecnologia", "tablets": "tecnologia",
+    "monitores": "tecnologia", "audífonos y sonido": "tecnologia", "audifonos y sonido": "tecnologia",
+    "consolas y videojuegos": "tecnologia", "smartwatches": "tecnologia", "toda la tecnología": "tecnologia", "toda la tecnologia": "tecnologia",
+    "smart tv": "tecnologia",
+    # Ropa
+    "tenis y zapatos": "ropa", "camisetas y polos": "ropa", "jeans y pantalones": "ropa",
+    "chaquetas y buzos": "ropa", "bolsos y morrales": "ropa", "ropa deportiva": "ropa", "toda la ropa": "ropa",
+    # Hogar
+    "muebles y salas": "hogar", "colchones": "hogar", "decoración e iluminación": "hogar", "decoracion e iluminacion": "hogar",
+    "organización y clóset": "hogar", "organizacion y closet": "hogar", "toda la casa": "hogar",
+    # Gaming
+    "tarjetas gráficas (gpu)": "gaming", "tarjetas graficas (gpu)": "gaming",
+    "mouses gamer": "gaming", "teclados mecánicos": "gaming", "teclados mecanicos": "gaming",
+    "sillas gamer": "gaming", "monitores gamer 144hz+": "gaming", "headsets y audio gamer": "gaming",
+    "mandos y consolas": "gaming", "todo gaming": "gaming",
+    # Belleza
+    "perfumes hombre": "belleza", "perfumes mujer": "belleza",
+    "cuidado de la piel (skincare)": "belleza", "afeitadoras y cuidado personal": "belleza", "toda la perfumería": "belleza", "toda la perfumeria": "belleza",
+    # Deportes
+    "mancuernas y pesas": "deportes", "tapetes de yoga y bandas": "deportes",
+    "bicicletas y ciclismo": "deportes", "tenis de running": "deportes",
+    "suplementos y proteínas": "deportes", "suplementos y proteinas": "deportes", "todo deportes": "deportes",
+    # Motos
+    "cascos integral y abatible": "motos", "chaquetas y protección moto": "motos", "chaquetas y proteccion moto": "motos",
+    "guantes de moto": "motos", "llantas de moto": "motos", "intercomunicadores moto": "motos", "todos los accesorios moto": "motos",
+}
+
+
+def _tienda_soporta_grupo(tienda: str, grupo: str) -> bool:
+    tienda = (tienda or "").lower()
+    if tienda in ("colombia", "co", "todo", "*"):
+        return True
+
+    tiendas_departamentales = {
+        "exito", "falabella", "mercadolibre", "meli", "alkosto",
+        "ktronix", "alkomprar", "jumbo", "olimpica", "homecenter", "carulla"
+    }
+
+    if grupo in ("tecnologia", "gaming"):
+        return tienda in (tiendas_departamentales | {"cajita", "descuentostech"})
+    if grupo == "cocina":
+        return tienda in (tiendas_departamentales | {"imusa", "oster"})
+    if grupo == "neveras":
+        return tienda in (tiendas_departamentales | {"haceb", "whirlpool"})
+    if grupo == "ropa":
+        return tienda in (tiendas_departamentales | {"totto", "studiof", "velez", "americanino", "arturocalle", "nike", "koaj", "simon"})
+    if grupo == "hogar":
+        return tienda in (tiendas_departamentales | {"ikea"})
+    if grupo == "deportes":
+        return tienda in (tiendas_departamentales | {"decathlon", "nike"})
+    if grupo == "belleza":
+        return tienda in tiendas_departamentales
+    if grupo == "motos":
+        return tienda in (tiendas_departamentales | {"cascos"})
+    return False
+
+
+def _tienda_soporta_categoria(tienda: str, categoria_nombre: str) -> bool:
+    tienda = (tienda or "").lower()
+    if tienda in ("colombia", "co", "todo", "*"):
+        return True
+
+    cat_norm = unicodedata.normalize("NFKD", categoria_nombre).encode("ascii", "ignore").decode().lower().strip()
+    cat_norm = re.sub(r'^[^\w\s]+', '', cat_norm).strip()
+
+    grupo = None
+    for k, grp in CATEGORIA_A_GRUPO.items():
+        k_norm = unicodedata.normalize("NFKD", k).encode("ascii", "ignore").decode().lower().strip()
+        k_norm = re.sub(r'^[^\w\s]+', '', k_norm).strip()
+        if cat_norm == k_norm or k_norm in cat_norm or cat_norm in k_norm:
+            grupo = grp
+            break
+
+    if not grupo:
+        return tienda in {
+            "exito", "falabella", "mercadolibre", "meli", "alkosto",
+            "ktronix", "alkomprar", "jumbo", "olimpica", "homecenter", "carulla"
+        }
+
+    return _tienda_soporta_grupo(tienda, grupo)
+
+
 def atender_comandos(por_comando: int | None = None) -> dict:
     """Pregunta por comandos pendientes (getUpdates) y los responde.
 
@@ -1703,6 +1795,7 @@ def atender_solicitudes(solicitudes: list[dict],
 
         if comando in ("start", "menu") or tipo == "menu":
             mod_comandos.limpiar_estado_feedback(chat_id)
+            mod_comandos.fijar_tienda_activa("colombia", chat_id=chat_id)
             es_adm = whitelist.es_admin(user_id or chat_id)
             telegram.send(
                 "🤖 <b>PromosBot — Menú Principal</b>\n\n"
@@ -1790,6 +1883,7 @@ def atender_solicitudes(solicitudes: list[dict],
 
         if tipo == "ver_tiendas":
             mod_comandos.limpiar_estado_feedback(chat_id)
+            mod_comandos.fijar_tienda_activa("colombia", chat_id=chat_id)
             telegram.send(
                 "🏬 <b>Tiendas y Marcas Oficiales</b>\n\n"
                 "Selecciona una tienda para explorar sus ofertas y catálogos exclusivos:\n"
@@ -1826,69 +1920,82 @@ def atender_solicitudes(solicitudes: list[dict],
         if tipo == "grupo_categoria":
             grupo = solicitud.get("grupo")
             tienda = mod_comandos.tienda_activa(chat_id=chat_id)
+            if not _tienda_soporta_grupo(tienda, grupo):
+                tienda = "colombia"
+                mod_comandos.fijar_tienda_activa("colombia", chat_id=chat_id)
+
             fuente, _, titulo_tienda = mod_comandos.CATALOGO.get(tienda, ("co", None, "Colombia"))
+            nombre_mostrar = "Todo Colombia" if tienda == "colombia" else titulo_tienda
 
             if grupo == "cocina":
                 telegram.send(
-                    f"🍳 <b>Cocina en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"🍳 <b>Cocina en {telegram.esc(nombre_mostrar)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_cocina(),
                     chat_id=chat_id,
                 )
             elif grupo == "tecnologia":
                 telegram.send(
-                    f"💻 <b>Tecnología en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"💻 <b>Tecnología en {telegram.esc(nombre_mostrar)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_tecnologia(),
                     chat_id=chat_id,
                 )
             elif grupo == "neveras":
                 telegram.send(
-                    f"❄️ <b>Electrodomésticos en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"❄️ <b>Electrodomésticos en {telegram.esc(nombre_mostrar)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_neveras_lavadoras(),
                     chat_id=chat_id,
                 )
             elif grupo == "ropa":
                 telegram.send(
-                    f"👟 <b>Ropa y Calzado en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"👟 <b>Ropa y Calzado en {telegram.esc(nombre_mostrar)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_ropa(),
                     chat_id=chat_id,
                 )
             elif grupo == "hogar":
                 telegram.send(
-                    f"🏠 <b>Hogar y Muebles en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
+                    f"🏠 <b>Hogar y Muebles en {telegram.esc(nombre_mostrar)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_hogar(),
                     chat_id=chat_id,
                 )
             elif grupo == "gaming":
                 telegram.send(
-                    f"🎮 <b>Gaming y Periféricos en {telegram.esc(titulo_tienda)}</b>\n\nElige el componente o accesorio que buscas:",
+                    f"🎮 <b>Gaming y Periféricos en {telegram.esc(nombre_mostrar)}</b>\n\nElige el componente o accesorio que buscas:",
                     reply_markup=telegram.teclado_gaming(),
                     chat_id=chat_id,
                 )
             elif grupo == "belleza":
                 telegram.send(
-                    f"💄 <b>Perfumería y Belleza en {telegram.esc(titulo_tienda)}</b>\n\nElige la categoría que buscas:",
+                    f"💄 <b>Perfumería y Belleza en {telegram.esc(nombre_mostrar)}</b>\n\nElige la categoría que buscas:",
                     reply_markup=telegram.teclado_belleza(),
                     chat_id=chat_id,
                 )
             elif grupo == "deportes":
                 telegram.send(
-                    f"🚲 <b>Deportes, Gym y Fitness en {telegram.esc(titulo_tienda)}</b>\n\nElige la disciplina o producto que buscas:",
+                    f"🚲 <b>Deportes, Gym y Fitness en {telegram.esc(nombre_mostrar)}</b>\n\nElige la disciplina o producto que buscas:",
                     reply_markup=telegram.teclado_deportes(),
                     chat_id=chat_id,
                 )
             elif grupo == "motos":
                 telegram.send(
-                    f"🏍️ <b>Motos y Accesorios en {telegram.esc(titulo_tienda)}</b>\n\nElige el equipamiento que buscas:",
+                    f"🏍️ <b>Motos y Accesorios en {telegram.esc(nombre_mostrar)}</b>\n\nElige el equipamiento que buscas:",
                     reply_markup=telegram.teclado_motos(),
                     chat_id=chat_id,
                 )
             elif grupo == "volver":
-                btn_todo = "🌟 Todo Colombia" if tienda == "colombia" else "🌟 TODO"
-                telegram.send(
-                    f"🏬 <b>{telegram.esc(titulo_tienda)}</b>\n\nElige un departamento o presiona <b>{btn_todo}</b>:",
-                    reply_markup=telegram.teclado_categorias(titulo_tienda),
-                    chat_id=chat_id,
-                )
+                if tienda in ("colombia", "co", "todo", "*"):
+                    telegram.send(
+                        "🤖 <b>PromosBot — Menú Principal</b>\n\n"
+                        "Toca una categoría o tienda en los botones inferiores para explorar ofertas:",
+                        reply_markup=telegram.teclado_tiendas(),
+                        chat_id=chat_id,
+                    )
+                else:
+                    btn_todo = "🌟 TODO"
+                    telegram.send(
+                        f"🏬 <b>{telegram.esc(nombre_mostrar)}</b>\n\nElige un departamento o presiona <b>{btn_todo}</b>:",
+                        reply_markup=telegram.teclado_categorias(nombre_mostrar),
+                        chat_id=chat_id,
+                    )
             atendidos += 1
             continue
 
@@ -1901,6 +2008,10 @@ def atender_solicitudes(solicitudes: list[dict],
             tienda = mod_comandos.tienda_activa(chat_id=chat_id)
             if tienda not in mod_comandos.CATALOGO and tienda not in ("objetivos", "estado"):
                 tienda = "colombia"
+
+            if not _tienda_soporta_categoria(tienda, categoria_nombre):
+                tienda = "colombia"
+                mod_comandos.fijar_tienda_activa("colombia", chat_id=chat_id)
 
             fuente, tiendas, titulo_tienda = mod_comandos.CATALOGO.get(
                 tienda, ("co", None, "Colombia"))
@@ -1951,18 +2062,22 @@ def atender_solicitudes(solicitudes: list[dict],
                 atendidos += 1
                 continue
 
+            teclado_salida_cat = (
+                telegram.teclado_tiendas() if tienda in ("colombia", "co", "todo", "*")
+                else telegram.teclado_categorias(titulo_tienda)
+            )
             if not seleccion:
                 if solicitud.get("es_siguiente"):
                     telegram.send(
                         f"🏁 <b>¡Ya te mostré todas las ofertas destacadas</b> de {telegram.esc(categoria_nombre)} en este momento!\n\n"
                         f"Puedes explorar otra categoría o tienda en los botones abajo.",
-                        reply_markup=telegram.teclado_categorias(titulo_tienda),
+                        reply_markup=teclado_salida_cat,
                         chat_id=chat_id,
                     )
                 else:
                     telegram.send(
                         f"Ahora mismo no encontré rebajas destacadas en {telegram.esc(categoria_nombre)} para <b>{telegram.esc(titulo_tienda)}</b>.",
-                        reply_markup=telegram.teclado_categorias(titulo_tienda),
+                        reply_markup=teclado_salida_cat,
                         chat_id=chat_id,
                     )
                 atendidos += 1
@@ -1977,7 +2092,7 @@ def atender_solicitudes(solicitudes: list[dict],
 
             telegram.send(
                 encabezado,
-                reply_markup=telegram.teclado_categorias(titulo_tienda),
+                reply_markup=teclado_salida_cat,
                 chat_id=chat_id,
             )
             enviadas_ahora = []
@@ -2063,7 +2178,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 atendidos += 1
                 continue
 
-            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon", "ikea", "cascos", "colombia")
+            teclado_salida = (telegram.teclado_tiendas() if tienda in ("cajita", "amazon", "ikea", "cascos", "colombia", "simon", "decathlon", "exterior")
                               else telegram.teclado_categorias(titulo))
             if not seleccion:
                 if solicitud.get("es_siguiente"):
@@ -2165,7 +2280,7 @@ def atender_solicitudes(solicitudes: list[dict],
             atendidos += 1
             continue
 
-        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon", "ikea", "cascos", "colombia")
+        teclado_salida = (telegram.teclado_tiendas() if comando in ("cajita", "amazon", "ikea", "cascos", "colombia", "simon", "decathlon", "exterior")
                           else telegram.teclado_categorias(titulo))
         if not seleccion:
             if solicitud.get("es_siguiente"):

@@ -5468,6 +5468,56 @@ class PruebaNuevasCategoriasYUX(unittest.TestCase):
             self.assertEqual(r_decat_btn["tipo"], "elegir_tienda")
             self.assertEqual(r_decat_btn["tienda"], "decathlon")
 
+    def test_auto_recuperacion_tienda_activa_y_grupos(self):
+        import radar
+        from unittest.mock import patch
+        from core import comandos, telegram
+
+        chat_test = 998877
+
+        # 1. Simular que el usuario tenía la tienda 'exterior' activa
+        comandos.fijar_tienda_activa("exterior", chat_id=chat_test)
+        self.assertEqual(comandos.tienda_activa(chat_test), "exterior")
+
+        # 2. Cuando el usuario pulsa volver al menú o volver a tiendas, se resetea a 'colombia'
+        with patch("core.whitelist.es_admin", return_value=True):
+            r_volver = comandos.leer_comando({"text": "⬅️ Volver a Tiendas", "chat": {"id": chat_test, "type": "private"}, "from": {"id": chat_test}})
+            self.assertEqual(r_volver["tipo"], "menu")
+            self.assertEqual(comandos.tienda_activa(chat_test), "colombia")
+
+        # 3. Si por alguna razón quedó en 'exterior', las funciones de validación deben detectar incompatibilidad
+        self.assertFalse(radar._tienda_soporta_grupo("exterior", "tecnologia"))
+        self.assertFalse(radar._tienda_soporta_grupo("exterior", "cocina"))
+        self.assertFalse(radar._tienda_soporta_categoria("exterior", "Portátiles"))
+        self.assertFalse(radar._tienda_soporta_categoria("exterior", "Licuadoras"))
+        self.assertTrue(radar._tienda_soporta_categoria("colombia", "Portátiles"))
+        self.assertTrue(radar._tienda_soporta_categoria("colombia", "Licuadoras"))
+
+        # 4. Atender grupo_categoria cocina cuando tienda es exterior reencamina a Colombia
+        comandos.fijar_tienda_activa("exterior", chat_id=chat_test)
+        with patch("core.telegram.send") as mock_send:
+            solicitud_cocina = {"tipo": "grupo_categoria", "grupo": "cocina", "chat_id": chat_test}
+            radar.atender_solicitudes([solicitud_cocina])
+            self.assertEqual(comandos.tienda_activa(chat_test), "colombia")
+            # Verificar que el mensaje enviado a Telegram dice 'Cocina en Todo Colombia' y no 'Ofertas del exterior'
+            mock_send.assert_called_once()
+            texto_enviado = mock_send.call_args[0][0]
+            self.assertIn("Cocina en Todo Colombia", texto_enviado)
+            self.assertNotIn("Ofertas del exterior", texto_enviado)
+
+        # 5. Teclado de Simon Outlet ofrece ropa, no cocina ni electrodomésticos
+        t_simon = telegram.teclado_categorias("Simon Outlet")
+        textos_simon = [b["text"] for row in t_simon["keyboard"] for b in row]
+        self.assertIn("👟 Tenis y Zapatos", textos_simon)
+        self.assertNotIn("🍳 Cocina", textos_simon)
+        self.assertNotIn("💻 Tecnología", textos_simon)
+
+        # 6. Teclado de Decathlon ofrece deportes
+        t_decat = telegram.teclado_categorias("Decathlon Colombia")
+        textos_decat = [b["text"] for row in t_decat["keyboard"] for b in row]
+        self.assertIn("🚴 Ciclismo y Bicis", textos_decat)
+        self.assertNotIn("🍳 Cocina", textos_decat)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
