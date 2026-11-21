@@ -125,6 +125,9 @@ class Store:
             self.conn.row_factory = sqlite3.Row
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA busy_timeout=5000")
+            self.conn.execute("PRAGMA synchronous=NORMAL")
+            self.conn.execute("PRAGMA cache_size=-2000")
+            self.conn.execute("PRAGMA temp_store=MEMORY")
             ruta_str = str(self.path.resolve())
             if ruta_str not in _DBS_INICIALIZADAS:
                 self.conn.executescript(_SCHEMA)

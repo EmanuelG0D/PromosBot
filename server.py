@@ -66,9 +66,11 @@ SONDEO_S = float(os.environ.get("POLL_COMANDOS_SECONDS", "1"))
 RUTA_WEBHOOK = "/telegram"
 
 _ronda_en_curso = threading.Lock()
-# Un comando a la vez: dos respuestas simultaneas se atropellarian en el
-# limite de mensajes por minuto de Telegram.
-_comando_en_curso = threading.Lock()
+# Dosificación de búsquedas: hasta 3 búsquedas concurrentes en chats distintos
+# para que un usuario no bloquee a los demás, respetando el límite de RAM de Render.
+_MAX_BUSQUEDAS_CONCURRENTES = 3
+_semaforo_busquedas = threading.Semaphore(_MAX_BUSQUEDAS_CONCURRENTES)
+_comando_en_curso = _semaforo_busquedas  # compatibilidad total
 # Telegram reintenta una entrega si cree que no llego. Recordar los ultimos
 # update_id evita responder dos veces el mismo comando.
 _ATENDIDOS_MAX = 200
@@ -443,10 +445,11 @@ def atender_comando(actualizacion: dict) -> None:
         _estado["comandos_atendidos"] += 1
         return
 
+    chat_id = solicitud.get("chat_id")
     _notificar_inicio_busqueda([solicitud])
-    radar.nueva_busqueda()
+    radar.nueva_busqueda(chat_id=chat_id)
 
-    with _comando_en_curso:
+    with _semaforo_busquedas:
         try:
             log(f"comando /{solicitud['comando']}")
             radar.atender_solicitudes([solicitud])
@@ -512,10 +515,11 @@ def sondeo_local() -> None:
 
                 if busquedas:
                     _notificar_inicio_busqueda(busquedas)
-                    radar.nueva_busqueda()
+                    for b in busquedas:
+                        radar.nueva_busqueda(chat_id=b.get("chat_id"))
 
                     def _ejecutar_busqueda(reqs):
-                        with _comando_en_curso:
+                        with _semaforo_busquedas:
                             radar.atender_solicitudes(reqs)
                             _estado["comandos_atendidos"] += len(reqs)
 

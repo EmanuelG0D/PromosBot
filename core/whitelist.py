@@ -98,25 +98,45 @@ def _sync_hacia_github(datos: dict[str, Any]) -> bool:
         return False
 
 
-def cargar() -> dict[str, Any]:
-    """Carga los usuarios permitidos. Prioriza archivo local, luego GitHub."""
+_CACHE_WHITELIST: dict[str, Any] | None = None
+_CACHE_WHITELIST_TS: float = 0.0
+_WHITELIST_TTL: float = 15.0
+
+
+def cargar(forzar: bool = False) -> dict[str, Any]:
+    """Carga los usuarios permitidos. Prioriza caché RAM reciente, luego archivo local, luego GitHub."""
+    global _CACHE_WHITELIST, _CACHE_WHITELIST_TS
+    ahora = time.time()
+    if not forzar and _CACHE_WHITELIST is not None and (ahora - _CACHE_WHITELIST_TS) < _WHITELIST_TTL:
+        return _CACHE_WHITELIST
+
+    datos = None
     if ARCHIVO_LOCAL.exists():
         try:
-            return json.loads(ARCHIVO_LOCAL.read_text(encoding="utf-8"))
+            datos = json.loads(ARCHIVO_LOCAL.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            datos = None
 
-    remoto = _sync_desde_github()
-    if remoto:
-        guardar_local(remoto)
-        return remoto
+    if datos is None:
+        remoto = _sync_desde_github()
+        if remoto:
+            guardar_local(remoto)
+            datos = remoto
 
-    base = _datos_iniciales()
-    guardar_local(base)
-    return base
+    if datos is None:
+        base = _datos_iniciales()
+        guardar_local(base)
+        datos = base
+
+    _CACHE_WHITELIST = datos
+    _CACHE_WHITELIST_TS = ahora
+    return datos
 
 
 def guardar_local(datos: dict[str, Any]) -> None:
+    global _CACHE_WHITELIST, _CACHE_WHITELIST_TS
+    _CACHE_WHITELIST = datos
+    _CACHE_WHITELIST_TS = time.time()
     try:
         ARCHIVO_LOCAL.write_text(json.dumps(datos, indent=2, ensure_ascii=False), encoding="utf-8")
     except Exception as exc:

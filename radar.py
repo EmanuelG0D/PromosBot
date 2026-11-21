@@ -14,6 +14,7 @@ import datetime as dt
 import gc
 import re
 import sys
+import threading
 import time
 import unicodedata
 from typing import Any
@@ -1248,13 +1249,43 @@ def precalentar_cache(forzar_refresco: bool = False,
 
 
 _token_busqueda_activa: int = 0
+_tokens_busqueda_chat: dict[str, int] = {}
+_tokens_lock = threading.Lock()
 
 
-def nueva_busqueda() -> int:
+def nueva_busqueda(chat_id: int | str | None = None) -> int:
     """Incrementa el token de busqueda para cancelar cualquier envio previo si el usuario pide otra cosa."""
     global _token_busqueda_activa
-    _token_busqueda_activa += 1
-    return _token_busqueda_activa
+    with _tokens_lock:
+        _token_busqueda_activa += 1
+        if chat_id is not None:
+            cid = str(chat_id)
+            _tokens_busqueda_chat[cid] = _tokens_busqueda_chat.get(cid, 0) + 1
+            if len(_tokens_busqueda_chat) > 500:
+                claves_viejas = list(_tokens_busqueda_chat.keys())[:200]
+                for k in claves_viejas:
+                    del _tokens_busqueda_chat[k]
+            return _tokens_busqueda_chat[cid]
+        return _token_busqueda_activa
+
+
+def token_busqueda_actual(chat_id: int | str | None = None) -> int:
+    """Devuelve el token de busqueda activo para ese chat (o el global)."""
+    with _tokens_lock:
+        if chat_id is not None:
+            cid = str(chat_id)
+            return _tokens_busqueda_chat.get(cid, _token_busqueda_activa)
+        return _token_busqueda_activa
+
+
+def busqueda_fue_cancelada(token_inicial: int, chat_id: int | str | None = None) -> bool:
+    """True si el usuario realizo una nueva peticion en su chat mientras enviaba ofertas."""
+    with _tokens_lock:
+        if chat_id is not None:
+            cid = str(chat_id)
+            token_ahora = _tokens_busqueda_chat.get(cid, _token_busqueda_activa)
+            return token_ahora != token_inicial
+        return _token_busqueda_activa != token_inicial
 
 
 def generar_panel_salud() -> str:
@@ -2003,7 +2034,7 @@ def atender_solicitudes(solicitudes: list[dict],
 
         # Inicializacion bajo demanda solo cuando realmente se van a buscar ofertas
         if tipo == "categoria":
-            token_actual = _token_busqueda_activa
+            token_actual = token_busqueda_actual(chat_id)
             if not solicitud.get("es_siguiente"):
                 mod_comandos.guardar_ultima_busqueda(chat_id, solicitud)
             categoria_nombre = solicitud.get("categoria_nombre", "Categoría")
@@ -2059,7 +2090,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas,
                                      consultas_custom=consultas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
-            if token_actual != _token_busqueda_activa:
+            if busqueda_fue_cancelada(token_actual, chat_id):
                 print("  [radar] categoria cancelada por nueva solicitud")
                 atendidos += 1
                 continue
@@ -2099,7 +2130,7 @@ def atender_solicitudes(solicitudes: list[dict],
             )
             enviadas_ahora = []
             for deal, verdict in seleccion:
-                if token_actual != _token_busqueda_activa:
+                if busqueda_fue_cancelada(token_actual, chat_id):
                     print("  [radar] envio interrumpido por nueva solicitud")
                     break
                 landed = None
@@ -2110,8 +2141,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
                 enviadas_ahora.append(deal.key)
                 time.sleep(1.2)
-                gc.collect()
-            if token_actual != _token_busqueda_activa:
+            if busqueda_fue_cancelada(token_actual, chat_id):
                 atendidos += 1
                 continue
             mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
@@ -2135,7 +2165,7 @@ def atender_solicitudes(solicitudes: list[dict],
             continue
 
         if tipo == "todo_tienda":
-            token_actual = _token_busqueda_activa
+            token_actual = token_busqueda_actual(chat_id)
             if not solicitud.get("es_siguiente"):
                 mod_comandos.guardar_ultima_busqueda(chat_id, solicitud)
             tienda = mod_comandos.tienda_activa(chat_id=chat_id)
@@ -2175,7 +2205,7 @@ def atender_solicitudes(solicitudes: list[dict],
             else:
                 seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
-            if token_actual != _token_busqueda_activa:
+            if busqueda_fue_cancelada(token_actual, chat_id):
                 print("  [radar] todo_tienda cancelado por nueva solicitud")
                 atendidos += 1
                 continue
@@ -2202,7 +2232,7 @@ def atender_solicitudes(solicitudes: list[dict],
                           chat_id=chat_id)
             enviadas_ahora = []
             for deal, verdict in seleccion:
-                if token_actual != _token_busqueda_activa:
+                if busqueda_fue_cancelada(token_actual, chat_id):
                     print("  [radar] envio interrumpido por nueva solicitud")
                     break
                 landed = None
@@ -2213,8 +2243,7 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
                 enviadas_ahora.append(deal.key)
                 time.sleep(1.2)
-                gc.collect()
-            if token_actual != _token_busqueda_activa:
+            if busqueda_fue_cancelada(token_actual, chat_id):
                 atendidos += 1
                 continue
             mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
@@ -2234,7 +2263,7 @@ def atender_solicitudes(solicitudes: list[dict],
                           chat_id=chat_id)
             continue
 
-        token_actual = _token_busqueda_activa
+        token_actual = token_busqueda_actual(chat_id)
         if not solicitud.get("es_siguiente"):
             mod_comandos.guardar_ultima_busqueda(chat_id, solicitud)
         mod_comandos.fijar_tienda_activa(comando, chat_id=chat_id)
@@ -2277,7 +2306,7 @@ def atender_solicitudes(solicitudes: list[dict],
         else:
             seleccion = _mejores(watchlist, [fuente], tiendas, vistas, cuantas, trm=trm or 4000.0, solo_nuevas=solo_nuevas)
 
-        if token_actual != _token_busqueda_activa:
+        if busqueda_fue_cancelada(token_actual, chat_id):
             print("  [radar] comando cancelado por nueva solicitud")
             atendidos += 1
             continue
@@ -2302,7 +2331,7 @@ def atender_solicitudes(solicitudes: list[dict],
                       chat_id=chat_id)
         enviadas_ahora = []
         for deal, verdict in seleccion:
-            if token_actual != _token_busqueda_activa:
+            if busqueda_fue_cancelada(token_actual, chat_id):
                 print("  [radar] envio interrumpido por nueva solicitud")
                 break
             landed = None
@@ -2313,7 +2342,7 @@ def atender_solicitudes(solicitudes: list[dict],
             telegram.enviar_oferta(deal, verdict, landed, chat_id=chat_id)
             enviadas_ahora.append(deal.key)
             time.sleep(1.2)
-        if token_actual != _token_busqueda_activa:
+        if busqueda_fue_cancelada(token_actual, chat_id):
             atendidos += 1
             continue
         mod_comandos.marcar_mostradas(enviadas_ahora, chat_id=chat_id)
@@ -2326,6 +2355,7 @@ def atender_solicitudes(solicitudes: list[dict],
         )
         atendidos += 1
 
+    gc.collect()
     print(f"Comandos atendidos: {atendidos}")
     return _resultado(enviadas=atendidos)
 

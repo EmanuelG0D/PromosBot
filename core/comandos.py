@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import unicodedata
 from pathlib import Path
 
@@ -456,15 +457,25 @@ def _buscar_categoria(texto_norm: str) -> tuple[str, list[str]] | None:
     return None
 
 
+_estado_lock = threading.RLock()
+
+
 def _cargar() -> dict:
-    try:
-        return json.loads(ESTADO.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    with _estado_lock:
+        try:
+            return json.loads(ESTADO.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
 
 
 def _guardar(datos: dict) -> None:
-    ESTADO.write_text(json.dumps(datos), encoding="utf-8")
+    with _estado_lock:
+        try:
+            tmp = ESTADO.with_suffix(".tmp")
+            tmp.write_text(json.dumps(datos), encoding="utf-8")
+            tmp.replace(ESTADO)
+        except Exception:
+            ESTADO.write_text(json.dumps(datos), encoding="utf-8")
 
 
 def _leer_estado() -> int:

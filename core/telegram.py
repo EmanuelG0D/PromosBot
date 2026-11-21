@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import json
 import re
-
+import threading
 import time
 
 import config
@@ -173,6 +174,35 @@ def _dominio(url: str) -> str:
     return url.split("/")[2] if url.count("/") > 2 else url[:40]
 
 
+_lock_despacho = threading.Lock()
+_ultimo_despacho_global: float = 0.0
+_ultimos_despachos_por_chat: dict[str, float] = {}
+
+
+def _pausar_despacho(chat_id: int | str | None = None) -> None:
+    """Evita saturar la API de Telegram asegurando espaciado entre mensajes."""
+    global _ultimo_despacho_global
+    with _lock_despacho:
+        ahora = time.time()
+        delta_global = ahora - _ultimo_despacho_global
+        if delta_global < 0.04:
+            time.sleep(0.04 - delta_global)
+
+        if chat_id is not None:
+            cid = str(chat_id)
+            ultimo_chat = _ultimos_despachos_por_chat.get(cid, 0.0)
+            delta_chat = time.time() - ultimo_chat
+            if delta_chat < 0.95:
+                time.sleep(0.95 - delta_chat)
+            _ultimos_despachos_por_chat[cid] = time.time()
+            if len(_ultimos_despachos_por_chat) > 500:
+                claves_viejas = sorted(_ultimos_despachos_por_chat.keys(), key=lambda k: _ultimos_despachos_por_chat[k])[:200]
+                for k in claves_viejas:
+                    del _ultimos_despachos_por_chat[k]
+
+        _ultimo_despacho_global = time.time()
+
+
 def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None,
                    reply_markup: dict | None = None) -> bool:
     """Le pasa la URL a Telegram para que la baje el. Es lo barato."""
@@ -186,6 +216,7 @@ def _foto_por_url(foto: str, pie: str, chat_id: int | str | None = None,
     }
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
+    _pausar_despacho(destino)
     respuesta = http.post_json(url, payload, retries=1)
     return bool(respuesta.get("ok"))
 
@@ -206,7 +237,7 @@ def _foto_subida(foto: str | bytes, pie: str, chat_id: int | str | None = None,
     if isinstance(foto, (bytes, bytearray)):
         imagen = bytes(foto)
     else:
-        imagen = http.descargar(foto, retries=1)
+        imagen = http.descargar(foto, timeout=6, retries=1)
     destino = chat_id if chat_id is not None else config.TELEGRAM_CHAT_ID
 
     # Si la imagen no es un formato estandar directo (ej. AVIF de K-tronix),
@@ -226,6 +257,7 @@ def _foto_subida(foto: str | bytes, pie: str, chat_id: int | str | None = None,
     if reply_markup is not None:
         campos["reply_markup"] = json.dumps(reply_markup)
 
+    _pausar_despacho(destino)
     respuesta = http.post_multipart(
         url,
         campos,
@@ -673,6 +705,7 @@ def send(html: str, preview: bool = False, reply_markup: dict | None = None,
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
     try:
+        _pausar_despacho(destino)
         respuesta = http.post_json(url, payload, retries=1)
         return bool(respuesta.get("ok"))
     except Exception as exc:
@@ -696,6 +729,7 @@ def editar_mensaje(chat_id: int | str, message_id: int, texto: str,
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
     try:
+        _pausar_despacho(chat_id)
         respuesta = http.post_json(url, payload, retries=1)
         return bool(respuesta.get("ok"))
     except Exception as exc:

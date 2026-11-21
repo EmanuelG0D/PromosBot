@@ -59,14 +59,33 @@ def _request(
             # El cuerpo trae la explicacion real ("chat not found", "group chat
             # was upgraded"...). Sin el, un 400 no dice nada util.
             detalle = ""
+            retry_segundos = None
             try:
-                detalle = url_segura(exc.read()[:400].decode("utf-8", "replace"))
+                cuerpo_bytes = exc.read()
+                detalle = url_segura(cuerpo_bytes[:400].decode("utf-8", "replace"))
+                if exc.code == 429:
+                    hdr_retry = exc.headers.get("Retry-After") if hasattr(exc, "headers") and exc.headers else None
+                    if hdr_retry:
+                        try:
+                            retry_segundos = float(hdr_retry)
+                        except (ValueError, TypeError):
+                            pass
+                    if not retry_segundos:
+                        try:
+                            datos_err = json.loads(cuerpo_bytes.decode("utf-8", "replace"))
+                            retry_segundos = float(datos_err.get("parameters", {}).get("retry_after", 0))
+                        except Exception:
+                            pass
             except Exception:
                 pass
             last_error = HttpError(
                 f"HTTP {exc.code} en {url_segura(url)}" + (f" -> {detalle}" if detalle else ""))
             if exc.code in PERMANENT_CODES:
                 break
+            if attempt < retries:
+                espera = retry_segundos if (retry_segundos and retry_segundos > 0) else (1.5 * (attempt + 1))
+                time.sleep(min(espera, 30.0))
+                continue
         except Exception as exc:  # timeouts, DNS, TLS, conexion cortada
             last_error = HttpError(f"{type(exc).__name__}: {exc} en {url_segura(url)}")
         if attempt < retries:

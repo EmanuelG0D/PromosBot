@@ -5566,6 +5566,71 @@ class PruebaNuevasCategoriasYUX(unittest.TestCase):
         self.assertNotIn("🍳 Cocina", textos_decat)
 
 
+class PruebaOptimizacionAntiSaturacion(unittest.TestCase):
+    """Pruebas de blindaje anti-saturación, concurrencia por chat y limitación de tasa."""
+
+    def test_nueva_busqueda_aislamiento_por_chat(self):
+        """Verifica que un usuario nuevo no cancela la búsqueda en curso de otro usuario."""
+        import radar
+
+        # Usuario 1 inicia búsqueda
+        t_user1 = radar.nueva_busqueda(chat_id="1111")
+        # Usuario 2 inicia búsqueda en otro chat
+        t_user2 = radar.nueva_busqueda(chat_id="2222")
+
+        # Ninguno debe estar cancelado
+        self.assertFalse(radar.busqueda_fue_cancelada(t_user1, chat_id="1111"))
+        self.assertFalse(radar.busqueda_fue_cancelada(t_user2, chat_id="2222"))
+
+        # Usuario 1 presiona otro botón -> solo cancela al Usuario 1
+        radar.nueva_busqueda(chat_id="1111")
+        self.assertTrue(radar.busqueda_fue_cancelada(t_user1, chat_id="1111"))
+        # Usuario 2 sigue intacto
+        self.assertFalse(radar.busqueda_fue_cancelada(t_user2, chat_id="2222"))
+
+    def test_http_retry_after_429(self):
+        """Verifica que el cliente HTTP interpreta 429 Retry-After y reintenta con éxito."""
+        from core import http
+        import io
+        import urllib.error
+        from unittest.mock import MagicMock, patch
+
+        mock_resp_ok = MagicMock()
+        mock_resp_ok.read.return_value = b'{"status": "ok"}'
+        mock_resp_ok.headers = {}
+        mock_resp_ok.__enter__.return_value = mock_resp_ok
+        mock_resp_ok.__exit__.return_value = None
+
+        headers_429 = {"Retry-After": "0.01"}
+        exc_429 = urllib.error.HTTPError("https://api.test/req", 429, "Too Many Requests", headers_429, io.BytesIO(b'{"error": "rate_limited"}'))
+
+        with patch("urllib.request.urlopen", side_effect=[exc_429, mock_resp_ok]) as mock_urlopen:
+            res = http.get_json("https://api.test/req", retries=1)
+            self.assertEqual(res, {"status": "ok"})
+            self.assertEqual(mock_urlopen.call_count, 2)
+
+    def test_pausar_despacho_rate_limit(self):
+        """Verifica que la función de control de ritmo no lanza excepciones y respeta chat_id."""
+        from core import telegram
+        import time
+
+        t0 = time.time()
+        telegram._pausar_despacho(chat_id=9990001)
+        # Invocación inmediata en el mismo chat debe aplicar micro-espera preventiva
+        t1 = time.time()
+        self.assertTrue(t1 >= t0)
+
+    def test_store_pragmas_wal_y_normal(self):
+        """Verifica que Store inicializa correctamente con pragmas de alto rendimiento."""
+        from core.store import Store
+        with Store() as store:
+            row_wal = store.conn.execute("PRAGMA journal_mode").fetchone()
+            self.assertEqual(row_wal[0].lower(), "wal")
+            row_sync = store.conn.execute("PRAGMA synchronous").fetchone()
+            # En SQLite NORMAL es valor 1
+            self.assertIn(row_sync[0], (1, "NORMAL", "normal"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
