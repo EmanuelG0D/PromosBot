@@ -5287,6 +5287,71 @@ class PruebaSimonOutlet(unittest.TestCase):
         self.assertEqual(d.list_price, 88.0)
         self.assertEqual(d.url, "https://shop.simon.com/products/coach-wristlet")
         self.assertIn("-67% OFF", d.notes)
+        self.assertIn("👜 Coach Outlet", d.notes)
+
+    def test_simon_multi_marcas_y_descarte_desconocidas(self):
+        from sources import simon
+        mock_data = {
+            "products": [
+                {
+                    "id": 101,
+                    "title": "PUMA Set of 5 Camo Boxer Brief",
+                    "handle": "puma-boxer-brief",
+                    "vendor": "2000",
+                    "tags": ["brand-type_0", "brand_PUMA"],
+                    "variants": [{"price": "17.98", "compare_at_price": "40.00", "available": True}],
+                },
+                {
+                    "id": 102,
+                    "title": "Men's Nike Air Force 1 '07",
+                    "handle": "nike-air-force-1",
+                    "vendor": "2808",
+                    "tags": ["brand_Nike"],
+                    "variants": [{"price": "39.00", "compare_at_price": "80.00", "available": True}],
+                },
+                {
+                    "id": 103,
+                    "title": "Tommy Hilfiger Men's Essential Solid T-Shirt",
+                    "handle": "tommy-tshirt",
+                    "vendor": "Tommy Hilfiger",
+                    "tags": [],
+                    "variants": [{"price": "19.75", "compare_at_price": "34.50", "available": True}],
+                },
+                {
+                    "id": 104,
+                    "title": "Adornia 14K Gold Plated Paperclip Chain",
+                    "handle": "adornia-chain",
+                    "vendor": "Adornia",
+                    "tags": ["brand_Adornia"],
+                    "variants": [{"price": "15.00", "compare_at_price": "60.00", "available": True}],
+                },
+                {
+                    "id": 105,
+                    "title": "24seven Comfort Apparel Casual Wrap Dress",
+                    "handle": "24seven-dress",
+                    "vendor": "24seven Comfort Apparel",
+                    "tags": ["brand_24seven"],
+                    "variants": [{"price": "22.00", "compare_at_price": "55.00", "available": True}],
+                },
+            ]
+        }
+        # Con solo_marcas_top=True (por defecto): Puma, Nike y Tommy pasan; Adornia y 24seven se descartan
+        deals = simon.extraer_deals_productos_json(mock_data, min_descuento=30.0, max_usd=40.0, solo_marcas_top=True)
+        self.assertEqual(len(deals), 3)
+        titulos = [d.title for d in deals]
+        self.assertIn("PUMA Set of 5 Camo Boxer Brief", titulos)
+        self.assertIn("Men's Nike Air Force 1 '07", titulos)
+        self.assertIn("Tommy Hilfiger Men's Essential Solid T-Shirt", titulos)
+        self.assertNotIn("Adornia 14K Gold Plated Paperclip Chain", titulos)
+        self.assertNotIn("24seven Comfort Apparel Casual Wrap Dress", titulos)
+
+        # Verificar badges de cada marca reconocida
+        d_puma = next(d for d in deals if "PUMA" in d.title)
+        self.assertIn("🐆 Puma Outlet", d_puma.notes)
+        d_nike = next(d for d in deals if "Nike" in d.title)
+        self.assertIn("✔️ Nike Outlet", d_nike.notes)
+        d_tommy = next(d for d in deals if "Tommy" in d.title)
+        self.assertIn("🔴 Tommy Hilfiger", d_tommy.notes)
 
 
 if __name__ == "__main__":

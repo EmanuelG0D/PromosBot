@@ -289,6 +289,7 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                     por_consulta=cfg.get("por_consulta", 30),
                     min_descuento=cfg.get("min_descuento", 30.0),
                     max_usd=max_u,
+                    solo_marcas_top=cfg.get("solo_marcas_top", True),
                 ),
                 cfg,
             )
@@ -627,7 +628,8 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
         crudas = simon.fetch(consultas, colecciones=cfg.get("collections"),
                              por_consulta=cfg.get("por_consulta", 30),
                              min_descuento=cfg.get("min_descuento", 30.0),
-                             max_usd=cfg.get("max_usd", 40.0))
+                             max_usd=cfg.get("max_usd", 40.0),
+                             solo_marcas_top=cfg.get("solo_marcas_top", True))
     else:
         return []
     resultado = _sin_ruido(crudas, cfg)
