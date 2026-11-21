@@ -5335,8 +5335,8 @@ class PruebaSimonOutlet(unittest.TestCase):
                 },
             ]
         }
-        # Con solo_marcas_top=True (por defecto): Puma, Nike y Tommy pasan; Adornia y 24seven se descartan
-        deals = simon.extraer_deals_productos_json(mock_data, min_descuento=30.0, max_usd=40.0, solo_marcas_top=True)
+        # Con solo_marcas_top=True y solo_calzado_y_bolsos=False: Puma, Nike y Tommy pasan; Adornia y 24seven se descartan
+        deals = simon.extraer_deals_productos_json(mock_data, min_descuento=30.0, max_usd=40.0, solo_marcas_top=True, solo_calzado_y_bolsos=False)
         self.assertEqual(len(deals), 3)
         titulos = [d.title for d in deals]
         self.assertIn("PUMA Set of 5 Camo Boxer Brief", titulos)
@@ -5352,6 +5352,53 @@ class PruebaSimonOutlet(unittest.TestCase):
         self.assertIn("✔️ Nike Outlet", d_nike.notes)
         d_tommy = next(d for d in deals if "Tommy" in d.title)
         self.assertIn("🔴 Tommy Hilfiger", d_tommy.notes)
+
+    def test_simon_solo_calzado_y_bolsos_filtro(self):
+        from sources import simon
+        mock_data = {
+            "products": [
+                {
+                    "id": 201,
+                    "title": "PUMA Phase Backpack Black",
+                    "product_type": "accessories/backpacks",
+                    "vendor": "PUMA",
+                    "tags": ["brand_PUMA"],
+                    "variants": [{"price": "19.99", "compare_at_price": "40.00", "available": True}],
+                },
+                {
+                    "id": 202,
+                    "title": "Men's Nike Air Force 1 '07",
+                    "product_type": "men/shoes/athletic",
+                    "vendor": "Nike",
+                    "tags": ["brand_Nike"],
+                    "variants": [{"price": "39.00", "compare_at_price": "80.00", "available": True}],
+                },
+                {
+                    "id": 203,
+                    "title": "PUMA Foundations Pullover Jacket",
+                    "product_type": "men/clothing/outerwear",
+                    "vendor": "PUMA",
+                    "tags": ["brand_PUMA"],
+                    "variants": [{"price": "18.98", "compare_at_price": "34.00", "available": True}],
+                },
+                {
+                    "id": 204,
+                    "title": "Calvin Klein Zigzag Rib Mini Dress",
+                    "product_type": "women/clothing/dresses",
+                    "vendor": "Calvin Klein",
+                    "tags": ["brand_Calvin Klein"],
+                    "variants": [{"price": "23.99", "compare_at_price": "129.00", "available": True}],
+                },
+            ]
+        }
+        # Con solo_calzado_y_bolsos=True (por defecto): mochila Puma y tenis Nike entran, chaqueta y vestido quedan descartados
+        deals = simon.extraer_deals_productos_json(mock_data, min_descuento=30.0, max_usd=40.0, solo_marcas_top=True, solo_calzado_y_bolsos=True)
+        self.assertEqual(len(deals), 2)
+        titulos = [d.title for d in deals]
+        self.assertIn("PUMA Phase Backpack Black", titulos)
+        self.assertIn("Men's Nike Air Force 1 '07", titulos)
+        self.assertNotIn("PUMA Foundations Pullover Jacket", titulos)
+        self.assertNotIn("Calvin Klein Zigzag Rib Mini Dress", titulos)
 
 
 class PruebaDecathlon(unittest.TestCase):

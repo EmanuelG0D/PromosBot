@@ -140,32 +140,75 @@ def detectar_marca(title: str, vendor: str = "", tags: list[str] | str | None = 
     return None
 
 
+# Expresiones regulares para filtrar estrictamente Zapatos / Tenis y Bolsos / Morrales
+CALZADO_RE = re.compile(
+    r'\b(shoes?|sneakers?|boots?|sandals?|slides?|slippers?|clogs?|footwear|loafers?|cleats?|trainers?|streettalk|slip-on|flats?|mules?|heels?|pumps?|air force|air max|ultraboost|stan smith|superstar|gazelle|samba|chuck taylor|old skool|classic leather|pegasus|air zoom)\b',
+    re.IGNORECASE
+)
+BOLSOS_RE = re.compile(
+    r'\b(bags?|backpacks?|morral(es)?|totes?|crossbod(y|ies)|shoulder bag|duffels?|duffles?|wallets?|wristlets?|handbags?|satchels?|clutch(es)?|pouches?|card case|luggage|messenger bag|fanny pack|waist bag|sling bag)\b',
+    re.IGNORECASE
+)
+ROPA_VETO_RE = re.compile(
+    r'\b(dress|dresses|skirt|skirts|jacket|jackets|coat|coats|vest|vests|hoodie|hoodies|sweater|sweaters|sweatshirt|sweatshirts|shirt|shirts|t-shirt|t-shirts|tee|tees|polo|polos|pants|trousers|jeans|shorts|leggings|tights|bra|bras|underwear|boxer|boxers|panties|swimsuit|bikini|belt|belts|hat|hats|cap|caps|beanie|beanies|socks|watch|watches|sunglasses|perfume|fragrance)\b',
+    re.IGNORECASE
+)
+
+
+def es_calzado_o_bolso(title: str, product_type: str = "", tags: list[str] | str | None = None) -> bool:
+    """Valida que el producto sea estrictamente calzado/tenis o bolso/morral/cartera."""
+    ptype = (product_type or "").lower()
+
+    # 1. Por product_type oficial de Shopify
+    if any(k in ptype for k in ("shoes", "footwear", "boots", "sandals", "sneakers", "slides", "slippers", "clogs")):
+        return True
+    if any(k in ptype for k in ("handbags", "bags", "backpacks", "wallets", "wristlets", "totes", "crossbody", "satchels", "clutches", "luggage", "card-cases")):
+        return True
+    if any(k in ptype for k in ("clothing", "underwear", "socks", "shirts", "tops", "dresses", "pants", "jeans", "shorts", "outerwear", "jackets", "coats", "hoodies", "sweatshirts", "jewelry", "watches", "eyewear", "belts", "hats")):
+        if not (CALZADO_RE.search(title) or BOLSOS_RE.search(title)):
+            return False
+
+    # 2. Por título
+    es_calz = bool(CALZADO_RE.search(title))
+    es_bols = bool(BOLSOS_RE.search(title))
+    es_ropa = bool(ROPA_VETO_RE.search(title))
+
+    if es_calz or es_bols:
+        if not es_ropa:
+            return True
+        if es_calz:
+            return True
+        if any(w in title.lower() for w in ("backpack", "handbag", "crossbody", "wristlet", "wallet", "duffel", "tote bag", "shoulder bag")):
+            return True
+
+    return False
+
+
 COLECCIONES_DEFECTO = [
+    # Adidas calzado y liquidaciones
     "store-adidas",
     "curated-adidas-price-drops",
     "curated-adidas-sale-top-picks",
+    # Puma calzado y bolsos
     "store-puma",
+    # Nike calzado
     "store-nike",
     "curated-nike-top-deals",
-    "store-under-armour",
-    "curated-under-armour-sale",
+    # Marcas top de calzado
     "store-reebok",
     "curated-reebok-sale",
     "store-new-balance",
-    "store-tommy-hilfiger",
-    "store-calvin-klein",
+    "store-under-armour",
+    "curated-under-armour-sale",
     "store-clarks-shoes",
     "curated-clarks-extra-40-off",
+    "store-crocs",
+    # Bolsos, morrales y carteras de marca
     "store-coach-outlet",
     "curated-coach-outlet-sale",
     "store-michael-kors-outlet",
-    "store-crocs",
-    "store-fossil",
+    "store-kate-spade",
     "store-guess-factory",
-    "store-aeropostale",
-    "store-nautica",
-    "store-diesel",
-    "store-hugo-boss",
 ]
 
 
@@ -174,6 +217,7 @@ def extraer_deals_productos_json(
     min_descuento: float = 30.0,
     max_usd: float | None = 40.0,
     solo_marcas_top: bool = True,
+    solo_calzado_y_bolsos: bool = True,
 ) -> list[Deal]:
     """Parsea el listado de productos de una colección de Shopify (products.json)."""
     deals: list[Deal] = []
@@ -192,8 +236,13 @@ def extraer_deals_productos_json(
             title = (p.get("title") or "").strip()
             handle = (p.get("handle") or "").strip()
             vendor = (p.get("vendor") or "").strip()
+            ptype = (p.get("product_type") or "").strip()
             tags = p.get("tags") or []
             if not pid or not title:
+                continue
+
+            # Filtro exclusivo de calzado/tenis y bolsos/morrales
+            if solo_calzado_y_bolsos and not es_calzado_o_bolso(title, product_type=ptype, tags=tags):
                 continue
 
             # Filtro de marca: omitir marcas desconocidas / genéricas si solo_marcas_top=True
@@ -234,6 +283,12 @@ def extraer_deals_productos_json(
                 notes.append(info_marca[1])
             elif vendor and not vendor.isdigit() and vendor.lower() not in title.lower():
                 notes.append(f"🏷️ {vendor}")
+
+            if CALZADO_RE.search(title) or any(k in ptype.lower() for k in ("shoes", "footwear", "boots", "sandals", "sneakers", "slides")):
+                notes.append("👟 Calzado y Tenis")
+            elif BOLSOS_RE.search(title) or any(k in ptype.lower() for k in ("handbags", "bags", "backpacks", "wallets", "wristlets")):
+                notes.append("🎒 Bolsos y Morrales")
+
             notes.append(f"-{pct}% OFF")
             if pct >= 50:
                 notes.append("🔥 50%+ EXTRA OFF")
@@ -265,6 +320,7 @@ def extraer_deals_suggest_json(
     min_descuento: float = 30.0,
     max_usd: float | None = 40.0,
     solo_marcas_top: bool = True,
+    solo_calzado_y_bolsos: bool = True,
 ) -> list[Deal]:
     """Parsea productos devueltos por el buscador predictivo de Shopify (search/suggest.json)."""
     deals: list[Deal] = []
@@ -282,8 +338,13 @@ def extraer_deals_suggest_json(
             pid = str(p.get("id") or "").strip()
             title = (p.get("title") or "").strip()
             vendor = (p.get("vendor") or "").strip()
+            ptype = (p.get("type") or p.get("product_type") or "").strip()
             tags = p.get("tags") or []
             if not pid or not title:
+                continue
+
+            # Filtro exclusivo de calzado/tenis y bolsos/morrales
+            if solo_calzado_y_bolsos and not es_calzado_o_bolso(title, product_type=ptype, tags=tags):
                 continue
 
             # Filtro de marca: omitir marcas desconocidas / genéricas si solo_marcas_top=True
@@ -312,6 +373,12 @@ def extraer_deals_suggest_json(
                 notes.append(info_marca[1])
             elif vendor and not vendor.isdigit() and vendor.lower() not in title.lower():
                 notes.append(f"🏷️ {vendor}")
+
+            if CALZADO_RE.search(title) or any(k in ptype.lower() for k in ("shoes", "footwear", "boots", "sandals", "sneakers", "slides")):
+                notes.append("👟 Calzado y Tenis")
+            elif BOLSOS_RE.search(title) or any(k in ptype.lower() for k in ("handbags", "bags", "backpacks", "wallets", "wristlets")):
+                notes.append("🎒 Bolsos y Morrales")
+
             notes.append(f"-{pct}% OFF")
             if pct >= 50:
                 notes.append("🔥 50%+ EXTRA OFF")
@@ -344,6 +411,7 @@ def _una_coleccion(
     min_descuento: float = 30.0,
     max_usd: float | None = 40.0,
     solo_marcas_top: bool = True,
+    solo_calzado_y_bolsos: bool = True,
 ) -> list[Deal]:
     """Descarga y extrae productos de una colección específica de Simon."""
     url = f"{BASE_URL}/collections/{handle}/products.json?limit={por_consulta}"
@@ -354,6 +422,7 @@ def _una_coleccion(
             min_descuento=min_descuento,
             max_usd=max_usd,
             solo_marcas_top=solo_marcas_top,
+            solo_calzado_y_bolsos=solo_calzado_y_bolsos,
         )
     except Exception as exc:
         print(f"  [simon] aviso: error en colección '{handle}': {exc}")
@@ -366,6 +435,7 @@ def _una_busqueda(
     min_descuento: float = 30.0,
     max_usd: float | None = 40.0,
     solo_marcas_top: bool = True,
+    solo_calzado_y_bolsos: bool = True,
 ) -> list[Deal]:
     """Busca ofertas por término en el buscador de Simon."""
     q_enc = urllib.parse.quote_plus(query.strip())
@@ -377,6 +447,7 @@ def _una_busqueda(
             min_descuento=min_descuento,
             max_usd=max_usd,
             solo_marcas_top=solo_marcas_top,
+            solo_calzado_y_bolsos=solo_calzado_y_bolsos,
         )
     except Exception as exc:
         print(f"  [simon] aviso: error en búsqueda '{query}': {exc}")
@@ -388,8 +459,9 @@ def fetch(consultas: list[str] | None = None,
           por_consulta: int = 24,
           min_descuento: float = 30.0,
           max_usd: float | None = 40.0,
-          solo_marcas_top: bool = True) -> list[Deal]:
-    """Recolecta ofertas de Simon Premium Outlets en paralelo filtrando solo marcas reconocidas."""
+          solo_marcas_top: bool = True,
+          solo_calzado_y_bolsos: bool = True) -> list[Deal]:
+    """Recolecta ofertas de Simon Premium Outlets en paralelo filtrando solo marcas reconocidas y solo calzado/bolsos."""
     col_efectivas = colecciones if colecciones is not None else COLECCIONES_DEFECTO
     q_efectivas = consultas or []
 
@@ -416,6 +488,7 @@ def fetch(consultas: list[str] | None = None,
                 min_descuento=min_descuento,
                 max_usd=max_usd,
                 solo_marcas_top=solo_marcas_top,
+                solo_calzado_y_bolsos=solo_calzado_y_bolsos,
             )
         else:
             return _una_busqueda(
@@ -424,6 +497,7 @@ def fetch(consultas: list[str] | None = None,
                 min_descuento=min_descuento,
                 max_usd=max_usd,
                 solo_marcas_top=solo_marcas_top,
+                solo_calzado_y_bolsos=solo_calzado_y_bolsos,
             )
 
     with ThreadPoolExecutor(max_workers=HILOS) as pool:

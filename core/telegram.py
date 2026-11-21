@@ -360,8 +360,19 @@ def teclado_categorias(tienda_nombre: str = "") -> dict:
     """Menu de categorias o grupos para la tienda seleccionada."""
     t_baja = tienda_nombre.lower()
 
-    # Simon Outlet o marcas oficiales de ropa y calzado
-    if any(m in t_baja for m in ("simon", "totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle", "koaj")):
+    # Simon Outlet: exclusivo calzado, tenis y bolsos/morrales
+    if "simon" in t_baja:
+        return {
+            "keyboard": [
+                [{"text": "🌟 TODO"}, {"text": "👟 Tenis y Zapatos"}],
+                [{"text": "🎒 Bolsos y Morrales"}, {"text": "⬅️ Volver al Menú Principal"}],
+            ],
+            "resize_keyboard": True,
+            "is_persistent": False,
+        }
+
+    # Marcas oficiales de ropa y calzado
+    if any(m in t_baja for m in ("totto", "studio f", "studiof", "vélez", "velez", "americanino", "arturo calle", "arturocalle", "koaj")):
         return {
             "keyboard": [
                 [{"text": "🌟 TODO"}, {"text": "👟 Tenis y Zapatos"}],

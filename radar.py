@@ -290,6 +290,7 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                     min_descuento=cfg.get("min_descuento", 30.0),
                     max_usd=max_u,
                     solo_marcas_top=cfg.get("solo_marcas_top", True),
+                    solo_calzado_y_bolsos=cfg.get("solo_calzado_y_bolsos", True),
                 ),
                 cfg,
             )
@@ -644,7 +645,8 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
                              por_consulta=cfg.get("por_consulta", 30),
                              min_descuento=cfg.get("min_descuento", 30.0),
                              max_usd=cfg.get("max_usd", 40.0),
-                             solo_marcas_top=cfg.get("solo_marcas_top", True))
+                             solo_marcas_top=cfg.get("solo_marcas_top", True),
+                             solo_calzado_y_bolsos=cfg.get("solo_calzado_y_bolsos", True))
     elif fuente == "decathlon":
         crudas = decathlon.fetch(categorias=cfg.get("categorias"),
                                  min_descuento=cfg.get("min_descuento", 15.0))
