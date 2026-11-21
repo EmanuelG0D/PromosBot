@@ -512,5 +512,19 @@
     "por_consulta": 30,
     "min_descuento": 30.0,
     "max_usd": 40.0
+  },
+  "decathlon": {
+    "_nota": "Decathlon Colombia: liquidaciones y ofertas deportivas oficiales en COP (ciclismo, fitness, running, camping).",
+    "categorias": [
+      "/ofertas-decathlon/descuentos",
+      "/ofertas-decathlon/descuentos?from=40&size=40",
+      "/ofertas-decathlon/descuentos-ciclismo",
+      "/ofertas-decathlon/descuentos-fitness",
+      "/ofertas-decathlon/descuentos-running",
+      "/ofertas-decathlon/descuentos-camping",
+      "/ofertas-decathlon/descuentos-deportes-equipo",
+      "/ofertas-decathlon/descuentos-montana"
+    ],
+    "min_descuento": 15.0
   }
 }

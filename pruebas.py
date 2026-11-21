@@ -5354,6 +5354,121 @@ class PruebaSimonOutlet(unittest.TestCase):
         self.assertIn("🔴 Tommy Hilfiger", d_tommy.notes)
 
 
+class PruebaDecathlon(unittest.TestCase):
+    def test_decathlon_extraer_deals_html(self):
+        from sources import decathlon
+        mock_html = """
+        <div class="product-card__container">
+            <div class="product-card__gallery">
+                <a class="link link--primary" href="/p/tenis-running-para-hombre-adidas/388432/m9041555">
+                    <img src="https://contents.mediadecathlon.com/p3093864/picture.jpg"/>
+                </a>
+            </div>
+            <div class="product-card__content">
+                <h2><a href="/p/tenis-running-para-hombre-adidas/388432/m9041555">ADIDAS Tenis Running para Hombre Adidas Duramo - Blanco</a></h2>
+                <div class="product-card-details__item__price">
+                    <span class="sr-only">Precio actual</span> <!-- -->$ 224.000</span>
+                    <span class="sr-only">Precio anterior</span> <!-- -->$ 280.000</span>
+                    <span class="vp-price-discount">20 % de descuento</span>
+                </div>
+            </div>
+        </div>
+        <div class="product-card__container">
+            <div class="product-card__gallery">
+                <a class="link link--primary" href="/p/kit-mancuernas-20kg/7449/m8018574">
+                    <img src="https://contents.mediadecathlon.com/p12345/picture.jpg"/>
+                </a>
+            </div>
+            <div class="product-card__content">
+                <h2><a href="/p/kit-mancuernas-20kg/7449/m8018574">DOMYOS Kit Mancuernas 20kg Musculación</a></h2>
+                <div class="product-card-details__item__price">
+                    <span class="sr-only">Precio actual</span> <!-- -->$ 150.000</span>
+                    <span class="sr-only">Precio anterior</span> <!-- -->$ 300.000</span>
+                    <span class="vp-price-discount">50 % de descuento</span>
+                </div>
+            </div>
+        </div>
+        """
+        deals = decathlon.extraer_deals_decathlon_html(mock_html, min_descuento=15.0)
+        self.assertEqual(len(deals), 2)
+        d1 = deals[0]
+        self.assertEqual(d1.source, "decathlon")
+        self.assertEqual(d1.store, "Decathlon")
+        self.assertEqual(d1.country, "CO")
+        self.assertEqual(d1.currency, "COP")
+        self.assertEqual(d1.price, 224000.0)
+        self.assertEqual(d1.list_price, 280000.0)
+        self.assertEqual(d1.key, "decathlon:m9041555")
+        self.assertIn("-20% OFF", d1.notes)
+
+        d2 = deals[1]
+        self.assertEqual(d2.price, 150000.0)
+        self.assertEqual(d2.list_price, 300000.0)
+        self.assertIn("-50% OFF", d2.notes)
+        self.assertIn("🔥 SÚPER LIQUIDACIÓN", d2.notes)
+
+
+class PruebaNuevasCategoriasYUX(unittest.TestCase):
+    def test_reconocimiento_nuevas_categorias(self):
+        from core.comandos import _buscar_categoria
+        # Gaming
+        cat_gpu = _buscar_categoria("🎮 Tarjetas Gráficas (GPU)")
+        self.assertIsNotNone(cat_gpu)
+        self.assertIn("rtx 4060", cat_gpu[1])
+
+        cat_mouse = _buscar_categoria("mouses gamer")
+        self.assertIsNotNone(cat_mouse)
+        self.assertIn("mouse gamer", cat_mouse[1])
+
+        # Perfumería y Belleza
+        cat_perfume = _buscar_categoria("🌸 Perfumes Hombre")
+        self.assertIsNotNone(cat_perfume)
+        self.assertIn("perfume hombre", cat_perfume[1])
+
+        cat_piel = _buscar_categoria("cuidado de la piel")
+        self.assertIsNotNone(cat_piel)
+        self.assertIn("bloqueador solar", cat_piel[1])
+
+        # Deportes
+        cat_pesas = _buscar_categoria("🏋️ Pesas y Mancuernas")
+        self.assertIsNotNone(cat_pesas)
+        self.assertIn("mancuernas", cat_pesas[1])
+
+        cat_bici = _buscar_categoria("ciclismo y bicis")
+        self.assertIsNotNone(cat_bici)
+        self.assertIn("bicicleta", cat_bici[1])
+
+    def test_routing_grupos_y_tienda_decathlon(self):
+        from unittest.mock import patch
+        from core import comandos
+        with patch("core.whitelist.es_admin", return_value=True):
+            def parsear(txt):
+                return comandos.leer_comando({"text": txt, "chat": {"id": 12345, "type": "private"}, "from": {"id": 12345}})
+
+            # Grupo Gaming
+            r_gaming = parsear("🎮 Gaming y Periféricos")
+            self.assertEqual(r_gaming["tipo"], "grupo_categoria")
+            self.assertEqual(r_gaming["grupo"], "gaming")
+
+            # Grupo Belleza
+            r_belleza = parsear("💄 Perfumería y Belleza")
+            self.assertEqual(r_belleza["tipo"], "grupo_categoria")
+            self.assertEqual(r_belleza["grupo"], "belleza")
+
+            # Grupo Deportes
+            r_deportes = parsear("🚲 Deportes y Gym")
+            self.assertEqual(r_deportes["tipo"], "grupo_categoria")
+            self.assertEqual(r_deportes["grupo"], "deportes")
+
+            # Tienda Decathlon
+            r_decat_cmd = parsear("/decathlon")
+            self.assertEqual(r_decat_cmd["comando"], "decathlon")
+
+            r_decat_btn = parsear("🚴 Decathlon Colombia")
+            self.assertEqual(r_decat_btn["tipo"], "elegir_tienda")
+            self.assertEqual(r_decat_btn["tienda"], "decathlon")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -27,10 +27,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech, ikea, cascos, simon
+from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech, ikea, cascos, simon, decathlon
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
-           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica", "descuentostech", "simon")
+           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica", "descuentostech", "simon", "decathlon")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -290,6 +290,21 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
                     min_descuento=cfg.get("min_descuento", 30.0),
                     max_usd=max_u,
                     solo_marcas_top=cfg.get("solo_marcas_top", True),
+                ),
+                cfg,
+            )
+
+    if "decathlon" in activas:
+        cfg = watchlist.get("decathlon", {})
+        categorias = cfg.get("categorias", [])
+        if categorias:
+            print(f"-> Decathlon Colombia: {len(categorias)} categorías de liquidación")
+            ofertas += _sin_ruido(
+                _recolectar_fuente(
+                    "decathlon",
+                    decathlon.fetch,
+                    categorias=categorias,
+                    min_descuento=cfg.get("min_descuento", 15.0),
                 ),
                 cfg,
             )
@@ -630,6 +645,9 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
                              min_descuento=cfg.get("min_descuento", 30.0),
                              max_usd=cfg.get("max_usd", 40.0),
                              solo_marcas_top=cfg.get("solo_marcas_top", True))
+    elif fuente == "decathlon":
+        crudas = decathlon.fetch(categorias=cfg.get("categorias"),
+                                 min_descuento=cfg.get("min_descuento", 15.0))
     else:
         return []
     resultado = _sin_ruido(crudas, cfg)
@@ -1275,6 +1293,7 @@ def generar_panel_salud() -> str:
         ("promocajita", "PromoCajita"),
         ("slickdeals", "Slickdeals (Moda/Calzado)"),
         ("simon", "Simon Premium Outlets"),
+        ("decathlon", "Decathlon Colombia"),
         ("descuentostech", "Descuentos Tech"),
     ]
 
@@ -1837,6 +1856,30 @@ def atender_solicitudes(solicitudes: list[dict],
                 telegram.send(
                     f"🏠 <b>Hogar y Muebles en {telegram.esc(titulo_tienda)}</b>\n\nElige el producto específico que buscas:",
                     reply_markup=telegram.teclado_hogar(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "gaming":
+                telegram.send(
+                    f"🎮 <b>Gaming y Periféricos en {telegram.esc(titulo_tienda)}</b>\n\nElige el componente o accesorio que buscas:",
+                    reply_markup=telegram.teclado_gaming(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "belleza":
+                telegram.send(
+                    f"💄 <b>Perfumería y Belleza en {telegram.esc(titulo_tienda)}</b>\n\nElige la categoría que buscas:",
+                    reply_markup=telegram.teclado_belleza(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "deportes":
+                telegram.send(
+                    f"🚲 <b>Deportes, Gym y Fitness en {telegram.esc(titulo_tienda)}</b>\n\nElige la disciplina o producto que buscas:",
+                    reply_markup=telegram.teclado_deportes(),
+                    chat_id=chat_id,
+                )
+            elif grupo == "motos":
+                telegram.send(
+                    f"🏍️ <b>Motos y Accesorios en {telegram.esc(titulo_tienda)}</b>\n\nElige el equipamiento que buscas:",
+                    reply_markup=telegram.teclado_motos(),
                     chat_id=chat_id,
                 )
             elif grupo == "volver":

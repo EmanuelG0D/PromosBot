@@ -312,12 +312,14 @@ def _avisar_migracion(error: Exception) -> None:
 
 
 def teclado_tiendas(es_admin: bool = False) -> dict:
-    """Menu principal compacto y ordenado para ReplyKeyboardMarkup (Zero Scroll)."""
+    """Menu principal compacto y ordenado para ReplyKeyboardMarkup."""
     filas = [
-        [{"text": "🇨🇴 Ofertas Colombia"}],
-        [{"text": "💻 Tecnología"}, {"text": "🍳 Cocina"}],
-        [{"text": "🏠 Hogar y Muebles"}, {"text": "❄️ Electrodomésticos"}],
-        [{"text": "👟 Ropa y Calzado"}, {"text": "⚡ Gangas Amazon"}],
+        [{"text": "🇨🇴 Ofertas Colombia"}, {"text": "🇺🇸 Simon Outlet"}],
+        [{"text": "🎮 Gaming y Periféricos"}, {"text": "💻 Tecnología"}],
+        [{"text": "👟 Ropa y Calzado"}, {"text": "🚲 Deportes y Gym"}],
+        [{"text": "💄 Perfumería y Belleza"}, {"text": "🍳 Cocina"}],
+        [{"text": "❄️ Electrodomésticos"}, {"text": "🏠 Hogar y Muebles"}],
+        [{"text": "🏍️ Motos y Accesorios"}, {"text": "⚡ Gangas Amazon"}],
         [{"text": "🏬 Ver por Tienda"}, {"text": "✍️ Sugerencias y Reportes"}],
     ]
     if es_admin:
@@ -330,22 +332,23 @@ def teclado_tiendas(es_admin: bool = False) -> dict:
 
 
 def teclado_tiendas_individuales() -> dict:
-    """Menu secundario con todas las marcas y tiendas individuales."""
+    """Menu secundario con todas las marcas y tiendas individuales agrupadas."""
     return {
         "keyboard": [
             [{"text": "🟡 Éxito"}, {"text": "🔴 Alkosto"}],
-            [{"text": "🟢 Jumbo"}, {"text": "🔵 Alkomprar"}],
             [{"text": "💛 Mercado Libre"}, {"text": "🟢 Falabella"}],
-            [{"text": "⚪ K-tronix"}, {"text": "🔵 Olímpica"}],
-            [{"text": "🟢 Carulla"}, {"text": "🟠 Homecenter"}],
-            [{"text": "🔴 Haceb"}, {"text": "🌀 Whirlpool"}],
-            [{"text": "🍳 Imusa"}, {"text": "☕ Oster"}],
+            [{"text": "⚪ K-tronix"}, {"text": "🟢 Jumbo"}],
+            [{"text": "🔵 Alkomprar"}, {"text": "🟠 Homecenter"}],
+            [{"text": "🔵 Olímpica"}, {"text": "🟢 Carulla"}],
+            [{"text": "🚴 Decathlon Colombia"}, {"text": "🛋️ IKEA Colombia"}],
+            [{"text": "🇺🇸 Simon Outlet"}, {"text": "⚡ Gangas Amazon"}],
+            [{"text": "👟 Nike"}, {"text": "👖 Koaj"}],
             [{"text": "🎒 Totto"}, {"text": "👔 Arturo Calle"}],
             [{"text": "👞 Vélez"}, {"text": "👗 Studio F"}],
-            [{"text": "🦅 Americanino"}, {"text": "👖 Koaj"}],
-            [{"text": "🛋️ IKEA Colombia"}, {"text": "🏍️ Cascos y Llantas"}],
-            [{"text": "⚡ Gangas Amazon"}, {"text": "📦 Promocajita"}],
-            [{"text": "🇺🇸 Exterior (EE. UU.)"}],
+            [{"text": "🦅 Americanino"}, {"text": "🏍️ Cascos y Llantas"}],
+            [{"text": "🔴 Haceb"}, {"text": "🌀 Whirlpool"}],
+            [{"text": "🍳 Imusa"}, {"text": "☕ Oster"}],
+            [{"text": "📦 Promocajita"}, {"text": "🇺🇸 Exterior (EE. UU.)"}],
             [{"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,
@@ -459,6 +462,65 @@ def teclado_hogar() -> dict:
             [{"text": "🛋️ Muebles y Colchones"}, {"text": "🧹 Aspiradoras"}],
             [{"text": "🔨 Herramientas"}, {"text": "💨 Ventiladores"}],
             [{"text": "🌟 Todo el Hogar"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_gaming() -> dict:
+    """Submenu de gaming, tarjetas graficas, perifericos y consolas."""
+    return {
+        "keyboard": [
+            [{"text": "🎮 Tarjetas Gráficas (GPU)"}, {"text": "🖥️ Monitores Gamer"}],
+            [{"text": "🖱️ Mouses Gamer"}, {"text": "⌨️ Teclados Mecánicos"}],
+            [{"text": "💺 Sillas Gamer"}, {"text": "🎧 Diademas Gamer"}],
+            [{"text": "🎮 Mandos y Controles"}, {"text": "🕹️ Consolas y Videojuegos"}],
+            [{"text": "🌟 Todo Gaming"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_belleza() -> dict:
+    """Submenu de perfumes, lociones y cuidado personal."""
+    return {
+        "keyboard": [
+            [{"text": "🌸 Perfumes Hombre"}, {"text": "🌺 Perfumes Mujer"}],
+            [{"text": "🧴 Cuidado de la Piel"}, {"text": "💈 Cuidado Personal y Afeitado"}],
+            [{"text": "🌟 Toda Perfumería"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_deportes() -> dict:
+    """Submenu de deportes, gym, pesas, ciclismo y running."""
+    return {
+        "keyboard": [
+            [{"text": "🏋️ Pesas y Mancuernas"}, {"text": "🧘 Yoga y Bandas"}],
+            [{"text": "🚴 Ciclismo y Bicis"}, {"text": "🏃 Running y Zapatillas"}],
+            [{"text": "🥤 Suplementos y Termos"}, {"text": "🩳 Ropa Deportiva"}],
+            [{"text": "🌟 Todo Deportes"}],
+            [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": False,
+    }
+
+
+def teclado_motos() -> dict:
+    """Submenu de equipamiento y repuestos para moto."""
+    return {
+        "keyboard": [
+            [{"text": "🪖 Cascos Certificados"}, {"text": "🛞 Llantas Moto"}],
+            [{"text": "🧤 Guantes e Impermeables"}],
+            [{"text": "🌟 Todo Motos"}],
             [{"text": "⬅️ Volver a Grupos"}, {"text": "⬅️ Volver al Menú Principal"}],
         ],
         "resize_keyboard": True,

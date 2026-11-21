@@ -52,6 +52,7 @@ CATALOGO: dict[str, tuple[str, list[str] | None, str]] = {
     "koaj":         ("koaj",   None,             "Koaj"),
     "amazon":       ("amazon_gangas", None,      "Gangas Amazon"),
     "simon":        ("simon",   None,             "Simon Outlet"),
+    "decathlon":    ("decathlon", None,           "Decathlon Colombia"),
     "ikea":         ("ikea",   None,             "IKEA Colombia"),
     "cascos":       ("cascos", None,             "Cascos y Llantas Moto"),
     "exterior": ("slickdeals", None,         "Ofertas del exterior"),
@@ -121,6 +122,10 @@ BOTONES_TIENDA: dict[str, tuple[str, str]] = {
     "🇺🇸 simon": ("simon", "Simon Outlet"),
     "simon outlet": ("simon", "Simon Outlet"),
     "simon": ("simon", "Simon Outlet"),
+    "🚴 decathlon colombia": ("decathlon", "Decathlon Colombia"),
+    "decathlon colombia": ("decathlon", "Decathlon Colombia"),
+    "🚴 decathlon": ("decathlon", "Decathlon Colombia"),
+    "decathlon": ("decathlon", "Decathlon Colombia"),
     "🛋️ ikea colombia": ("ikea", "IKEA Colombia"),
     "🛋️ ikea": ("ikea", "IKEA Colombia"),
     "ikea colombia": ("ikea", "IKEA Colombia"),
@@ -170,6 +175,37 @@ GRUPOS_MENU: dict[str, str] = {
     "hogar": "hogar",
     "🏠 hogar y muebles": "hogar",
     "hogar y muebles": "hogar",
+    # Gaming y Periféricos
+    "🎮 gaming y periféricos": "gaming",
+    "gaming y periféricos": "gaming",
+    "🎮 gaming y perifericos": "gaming",
+    "gaming y perifericos": "gaming",
+    "🎮 gaming": "gaming",
+    "gaming": "gaming",
+    "periféricos": "gaming",
+    "perifericos": "gaming",
+    # Perfumería y Belleza
+    "💄 perfumería y belleza": "belleza",
+    "perfumería y belleza": "belleza",
+    "💄 perfumeria y belleza": "belleza",
+    "perfumeria y belleza": "belleza",
+    "💄 perfumería": "belleza",
+    "perfumería": "belleza",
+    "perfumeria": "belleza",
+    "belleza": "belleza",
+    "perfumes": "belleza",
+    # Deportes, Gym y Fitness
+    "🚲 deportes y gym": "deportes",
+    "deportes y gym": "deportes",
+    "deportes": "deportes",
+    "gym": "deportes",
+    "fitness": "deportes",
+    "ciclismo": "deportes",
+    # Motos y Accesorios
+    "🏍️ motos y accesorios": "motos",
+    "motos y accesorios": "motos",
+    "motos": "motos",
+    "accesorios moto": "motos",
 }
 
 # Consultas especificas al tocar cada categoria o cosita especifica
@@ -270,6 +306,38 @@ CATEGORIAS_BUSQUEDA: dict[str, list[str]] = {
     "llanta": ["llanta", "llantas", "neumatico", "neumaticos", "pirelli", "michelin"],
     "🌟 Todo el Hogar": ["aspiradora", "ventilador", "taladro"],
 
+    # --- Cositas Específicas: Gaming y Periféricos ---
+    "🎮 Tarjetas Gráficas (GPU)": ["tarjeta grafica", "rtx 4060", "rtx 4070", "rtx 3060", "rx 6600", "rx 7600", "tarjeta de video", "placa de video"],
+    "🖥️ Monitores Gamer": ["monitor gamer", "monitor 144hz", "monitor 165hz", "monitor 240hz", "monitor curvo gamer"],
+    "🖱️ Mouses Gamer": ["mouse gamer", "mouse logitech g", "mouse razer", "mouse inalambrico gamer"],
+    "⌨️ Teclados Mecánicos": ["teclado mecanico", "teclado gamer", "teclado redragon", "teclado logitech"],
+    "💺 Sillas Gamer": ["silla gamer", "silla ergonomica gamer", "silla para juegos"],
+    "🎧 Diademas Gamer": ["diadema gamer", "headset gamer", "audifonos gamer con microfono", "audifonos gamer"],
+    "🎮 Mandos y Controles": ["control ps5", "mando ps5", "control xbox", "mando xbox", "control nintendo switch", "gamepad"],
+    "🕹️ Consolas y Videojuegos": ["nintendo switch oled", "playstation 5", "ps5", "xbox series x", "xbox series s", "consola"],
+    "🌟 Todo Gaming": ["mouse gamer", "teclado mecanico", "silla gamer", "tarjeta grafica", "monitor gamer"],
+
+    # --- Cositas Específicas: Perfumería y Belleza ---
+    "🌸 Perfumes Hombre": ["perfume hombre", "locion hombre", "fragancia hombre", "eau de parfum hombre", "carolina herrera hombre", "paco rabanne", "nautica voyage"],
+    "🌺 Perfumes Mujer": ["perfume mujer", "locion mujer", "fragancia mujer", "eau de parfum mujer", "good girl", "la vie est belle"],
+    "🧴 Cuidado de la Piel": ["bloqueador solar", "protector solar", "serum vitamina c", "acido hialuronico", "cerave", "la roche posay", "crema hidratante"],
+    "💈 Cuidado Personal y Afeitado": ["afeitadora electrica", "rasuradora", "cortadora de pelo", "secador de pelo", "plancha de cabello", "depiladora", "cepillo electrico"],
+    "🌟 Toda Perfumería": ["perfume", "locion", "fragancia", "bloqueador solar", "afeitadora"],
+
+    # --- Cositas Específicas: Deportes, Gym y Fitness ---
+    "🏋️ Pesas y Mancuernas": ["mancuernas", "pesas", "kit mancuernas", "barra pesas", "kettlebell"],
+    "🧘 Yoga y Bandas": ["tapete yoga", "mat yoga", "bandas elasticas", "banda elastica", "rueda abdominal", "colchoneta"],
+    "🚴 Ciclismo y Bicis": ["bicicleta", "bici montana", "casco bicicleta", "luz bicicleta", "cadena bicicleta"],
+    "🏃 Running y Zapatillas": ["tenis running", "zapatillas running", "reloj running", "chaleco hidratacion"],
+    "🥤 Suplementos y Termos": ["proteina whey", "creatina", "termo deportivo", "shaker"],
+    "🌟 Todo Deportes": ["mancuernas", "bicicleta", "tenis running", "proteina", "bandas elasticas"],
+
+    # --- Cositas Específicas: Motos y Accesorios ---
+    "🪖 Cascos Certificados": ["casco moto", "casco certificado", "casco integral", "casco abatible", "casco shaft", "casco hjc"],
+    "🛞 Llantas Moto": ["llanta moto", "llanta michelin", "llanta pirelli", "llantas moto"],
+    "🧤 Guantes e Impermeables": ["guantes moto", "impermeable moto", "chaqueta con protecciones moto"],
+    "🌟 Todo Motos": ["casco moto", "llanta moto", "guantes moto"],
+
     # --- Compatibilidad hacia atrás ---
     "📺 Smart TV": ["televisor", "smart tv"],
     "👟 Zapatos y Tenis": ["tenis", "zapatillas", "sneakers", "botas", "zapatos"],
@@ -317,6 +385,20 @@ CATEGORIAS_BUSQUEDA_EN: dict[str, list[str]] = {
     "👖 Jeans y Pantalones": ["jeans", "pants", "shorts", "jogger", "levis"],
     "🧥 Chaquetas y Buzos": ["jacket", "hoodie", "fleece", "coat", "sweatshirt"],
     "🩳 Ropa Deportiva": ["sportswear", "running", "athletic", "shorts", "activewear", "nike", "adidas", "under armour"],
+    "🎮 Tarjetas Gráficas (GPU)": ["graphics card", "rtx 4070", "rtx 4060", "gpu", "video card"],
+    "🖥️ Monitores Gamer": ["gaming monitor", "144hz monitor", "curved monitor"],
+    "🖱️ Mouses Gamer": ["gaming mouse", "razer mouse", "logitech mouse"],
+    "⌨️ Teclados Mecánicos": ["mechanical keyboard", "gaming keyboard"],
+    "💺 Sillas Gamer": ["gaming chair"],
+    "🎧 Diademas Gamer": ["gaming headset", "gaming headphones"],
+    "🎮 Mandos y Controles": ["ps5 controller", "xbox controller", "gamepad"],
+    "🌟 Todo Gaming": ["gaming", "graphics card", "gaming monitor", "gaming mouse", "mechanical keyboard"],
+    "🌸 Perfumes Hombre": ["men perfume", "men cologne", "fragrance"],
+    "🌺 Perfumes Mujer": ["women perfume", "perfume", "fragrance"],
+    "🏋️ Pesas y Mancuernas": ["dumbbells", "weights", "kettlebell"],
+    "🚴 Ciclismo y Bicis": ["bicycle", "bike", "cycling"],
+    "🏃 Running y Zapatillas": ["running shoes", "running", "sneakers"],
+    "🌟 Todo Deportes": ["sporting goods", "dumbbells", "bike", "running shoes"],
 }
 
 # Cuantas claves de ofertas ya mostradas se recuerdan. Alcanza para que pedir
@@ -1092,6 +1174,9 @@ MENU = [
     ("imusa", "Ofertas de Imusa"),
     ("oster", "Ofertas de Oster"),
     ("koaj", "Ofertas de Koaj"),
+    ("simon", "Ofertas de Simon Premium Outlets"),
+    ("decathlon", "Ofertas de Decathlon Colombia"),
+    ("ikea", "Ofertas de IKEA Colombia"),
     ("colombia", "Lo mejor de las tiendas colombianas"),
     ("cajita", "Ofertas de PROMOCAJITA"),
     ("descuentostech", "Ofertas de Descuentos Tech"),
