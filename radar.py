@@ -27,10 +27,10 @@ from core.landed import calcular
 from core.models import Deal
 from core.scoring import SIN_PRECIO_DE_LISTA, Verdict, evaluar
 from core.store import Store
-from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech, ikea, cascos
+from sources import algolia_co, falabella, promocajita, mercadolibre, slickdeals, vtex, koaj, promohunter, miloderrocha, republica, descuentostech, ikea, cascos, simon
 
 FUENTES = ("slickdeals", "promocajita", "vtex", "algolia_co", "falabella",
-           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica", "descuentostech")
+           "mercadolibre", "koaj", "promohunter", "miloderrocha", "republica", "descuentostech", "simon")
 
 # Los colores no distinguen productos: solo variantes del mismo modelo.
 COLORES = {
@@ -272,6 +272,24 @@ def recolectar(watchlist: dict, activas: list[str]) -> list[Deal]:
             ),
             cfg,
         )
+
+    if "simon" in activas:
+        cfg = watchlist.get("simon", {})
+        consultas = cfg.get("queries", [])
+        colecciones = cfg.get("collections", [])
+        if consultas or colecciones:
+            print(f"-> Simon Premium Outlets: {len(consultas)} busquedas, {len(colecciones)} colecciones")
+            ofertas += _sin_ruido(
+                _recolectar_fuente(
+                    "simon",
+                    simon.fetch,
+                    consultas=consultas,
+                    colecciones=colecciones,
+                    por_consulta=cfg.get("por_consulta", 24),
+                    min_descuento=cfg.get("min_descuento", 30.0),
+                ),
+                cfg,
+            )
 
     return ofertas
 
@@ -603,6 +621,10 @@ def _ofertas_de(watchlist: dict, fuente: str, tiendas,
     elif fuente == "koaj":
         crudas = koaj.fetch(consultas, incluir_outlet=cfg.get("incluir_outlet", True),
                             por_consulta=cfg.get("por_consulta", 24))
+    elif fuente == "simon":
+        crudas = simon.fetch(consultas, colecciones=cfg.get("collections"),
+                             por_consulta=cfg.get("por_consulta", 24),
+                             min_descuento=cfg.get("min_descuento", 30.0))
     else:
         return []
     resultado = _sin_ruido(crudas, cfg)
@@ -1247,6 +1269,7 @@ def generar_panel_salud() -> str:
         ("republica", "República de Descuentos"),
         ("promocajita", "PromoCajita"),
         ("slickdeals", "Slickdeals (Moda/Calzado)"),
+        ("simon", "Simon Premium Outlets"),
         ("descuentostech", "Descuentos Tech"),
     ]
 

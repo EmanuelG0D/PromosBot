@@ -5214,6 +5214,71 @@ class PruebaModoMantenimientoYBlindajeMemoria(unittest.TestCase):
         self.assertIn("🛠️ Modo Mantenimiento", textos)
 
 
+class PruebaSimonOutlet(unittest.TestCase):
+    def test_simon_extraer_deals_productos_json(self):
+        from sources import simon
+        mock_data = {
+            "products": [
+                {
+                    "id": 12345678,
+                    "title": "Adidas Ultraboost 1.0 Shoes",
+                    "handle": "adidas-ultraboost-1-0",
+                    "vendor": "Adidas",
+                    "variants": [
+                        {"price": "75.00", "compare_at_price": "190.00", "available": True}
+                    ],
+                    "images": [{"src": "https://cdn.shopify.com/test.jpg"}]
+                },
+                {
+                    "id": 99999999,
+                    "title": "Sin Descuento Shirt",
+                    "handle": "sin-desc",
+                    "variants": [
+                        {"price": "50.00", "compare_at_price": "50.00", "available": True}
+                    ]
+                }
+            ]
+        }
+        deals = simon.extraer_deals_productos_json(mock_data, min_descuento=30.0)
+        self.assertEqual(len(deals), 1)
+        d = deals[0]
+        self.assertEqual(d.source, "simon")
+        self.assertEqual(d.store, "Simon Outlet")
+        self.assertEqual(d.country, "US")
+        self.assertEqual(d.currency, "USD")
+        self.assertEqual(d.price, 75.0)
+        self.assertEqual(d.list_price, 190.0)
+        self.assertEqual(d.url, "https://shop.simon.com/products/adidas-ultraboost-1-0")
+        self.assertIn("-61% OFF", d.notes)
+
+    def test_simon_extraer_deals_suggest_json(self):
+        from sources import simon
+        mock_data = {
+            "resources": {
+                "results": {
+                    "products": [
+                        {
+                            "id": 87654321,
+                            "title": "Coach Corner Zip Wristlet",
+                            "url": "/products/coach-wristlet?_pos=1",
+                            "price": "29.00",
+                            "compare_at_price_max": "88.00",
+                            "image": "https://cdn.shopify.com/coach.jpg"
+                        }
+                    ]
+                }
+            }
+        }
+        deals = simon.extraer_deals_suggest_json(mock_data, min_descuento=30.0)
+        self.assertEqual(len(deals), 1)
+        d = deals[0]
+        self.assertEqual(d.key, "simon:87654321")
+        self.assertEqual(d.price, 29.0)
+        self.assertEqual(d.list_price, 88.0)
+        self.assertEqual(d.url, "https://shop.simon.com/products/coach-wristlet")
+        self.assertIn("-67% OFF", d.notes)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
